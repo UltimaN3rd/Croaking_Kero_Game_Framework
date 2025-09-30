@@ -11,7 +11,6 @@ typedef struct {
 	char *filenames[64];
     bool is_folder[64];
 	// #define EXPLORER_FILENAME_DATA_BYTES (1024*2)
-    int filename_bytes_available;
 	char filename_data[MENU_EXPLORER_FILENAME_BYTES];
 } explorer_t;
 
@@ -22,7 +21,7 @@ typedef struct {
         const char *string;
     } error;
 } explorer_Init_return_t;
-explorer_Init_return_t explorer_Init (explorer_t *explorer, int filename_bytes_allocated, const char *base_directory);
+explorer_Init_return_t explorer_Init (explorer_t *explorer, const char *base_directory);
 
 typedef struct {
     bool is_error;

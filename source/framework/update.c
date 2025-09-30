@@ -170,6 +170,11 @@ void *Update(void*) {
 
 			state_functions[current_state].Update ();
 
+			ParticlesUpdate(PARTICLES_BOUNDARY_LEFT, PARTICLES_BOUNDARY_RIGHT, PARTICLES_BOUNDARY_BOTTOM, PARTICLES_BOUNDARY_TOP);
+			for (int i = 0; i < update_data.gameplay.particles.count; ++i) {
+				Render_Particle (update_data.gameplay.particles.position[i].x.high, update_data.gameplay.particles.position[i].y.high, update_data.gameplay.particles.pixel[i], false);
+			}
+
 			char temp[64];
 			if (current_state == update_state_gameplay) {
 				switch (replay.mode) {
@@ -185,14 +190,14 @@ void *Update(void*) {
 				}
 			}
 
-			// if (submenu_vars.debug.show_simtime) {
-			// 	if (current_state == update_state_gameplay) {
-			// 		sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-			// 		Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-resources_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
-			// 	}
-			// }
-			// if (submenu_vars.debug.show_rendertime) Render_ShowRenderTime (true);
-			// if (submenu_vars.debug.show_framerate) Render_ShowFPS (true);
+			if (submenu_vars.debug.show_simtime) {
+				if (current_state == update_state_gameplay) {
+					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
+					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-resources_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
+				}
+			}
+			if (submenu_vars.debug.show_rendertime) Render_ShowRenderTime (true);
+			if (submenu_vars.debug.show_framerate) Render_ShowFPS (true);
 
 			asm volatile("" ::: "memory");
 			Render_FinishEditingState ();
@@ -286,17 +291,21 @@ void ParticleDelete (int index) {
 
 void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float direction, int32_t velocity, CreateParticlesFromSprite_arguments arguments) {
 	enum {CPFSFLIP_NONE, CPFSFLIP_Y, CPFSFLIP_X, CPFSFLIP_BOTH} flip = (arguments.flipx ? 2 : 0) | (arguments.flipy ? 1 : 0);
-	x -= arguments.originx;
-	y -= arguments.originy;
     auto w = sprite->w;
     auto h = sprite->h;
+	float c = cos_turns (arguments.rotation);
+	float s = sin_turns (arguments.rotation);
 	switch (flip) {
 		case CPFSFLIP_NONE: {
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
+					int tx = sx - arguments.originx;
+					int ty = sy - arguments.originy;
+					int rx = c*tx - s*ty;
+					int ry = s*tx + c*ty;
 					if (p != 0)
-						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x + sx, y + sy, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
+						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x + rx, y + ry, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
 				}
 			}
 		} break;
@@ -305,8 +314,12 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
+					int tx = sx - arguments.originx;
+					int ty = sy - arguments.originy;
+					int rx = c*tx - s*ty;
+					int ry = s*tx + c*ty;
 					if (p != 0)
-						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x - sx, y + sy, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
+						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x - rx, y + ry, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
 				}
 			}
 		} break;
@@ -315,8 +328,12 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
+					int tx = sx - arguments.originx;
+					int ty = sy - arguments.originy;
+					int rx = c*tx - s*ty;
+					int ry = s*tx + c*ty;
 					if (p != 0)
-						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x + sx, y - sy, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
+						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x + rx, y - ry, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
 				}
 			}
 		} break;
@@ -326,10 +343,19 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
+					int tx = sx - arguments.originx;
+					int ty = sy - arguments.originy;
+					int rx = c*tx - s*ty;
+					int ry = s*tx + c*ty;
 					if (p != 0)
-						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x - sx, y - sy, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
+						ParticleAddAngleVelocity (arguments.color ? arguments.color : p, x - rx, y - ry, direction + DiscreteRandom_Rangef (&random_state, -0.01, 0.01), velocity + DiscreteRandom_Range (&random_state, -16384, 16384));
 				}
 			}
 		} break;
 	}
+}
+
+void Update_ChangeState (update_state_e new_state) {
+	assert (new_state >= 0 && new_state < update_state_count); if (new_state < 0 || new_state >= update_state_count) { LOG ("Update new state %d out of bounds", new_state); new_state = 0; }
+	update_data.new_state = new_state;
 }

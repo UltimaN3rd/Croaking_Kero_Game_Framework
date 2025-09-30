@@ -17,10 +17,6 @@ extern bool quit;
 void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length);
 void font_Write (const font_t *font, sprite_t *destination, int left, int top, char *text);
 
-void Render_Clear () {
-	render_state_being_edited->clear = true;
-}
-
 void Render_Cursor (const sprite_t *sprite, int x, int y, int offsetx, int offsety) {
 	render_state_being_edited->cursor = (typeof (render_state_being_edited->cursor)) {
 		.sprite = sprite,
@@ -269,9 +265,6 @@ void *Render (void*) {
 
 		zen_timer_t frame_timer = zen_Start();
 
-		if (render_state->clear)
-			memset(frame->p, 0x69, frame->w*frame->h*4);
-
 		// Draw background
 		switch (render_state->background.type) {
 			case background_type_none: break;
@@ -439,8 +432,8 @@ void *Render (void*) {
 						sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
 					}
 					else {
-						if (s.flags.center_horizontally) s.position.x -= s.sprite->w/2;
-						if (s.flags.center_vertically) s.position.y -= s.sprite->h/2;
+						s.position.x -= s.originx;
+						s.position.y -= s.originy;
 						switch (flip) {
 							case flip_none: {
 								switch (s.flags.rotation_by_quarters) {
@@ -475,8 +468,8 @@ void *Render (void*) {
 						sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
 					}
 					else {
-						if (s.flags.center_horizontally) s.position.x -= s.sprite->w/2;
-						if (s.flags.center_vertically) s.position.y -= s.sprite->h/2;
+						s.position.x -= s.originx;
+						s.position.y -= s.originy;
 						switch (flip) {
 							case flip_none: {
 								switch (s.flags.rotation_by_quarters) {

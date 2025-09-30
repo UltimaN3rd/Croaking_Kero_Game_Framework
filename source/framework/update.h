@@ -73,3 +73,5 @@ typedef struct {
 } CreateParticlesFromSprite_arguments;
 #define CreateParticlesFromSprite(sprite, x, y, direction, velocity, ...) CreateParticlesFromSprite_ (sprite, x, y, direction, velocity, (CreateParticlesFromSprite_arguments){__VA_ARGS__})
 void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float direction, int32_t velocity, CreateParticlesFromSprite_arguments arguments);
+
+void Update_ChangeState (update_state_e new_state);

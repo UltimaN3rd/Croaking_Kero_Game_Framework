@@ -11,13 +11,12 @@
 #endif
 
 // Change the below function into general "OpenDirectory" or "OpenSubDirectory", and create a new initialization function which calls it after the basic setup to open the base folder
-explorer_Init_return_t explorer_Init (explorer_t *explorer, int filename_bytes_allocated, const char *base_directory) {
+explorer_Init_return_t explorer_Init (explorer_t *explorer, const char *base_directory) {
     if (!explorer) {
         LOG ("Trying to load directory %s. The explorer pointer was NULL D:", base_directory);
         return (explorer_Init_return_t){.is_error = true, .error = {.code = explorer_Init_error_InvalidArgument, .string = ERROR_STRING("explorer was a NULL pointer. You are very naughty! >:(")}};
     }
 	explorer->depth = -1;
-    explorer->filename_bytes_available = filename_bytes_allocated;
 	sprintf (explorer->current_directory_string, base_directory);
     auto result = explorer_OpenSubDirectory (explorer, "/");
     if (result.is_error) {
@@ -72,8 +71,8 @@ explorer_OpenSubDirectory_return_t explorer_ReloadDirectory (explorer_t *explore
 	while (!result.is_error) {
 		explorer->filenames[explorer->file_count] = &explorer->filenames[explorer->file_count-1][strlen(explorer->filenames[explorer->file_count-1])+1];
         if (explorer->is_folder[explorer->file_count-1]) ++explorer->filenames[explorer->file_count];
-		if ((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + (explorer->folder.is_folder ? 1 : 0)) - explorer->filename_data > explorer->filename_bytes_available) {
-            LOG ("explorer filename [%s] is too long [%"PRId64"] > [%d]", explorer->folder.name, (int64_t)((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + 1) - explorer->filename_data), explorer->filename_bytes_available);
+		if ((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + (explorer->folder.is_folder ? 1 : 0)) - explorer->filename_data > MENU_EXPLORER_FILENAME_BYTES) {
+            LOG ("explorer filename [%s] is too long [%"PRId64"] > [%d]", explorer->folder.name, (int64_t)((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + 1) - explorer->filename_data), MENU_EXPLORER_FILENAME_BYTES);
 			out_of_characters = true;
 			break;
 		}

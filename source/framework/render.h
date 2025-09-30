@@ -1,6 +1,9 @@
 #pragma once
 
-#include "framework.h"
+#include <stdint.h>
+#include "utilities.h"
+#include "sprite.h"
+#include "framework_types.h"
 
 typedef struct {
 	vec2i_t position;
@@ -103,11 +106,12 @@ typedef struct render_state_s {
 		const sprite_t *sprite;
 		int x, y, offsetx, offsety;
 	} cursor;
-	bool clear;
 	struct {
 		bool show_rendertime, show_framerate;
 	} debug;
 } render_state_t;
+
+#include "framework.h"
 
 typedef struct render_data_s {
 	bool thread_initialized;
@@ -164,8 +168,6 @@ void Render_Background_ (Render_Background_arguments background);
 void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera);
 
 render_state_t *Render_GetCurrentEditableState ();
-
-void Render_Clear ();
 
 void Render_Cursor (const sprite_t *sprite, int x, int y, int offsetx, int offsety);
 

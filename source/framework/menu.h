@@ -1,15 +1,17 @@
 #pragma once
 
-#include "framework.h"
 #include <stdint.h>
+#include <stddef.h>
 
-typedef struct {
+typedef struct submenu_t submenu_t;
+struct submenu_t {
     const char *name;
-    int parent, selected;
+    submenu_t *parent;
+    int selected;
     bool retain_selection;
     uint8_t color;
     void (*on_exit_func) ();
-    enum { menu_type_list, menu_type_explorer, menu_type_file_creator, menu_type_internal } type;
+    enum { menu_type_list, menu_type_explorer, menu_type_name_creator, menu_type_internal } type;
     union {
         struct {
             #define MENU_LIST_MAX_ITEMS 12
@@ -19,7 +21,7 @@ typedef struct {
                 enum { menu_list_item_type_function, menu_list_item_type_submenu, menu_list_item_type_slider, menu_list_item_type_toggle } type;
                 union {
                     void (*Function) ();
-                    int submenu;
+                    submenu_t *submenu;
                     struct {
                         void (*Function) (float);
                         float (*InitialValueFunction) ();
@@ -45,20 +47,20 @@ typedef struct {
             char *const text_buffer;
             const size_t *const buffer_size; // Amount of characters that can be held +1 for NULL terminator
             void (*const confirm_func) ();
-            const char* (*const base_directory_func) ();
             uint8_t cursor;
-        } file_creator;
+        } name_creator;
     };
-} submenu_t;
+};
+
+#include "framework.h"
+#include "render.h"
 
 typedef struct {
-    int current; // -2 = delete confirmation menu
     int submenu_count;
     typeof((render_state_t){}.background.type) background;
     struct { int x, y, w, h, textw, topoffset; } dimensions;
     const char *filename_to_delete;
     submenu_t *submenu;
-    submenu_t submenus[] counted_by(submenu_count);
 } menu_t;
 
 typedef struct {

@@ -76,7 +76,7 @@ int main (int argc, char **argv) {
 	render_data.frame[0]->w = render_data.frame[1]->w = RESOLUTION_WIDTH;
 	render_data.frame[0]->h = render_data.frame[1]->h = RESOLUTION_HEIGHT;
 
-	if (!os_Init ("Heli")) { LOG ("os_Init failed."); abort (); }
+	if (!os_Init (GAME_TITLE)) { LOG ("os_Init failed."); abort (); }
 	os_SetBackgroundColor (0x40, 0x3a, 0x4d);
 	log_Time ();
 	LOG (" Program started");
@@ -218,7 +218,7 @@ void OutputScreenshot () {
 	char buf[128];
 	// Create new filename based on time, then add number if file already exists
 	for (int i = 0; true; ++i) {
-		snprintf (buf, sizeof(buf), "%s/heli/%04d-%02d-%02d-%02d-%02d-%02d-%02d.bmp",
+		snprintf (buf, sizeof(buf), "%s/" GAME_TITLE "/%04d-%02d-%02d-%02d-%02d-%02d-%02d.bmp",
 		#if WIN32
 		"C:/Users/Nick/Pictures",
 		#elif __linux__

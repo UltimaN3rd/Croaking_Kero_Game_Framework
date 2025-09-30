@@ -2,13 +2,179 @@
 
 void game_Init ();
 void game_Update () {}
+void game_menu_Init ();
+void game_menu_Update ();
+void gameplay_Init ();
+void gameplay_Update ();
 
 const update_state_functions_t state_functions[update_state_count] = {
-    [update_state_init] = {game_Init, game_Update}
+    [update_state_init] = {game_Init, game_Update},
+    [update_state_menu] = {game_menu_Init, game_menu_Update},
+    [update_state_gameplay] = {gameplay_Init, gameplay_Update},
 };
 
 extern update_data_t update_data;
+extern const cereal_t cereal_options[];
+extern const size_t cereal_options_size;
+extern sound_internal_t sound;
+extern const cereal_t cereal_savedata[];
+extern const size_t cereal_savedata_size;
 
 void game_Init () {
-    abort ();
+	{
+		char buf[1024];
+		snprintf (buf, sizeof (buf), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
+		folder_CreateDirectoryRecursive(buf);
+	}
+	snprintf (update_data.config_filename, sizeof (update_data.config_filename), "%s/%s", os_public.directories.config, GAME_FOLDER_CONFIG);
+	folder_CreateDirectoryRecursive(update_data.config_filename);
+	snprintf (update_data.config_filename, sizeof (update_data.config_filename), "%s/%s/config", os_public.directories.config, GAME_FOLDER_CONFIG);
+	do { // Load config
+		FILE *file = fopen (update_data.config_filename, "rb");
+		if (!file) break;
+		DEFER (fclose (file););
+		cereal_ReadFromFile(cereal_options, cereal_options_size, file);
+	} while (false);
+	SoundMusicSetVolume (submenu_vars.music_volume / 255.f);
+	SoundFXSetVolume (submenu_vars.fx_volume / 255.f);
+	os_Fullscreen(submenu_vars.fullscreen);
+
+	snprintf (update_data.game_save_filename, sizeof(update_data.game_save_filename), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
+	folder_CreateDirectoryRecursive(update_data.game_save_filename);
+	snprintf (update_data.game_save_filename, sizeof(update_data.game_save_filename), "%s/%s/high_score", os_public.directories.savegame, GAME_FOLDER_SAVES);
+	do { // Load high score
+		FILE *file = fopen (update_data.game_save_filename, "rb");
+		if (!file) break;
+		DEFER (fclose (file););
+		cereal_ReadFromFile(cereal_savedata, cereal_savedata_size, file);
+	} while (false);
+
+	Update_ChangeState (update_state_menu);
+}
+
+#ifdef WIN32
+char GAME_FOLDER_SAVES[] = "CroakingKero\\" GAME_TITLE;
+char GAME_FOLDER_CONFIG[] = "CroakingKero\\" GAME_TITLE;
+#elifdef __linux__
+char GAME_FOLDER_SAVES[] = "CroakingKero/" GAME_TITLE;
+char GAME_FOLDER_CONFIG[] = "CroakingKero/" GAME_TITLE;
+#elifdef __APPLE__
+char GAME_FOLDER_SAVES[] = "com.CroakingKero." GAME_TITLE;
+char GAME_FOLDER_CONFIG[] = "com.CroakingKero." GAME_TITLE;
+#else
+#error "Unknown platform"
+#endif
+
+void menu_Options_Fullscreen () {
+	os_Fullscreen (!os_public.window.is_fullscreen);
+	submenu_vars.fullscreen = os_public.window.is_fullscreen;
+}
+void menu_Options_Sound_Music (float slider_0_to_1) {
+	SoundMusicSetVolume(slider_0_to_1);
+	submenu_vars.music_volume = slider_0_to_1 * 255;
+}
+float menu_Options_Sound_Music_Init () { return submenu_vars.music_volume / 255.f; }
+void menu_Options_Sound_Effects (float slider_0_to_1) {
+	SoundFXSetVolume(slider_0_to_1);
+	submenu_vars.fx_volume = slider_0_to_1 * 255;
+}
+float menu_Options_Sound_Effects_Init () { return submenu_vars.fx_volume / 255.f; }
+
+submenu_vars_t submenu_vars = {
+	.music_volume = 125,
+	.fx_volume = 200,
+	.fullscreen = false,
+};
+extern sound_internal_t sound;
+const cereal_t cereal_options[] = {
+	{"Music volume", cereal_u8, &submenu_vars.music_volume},
+	{"FX volume", cereal_u8, &submenu_vars.fx_volume},
+	{"Fullscreen", cereal_bool, &submenu_vars.fullscreen},
+	{"Debug show FPS", cereal_bool, &submenu_vars.debug.show_framerate},
+	{"Debug show simulation time", cereal_bool, &submenu_vars.debug.show_simtime},
+	{"Debug show render time", cereal_bool, &submenu_vars.debug.show_rendertime},
+};
+const size_t cereal_options_size = sizeof (cereal_options) / sizeof (*cereal_options);
+
+#include "DEFER.h"
+extern update_data_t update_data;
+void menu_Options_OnExit () {
+	FILE *file = fopen (update_data.config_filename, "wb");
+	if (!file) return;
+	DEFER (fclose (file););
+	cereal_WriteToFile(cereal_options, cereal_options_size, file);
+}
+
+void menu_Options_Debug_OpenFolder () {
+	char buf[1024];
+	snprintf (buf, sizeof(buf), "%s/%s", os_public.directories.config, GAME_FOLDER_CONFIG);
+	os_OpenFileBrowser(buf);
+}
+
+submenu_t submenus_options[] = {
+	[0] = {
+		.name = "Options",
+		.color = 212,
+		.type = menu_type_list,
+		.retain_selection = true,
+		.on_exit_func = menu_Options_OnExit,
+		.list = {
+			.item_count = 4,
+			.items = {
+				{.name = "Fullscreen", .type = menu_list_item_type_function, .Function = menu_Options_Fullscreen},
+				{.name = "Sound", .type = menu_list_item_type_submenu, .submenu = &submenus_options[1]},
+				{.name = "Debug", .type = menu_list_item_type_submenu, .submenu = &submenus_options[2]},
+				{.name = "Back", .type = menu_list_item_type_submenu, .submenu = NULL},
+			},
+		},
+	},
+	[1] = {
+		.name = "Sound",
+		.color = 123,
+		.type = menu_type_list,
+		.retain_selection = true,
+		.list = {
+			.item_count = 3,
+			.items = {
+				{.name = "Music", .type = menu_list_item_type_slider, .slider.Function = menu_Options_Sound_Music, .slider.InitialValueFunction = menu_Options_Sound_Music_Init},
+				{.name = "Effects", .type = menu_list_item_type_slider, .slider.Function = menu_Options_Sound_Effects, .slider.InitialValueFunction = menu_Options_Sound_Effects_Init},
+				{.name = "Back", .type = menu_list_item_type_submenu, .submenu = NULL},
+			},
+		},
+	},
+	[2] = {
+		.name = "Debug",
+		.color = 160,
+		.type = menu_type_list,
+		.retain_selection = true,
+		.list = {
+			.item_count = 5,
+			.items = {
+				{.name = "Framerate", .type = menu_list_item_type_toggle, .toggle.var = &submenu_vars.debug.show_framerate},
+				{.name = "Simulation time", .type = menu_list_item_type_toggle, .toggle.var = &submenu_vars.debug.show_simtime},
+				{.name = "Rendering time", .type = menu_list_item_type_toggle, .toggle.var = &submenu_vars.debug.show_rendertime},
+				{.name = "Open config/log folder", .type = menu_list_item_type_function, .Function = menu_Options_Debug_OpenFolder},
+				{.name = "Back", .type = menu_list_item_type_submenu, .submenu = NULL},
+			},
+		},
+	},
+};
+
+game_save_data_t game_data = {};
+
+const cereal_t cereal_savedata[] = {
+	{"Name", cereal_string, game_data.high_score.name, .u.string = {.capacity = sizeof (game_data.high_score.name)}},
+	{"Score", cereal_u64, &game_data.high_score.score},
+};
+
+const size_t cereal_savedata_size = sizeof(cereal_savedata) / sizeof(*cereal_savedata);
+
+void game_SaveGame () {
+	FILE *file = fopen (update_data.game_save_filename, "wb");
+	if (!file) {
+		LOG ("Failed to open game save file [%s]", update_data.game_save_filename);
+		return;
+	};
+	DEFER (fclose (file););
+	cereal_WriteToFile(cereal_savedata, cereal_savedata_size, file);
 }

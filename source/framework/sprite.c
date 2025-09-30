@@ -1,4 +1,5 @@
 #include "sprite.h"
+#include "framework_types.h"
 
 #include <assert.h>
 #include "turns_math.h"
@@ -195,14 +196,7 @@ void sprite_BlitFlippedVerticallyColor(const sprite_t *source, sprite_t *destina
 	}
 }
 
-void sprite_RotateByShear(const sprite_t *source, sprite_t *destination, int destinationx, int destinationy, int originx, int originy, float angle);
-
 void sprite_SampleRotated(const sprite_t *source, sprite_t *destination, int x, int y, float angle, float originx, float originy) {
-	static bool shear = true;
-	if (shear) {
-		sprite_RotateByShear (source, destination, x, y, originx, originy, angle);
-		return;
-	}
 	float sin_angle = sin_turns(angle);
 	float cos_angle = cos_turns(angle);
 	float sin_bangle = sin_turns(angle + 0.25f);
@@ -457,107 +451,3 @@ uint8_t sprite_SamplePixel_ (sprite_SamplePixel_arguments arguments) {
 	if (sx < 0 || sx > spw-1 || sy < 0 || sy > sph-1) return 0;
 	return arguments.sprite->p[sx + sy * spw];
 }
-
-void sprite_RotateByShear(const sprite_t *source, sprite_t *destination, int destinationx, int destinationy, int originx, int originy, float angle) {
-	angle = angle - (int)angle;
-	float absangle = fabs (angle);
-
-	if(absangle < 0.000002f) { // Rotation is so small that errors will emerge. Just do non-rotated blit and early out. Value found through experimentation. May need adjustment
-		sprite_Blit(source, destination, destinationx - originx, destinationy - originy);
-		return;
-	}
-
-	const uint8_t *source_pixel = source->p;
-	int pixel_direction = 1;
-
-	uint16_t w, h, dw, dh;
-	w = source->w;
-	h = source->h;
-	dw = destination->w;
-	dh = destination->h;
-
-	if(absangle > .25f) {
-		source_pixel += w * h - 1;
-		pixel_direction = -1;
-		if(angle > .25f) angle -= .5f;
-		if(angle < -.25f) angle += .5f;
-		originx = w-1 - originx;
-		originy = h-1 - originy;
-	}
-
-	float skewx = -tan_turns (angle/2);
-	float skewy = sin_turns (angle);
-
-	int rowx;
-	int newx, newy;
-
-	int skewed_originx = originx + originy * skewx;
-	int skewed_originy = originy + skewed_originx * skewy;
-	skewed_originx += skewed_originy * skewx;
-
-	// Copy sprite from source to destination, triple skewing each pixel
-	for(int sy = 0; sy < h; ++sy) {
-		rowx = sy * skewx;
-		for(int sx = 0; sx < w; ++sx, source_pixel += pixel_direction) {
-			uint8_t p = *source_pixel;
-			if(p == 0) continue;
-			newx = sx + rowx;
-			newy = sy + newx*skewy;
-			newx += newy * skewx;
-			newx += -skewed_originx + destinationx;
-			newy += -skewed_originy + destinationy;
-			if (newx < 0 || newx > dw-1 ||
-				newy < 0 || newy > dh-1) continue;
-			destination->p[newx + newy*dw] = p;
-		}
-	}
-}
-
-// void SpriteRotateByShear(sprite_t source, sprite_t destination, int destinationx, int destinationy, int originx, int originy, float r) {
-// 	r = fmod(r + PI, TWOPI);
-// 	if(r < 0) r += TWOPI;
-// 	r -= PI;
-
-// 	if(r < 0.000002f && r > -0.000001f) { // Rotation is so small that errors will emerge. Just do non-rotated blit and early out. Values found through experimentation. May need adjustment
-// 		SpriteBlitAlpha(source, destination, destinationx - originx, destinationy - originy);
-// 		return;
-// 	}
-
-// 	pixel_t *source_pixel = source.p;
-// 	int pixel_direction = 1;
-
-// 	if(r > HALFPI || r < -HALFPI) {
-// 		source_pixel += source.w * source.h - 1;
-// 		pixel_direction = -1;
-// 		if(r > HALFPI) r -= PI;
-// 		if(r < -HALFPI) r += PI;
-// 		originx = source.w-1 - originx;
-// 		originy = source.h-1 - originy;
-// 	}
-
-// 	float skewx = -tanf(r/2);
-// 	float skewy = sinf(r);
-
-// 	int rowx;
-// 	int newx, newy;
-
-// 	int skewed_originx = originx + originy * skewx;
-// 	int skewed_originy = originy + skewed_originx * skewy;
-// 	skewed_originx += skewed_originy * skewx;
-
-// 	// Copy sprite from source to destination, triple skewing each pixel
-// 	for(int sy = 0; sy < source.h; ++sy) {
-// 		rowx = sy * skewx;
-// 		for(int sx = 0; sx < source.w; ++sx, source_pixel += pixel_direction) {
-// 			if(source_pixel->a != 255) continue;
-// 			newx = sx + rowx;
-// 			newy = sy + newx*skewy;
-// 			newx += newy * skewx;
-// 			newx += -skewed_originx + destinationx;
-// 			newy += -skewed_originy + destinationy;
-// 			if (newx < 0 || newx > destination.w-1 ||
-// 				newy < 0 || newy > destination.h-1) continue;
-// 			destination.p[newx + newy*destination.w] = *source_pixel;
-// 		}
-// 	}
-// }

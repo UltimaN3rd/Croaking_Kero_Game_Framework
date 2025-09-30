@@ -1,3 +1,4 @@
+#include "game.h"
 #include "menu.h"
 
 explorer_t menu_explorer;
@@ -7,7 +8,6 @@ explorer_t menu_explorer;
 #define SLIDER_MARGIN 2
 #define XMARGIN 2
 #define TOGGLE_WIDTH (resources_font.line_height - 2)
-#define MENU_DELETE_CONFIRMATION -2
 
 static struct { int l, b, r, t; } title_bounds = {};
 
@@ -27,7 +27,7 @@ static submenu_t submenu_delete_confirmation = {
 		.item_count = 2,
 		.items = {
 			{.name = "Delete", .type = menu_list_item_type_function, .Function = menu_Delete_Yes},
-			{.name = "Cancel", menu_list_item_type_submenu, .submenu = -1},
+			{.name = "Cancel", menu_list_item_type_submenu, .submenu = NULL},
 		}
 	}
 };
@@ -81,7 +81,6 @@ vec2i_t menu_ItemDimensions (const char *item_start) {
 void menu_CalculateDimensions (menu_t *self) {
 	__label__ goto_calculate_dimensions_list;
 	self->dimensions = (typeof(self->dimensions)){};
-	if (self->current >= 0) self->submenu = &self->submenus[self->current];
     auto submenu = self->submenu;
 
 	int explorer_start = 0;
@@ -152,8 +151,8 @@ void menu_CalculateDimensions (menu_t *self) {
 			title_bounds.b = title_bounds.t - resources_menu_folder_open.h + 1;
 		} break;
 
-		case menu_type_file_creator: {
-			auto dimensions = menu_ItemDimensions(submenu->file_creator.text_buffer);
+		case menu_type_name_creator: {
+			auto dimensions = menu_ItemDimensions(submenu->name_creator.text_buffer);
 			self->dimensions.x = (RESOLUTION_WIDTH - dimensions.x) / 2;
 			self->dimensions.y = (RESOLUTION_HEIGHT - dimensions.y) / 2;
 			self->dimensions.w = dimensions.w;
@@ -175,23 +174,33 @@ void menu_CalculateDimensions (menu_t *self) {
 	self->dimensions.topoffset = top_item_offset;
 }
 
-static void SwitchMenu (menu_t *self, int new_menu) {
+static void SwitchMenu (menu_t *self, submenu_t *new_menu) {
 	auto submenu = self->submenu;
 	int was_selected = submenu->selected;
     if (!submenu->retain_selection) submenu->selected = 0;
-	if (new_menu == -1) new_menu = submenu->parent;
+	if (new_menu == NULL) new_menu = submenu->parent;
+	else { new_menu->parent = submenu; }
 	if (new_menu == submenu->parent) {
 		if (submenu->on_exit_func) submenu->on_exit_func ();
 	}
-	assert (new_menu != -1);
-	auto oldmenu = self->current;
-	self->current = new_menu;
-	if (new_menu >= 0) {
-		self->submenu = &self->submenus[self->current];
+	assert (new_menu != NULL);
+	auto oldmenu = self->submenu;
+	if (new_menu == &submenu_delete_confirmation) {
+		assert (new_menu == &submenu_delete_confirmation);
+		delete_confirmation_explorer_file_index = was_selected;
+		delete_confirmation_filename = menu_explorer.filenames[delete_confirmation_explorer_file_index];
+		self->submenu = &submenu_delete_confirmation;
+		submenu = self->submenu;
+		submenu->parent = oldmenu;
+		delete_confirmed = false;
+		submenu->selected = 1; // Default to the cancel option rather than delete to prevent accidental deletions
+	}
+	else {
+		self->submenu = new_menu;
 		submenu = self->submenu;
 		switch (submenu->type) {
 			case menu_type_explorer: {
-				explorer_Init (&menu_explorer, MENU_EXPLORER_FILENAME_BYTES, submenu->explorer.base_directory_func());
+				explorer_Init (&menu_explorer, submenu->explorer.base_directory_func());
 			} break;
 			case menu_type_list: {
 				for (int i = 0; i < submenu->list.item_count; ++i) {
@@ -203,23 +212,13 @@ static void SwitchMenu (menu_t *self, int new_menu) {
 					}
 				}
 			} break;
-			case menu_type_file_creator: {
-				memset (submenu->file_creator.text_buffer, 0, sizeof (submenu->file_creator.buffer_size));
-				submenu->file_creator.cursor = 0;
+			case menu_type_name_creator: {
+				memset (submenu->name_creator.text_buffer, 0, sizeof (submenu->name_creator.buffer_size));
+				submenu->name_creator.cursor = 0;
 			} break;
 			case menu_type_internal:
 				unreachable();
 		}
-	}
-	else {
-		assert (new_menu == MENU_DELETE_CONFIRMATION);
-		delete_confirmation_explorer_file_index = was_selected;
-		delete_confirmation_filename = menu_explorer.filenames[delete_confirmation_explorer_file_index];
-		self->submenu = &submenu_delete_confirmation;
-		submenu = self->submenu;
-		submenu->parent = oldmenu;
-		delete_confirmed = false;
-		submenu->selected = 1; // Default to the cancel option rather than delete to prevent accidental deletions
 	}
 	menu_CalculateDimensions (self);
 }
@@ -263,8 +262,8 @@ static void SelectItem (menu_t *self, int item_index) {
             }
         } break;
 
-		case menu_type_file_creator: {
-			submenu->file_creator.confirm_func ();
+		case menu_type_name_creator: {
+			submenu->name_creator.confirm_func ();
 		} break;
 
 		case menu_type_internal: {
@@ -292,9 +291,9 @@ static void MenuBack (menu_t *self) {
         }
         menu_CalculateDimensions (self);
     }
-    else if (submenu->parent >= 0) {
+    else if (submenu->parent != NULL) {
         const char *source_child = submenu->name;
-        SwitchMenu (self, submenu->parent);
+        SwitchMenu (self, NULL);
     }
 };
 
@@ -325,7 +324,7 @@ static int ItemAt (menu_t *self, int x, int y, menu_inputs_t inputs) {
             }
             item_count = explorer_end - explorer_start;
         } break;
-		case menu_type_file_creator: return 0;
+		case menu_type_name_creator: return 0;
 
 		case menu_type_internal: {
 			assert (submenu == &submenu_delete_confirmation);
@@ -336,7 +335,7 @@ static int ItemAt (menu_t *self, int x, int y, menu_inputs_t inputs) {
     return item_count-1 - (inputs.mouse.y - self->dimensions.y) / divisor;
 };
 
-static bool menu_FileCreatorDeleteCharacter (typeof((menu_t){}.submenus[0].file_creator) *self) {
+static bool menu_NameCreatorDeleteCharacter (typeof((submenu_t){}.name_creator) *self) {
 	size_t len = strlen (self->text_buffer);
 	if (self->cursor >= len) return false;
 	for (int i = self->cursor; i < len-1; ++i)
@@ -418,20 +417,20 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 			}
 			if (input.delete) {
 				// Confirm menu
-				SwitchMenu (self, MENU_DELETE_CONFIRMATION);
+				SwitchMenu (self, &submenu_delete_confirmation);
 			}
 		} break;
 
-		case menu_type_file_creator: {
-			const auto fc = &submenu->file_creator;
+		case menu_type_name_creator: {
+			const auto fc = &submenu->name_creator;
 			if (input.left && fc->cursor > 0) --fc->cursor;
 			if (input.right && fc->cursor < strlen (fc->text_buffer)) ++fc->cursor;
 			if (input.backspace && fc->cursor > 0) {
 				--fc->cursor;
-				menu_FileCreatorDeleteCharacter(fc);
+				menu_NameCreatorDeleteCharacter(fc);
 			}
 			if (input.delete)
-				menu_FileCreatorDeleteCharacter(fc);
+				menu_NameCreatorDeleteCharacter(fc);
 			constexpr bool character_illegal[256] = {['/']=1,['\\']=1, [':']=1,['*']=1,['?']=1,['"']=1,['<']=1,['>']=1,['|']=1,};
 			for (int i = 0; i < sizeof (input.typing) && input.typing[i] != 0; ++i) {
 				if (character_illegal[(int)input.typing[i]]) continue;
@@ -553,8 +552,8 @@ void menu_Render (menu_t *self, int depth) {
 			Render_Sprite (.sprite = &resources_menu_folder_open, .x = RESOLUTION_WIDTH - resources_menu_folder_open.w, .y = RESOLUTION_HEIGHT - resources_menu_folder_open.h, .depth = depth, .flags.ignore_camera = true);
 		} break;
 
-		case menu_type_file_creator: {
-			const auto fc = &submenu->file_creator;
+		case menu_type_name_creator: {
+			const auto fc = &submenu->name_creator;
 			y = RESOLUTION_HEIGHT / 2;
 			int texty = y + resources_font.baseline;
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = y - 1, .w = self->dimensions.w, .h = 1, .color_edge = 1}}, .depth = depth);
@@ -581,7 +580,7 @@ void menu_Render (menu_t *self, int depth) {
 		case menu_type_internal: {
 			goto goto_draw_box_list;
 		} break;
-		case menu_type_file_creator: break;
+		case menu_type_name_creator: break;
 		case menu_type_explorer:
 		case menu_type_list: {
 		goto_draw_box_list:

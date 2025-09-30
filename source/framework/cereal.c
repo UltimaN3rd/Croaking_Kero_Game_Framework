@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <string.h>
+#include "update.h"
 
 extern update_data_t update_data;
 uint64_t cereal_dummy;
@@ -12,21 +13,21 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *
 		switch (cereal[i].type) {
 			case cereal_array: {
 				uint64_t count = 0;
-				assert (cereal[i].array_counter_type != cereal_array);
-				assert (cereal[i].array_counter_type != cereal_f32);
-				assert (cereal[i].array_counter_type != cereal_bool);
-				switch (cereal[i].array_counter_type) {
+				assert (cereal[i].u.array.counter_type != cereal_array);
+				assert (cereal[i].u.array.counter_type != cereal_f32);
+				assert (cereal[i].u.array.counter_type != cereal_bool);
+				switch (cereal[i].u.array.counter_type) {
 					case cereal_f32:
 					case cereal_bool:
 					case cereal_array: unreachable();
-					case cereal_u8: fprintf (file, "%"PRIu8, *(uint8_t*)cereal[i].array_counter); count = *(uint8_t*)cereal[i].array_counter; break;
-					case cereal_u16: fprintf (file, "%"PRIu16, *(uint16_t*)cereal[i].array_counter); count = *(uint16_t*)cereal[i].array_counter; break;
-					case cereal_u32: fprintf (file, "%"PRIu32, *(uint32_t*)cereal[i].array_counter); count = *(uint32_t*)cereal[i].array_counter; break;
-					case cereal_u64: fprintf (file, "%"PRIu64, *(uint64_t*)cereal[i].array_counter); count = *(uint64_t*)cereal[i].array_counter; break;
+					case cereal_u8: fprintf (file, "%"PRIu8, *(uint8_t*)cereal[i].u.array.counter); count = *(uint8_t*)cereal[i].u.array.counter; break;
+					case cereal_u16: fprintf (file, "%"PRIu16, *(uint16_t*)cereal[i].u.array.counter); count = *(uint16_t*)cereal[i].u.array.counter; break;
+					case cereal_u32: fprintf (file, "%"PRIu32, *(uint32_t*)cereal[i].u.array.counter); count = *(uint32_t*)cereal[i].u.array.counter; break;
+					case cereal_u64: fprintf (file, "%"PRIu64, *(uint64_t*)cereal[i].u.array.counter); count = *(uint64_t*)cereal[i].u.array.counter; break;
 				}
 				char *v = (char*)cereal[i].var;
 				for (int j = 0; j < count; ++j) {
-					switch (cereal[i].array_type) {
+					switch (cereal[i].u.array.type) {
 						case cereal_array: unreachable ();
 						case cereal_bool: fprintf (file, " %"PRIu8, *(bool*)v ? 1 : 0); v += sizeof (bool); break;
 						case cereal_u8: fprintf (file, " %"PRIu8, *(uint8_t*)v); v += sizeof (uint8_t); break;

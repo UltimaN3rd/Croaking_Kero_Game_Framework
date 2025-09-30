@@ -11,6 +11,7 @@
 #include "render.c"
 #include "samples.c"
 #include "sprite.c"
+#include "update.c"
 
 // The following are not included because they must be built separately on Mac as OBJC
 // #include "osinterface.c"
