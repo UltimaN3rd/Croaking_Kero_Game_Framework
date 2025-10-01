@@ -4,11 +4,12 @@
 #define PLAYERX 80
 #define PLAYER_FLAP_SPEED (-GRAVITY * 40)
 #define PIPES_MAX 8
-#define PIPE_GAP_MIN 80
+#define PIPE_GAP_MIN 70
 #define PIPE_GAP_MAX 120
 #define PIPE_SPEED 65536
+#define PIPE_MAX_HEIGHT_DIFFERENCE_FROM_LAST 80
 #define PLAYER_COIN_LIMIT UINT64_MAX
-#define PLAYER_FLAP_PROPELLER_SPEED (2<<19)
+#define PLAYER_FLAP_PROPELLER_SPEED (2<<20)
 
 typedef enum {state_alive, state_dead} gameplay_state_e;
 #define GAMEPLAY_STATE_COUNT (state_dead+1)
@@ -101,7 +102,7 @@ void gameplay_Update () {
         int t = b + data.pipes[i].gap_size;
         Render_Sprite (.sprite = &resources_gameplay_pipe_top, .x = x, .y = b, .sprite_flags.center_horizontally = true, .originy = resources_gameplay_pipe_top.h-1, .depth = -1);
         Render_Sprite (.sprite = &resources_gameplay_pipe_top, .x = x, .y = t, .originy = resources_gameplay_pipe_top.h-1, .sprite_flags = {.center_horizontally = true, .flip_vertically = true}, .depth = -1);
-        for (int y = b - resources_gameplay_pipe_top.h; y > 0; y -= resources_gameplay_pipe_body.h)
+        for (int y = b - resources_gameplay_pipe_top.h; y >= 0; y -= resources_gameplay_pipe_body.h)
             Render_Sprite (.sprite = &resources_gameplay_pipe_body, .x = x, .y = y, .sprite_flags.center_horizontally = true, .originy = resources_gameplay_pipe_body.h-1, .depth = -1);
         for (int y = t + resources_gameplay_pipe_top.h; y < RESOLUTION_HEIGHT; y += resources_gameplay_pipe_body.h)
             Render_Sprite (.sprite = &resources_gameplay_pipe_body, .x = x, .y = y, .sprite_flags.center_horizontally = true, .depth = -1);
@@ -130,7 +131,7 @@ void PipeGenerate (int i) {
     assert (i < PIPES_MAX);
     data.pipes[i] = (typeof(data.pipes[0])){
         .x.high = data.pipes[i-1].x.high + DiscreteRandom_Range(&random_state, 80, 120),
-        .bottom = MIN (RESOLUTION_HEIGHT-1 - resources_gameplay_pipe_top.h - PIPE_GAP_MAX, MAX (resources_gameplay_pipe_top.h, data.pipes[i-1].bottom + DiscreteRandom_Range(&random_state, -30, 30))),
+        .bottom = MIN (RESOLUTION_HEIGHT-1 - resources_gameplay_pipe_top.h - PIPE_GAP_MAX, MAX (resources_gameplay_pipe_top.h, data.pipes[i-1].bottom + DiscreteRandom_Range(&random_state, -PIPE_MAX_HEIGHT_DIFFERENCE_FROM_LAST/2, PIPE_MAX_HEIGHT_DIFFERENCE_FROM_LAST/2))),
         .gap_size = DiscreteRandom_Range(&random_state, PIPE_GAP_MIN, PIPE_GAP_MAX),
     };
 }
@@ -171,7 +172,7 @@ void UpdateAlive () {
     if (keyboard[os_KEY_SPACE] & KEY_PRESSED) PlayerFlap ();
 
     data.player.y.i32 += data.player.vy;
-    data.player.propeller_speed *= .98f;
+    data.player.propeller_speed *= .95f;
     data.player.propeller.i32 += data.player.propeller_speed;
     data.player.pitch = (data.player.pitch * 0.9f) + (data.player.vy * 0.000002f * 0.1f);
     if (fabs (data.player.pitch) > 0.25) data.player.pitch = SIGN (data.player.pitch) * 0.25f;
@@ -258,7 +259,7 @@ void UpdateDead () {
             if (keyboard[os_KEY_SPACE] & KEY_PRESSED) {
                 gameplay_Init ();
             }
-            Render_Text (.string = "Press [SPACE] to respawn", .x = 100, .y = 100, .depth = 10);
+            Render_Text (.string = "Press [SPACE] to play again", .x = 90, .y = 140, .depth = 10);
         }
     }
 }
@@ -267,5 +268,6 @@ void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
     game_SaveGame ();
-    gameplay_Init ();
+    
+    data.dead.new_high_score = false;
 }
