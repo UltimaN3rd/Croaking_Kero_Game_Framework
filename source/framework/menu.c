@@ -113,7 +113,7 @@ void menu_CalculateDimensions (menu_t *self) {
 			if (contains_toggle) self->dimensions.w = MAX (self->dimensions.w, self->dimensions.w + TOGGLE_WIDTH + SLIDER_MARGIN * 2);
 			self->dimensions.x = (RESOLUTION_WIDTH - self->dimensions.w) / 2;
 			self->dimensions.h = abs(y);
-			self->dimensions.y = RESOLUTION_HEIGHT - 40 - self->dimensions.h;
+			self->dimensions.y = (RESOLUTION_HEIGHT - self->dimensions.h)/2;
 		} break;
 
 		case menu_type_explorer: {
@@ -138,7 +138,7 @@ void menu_CalculateDimensions (menu_t *self) {
 			}
 			self->dimensions.x = 20;
 			self->dimensions.h = abs(y);
-			self->dimensions.y = RESOLUTION_HEIGHT - 40 - self->dimensions.h;
+			self->dimensions.y = (RESOLUTION_HEIGHT - self->dimensions.h)/2;
 			// menu->dimensions.y = RESOLUTION_HEIGHT - 10;
 			// auto title_dimensions = menu_ItemDimensions(submenu->explorer.show_name_instead_of_directory ? submenu->name : menu_explorer.current_directory_string);
 			// title_bounds.l = self->dimensions.x;

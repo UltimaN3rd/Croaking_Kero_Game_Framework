@@ -16,9 +16,11 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *
 				assert (cereal[i].u.array.counter_type != cereal_array);
 				assert (cereal[i].u.array.counter_type != cereal_f32);
 				assert (cereal[i].u.array.counter_type != cereal_bool);
+				assert (cereal[i].u.array.counter_type != cereal_string);
 				switch (cereal[i].u.array.counter_type) {
 					case cereal_f32:
 					case cereal_bool:
+					case cereal_string:
 					case cereal_array: unreachable();
 					case cereal_u8: fprintf (file, "%"PRIu8, *(uint8_t*)cereal[i].u.array.counter); count = *(uint8_t*)cereal[i].u.array.counter; break;
 					case cereal_u16: fprintf (file, "%"PRIu16, *(uint16_t*)cereal[i].u.array.counter); count = *(uint16_t*)cereal[i].u.array.counter; break;
@@ -35,6 +37,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *
 						case cereal_u32: fprintf (file, " %"PRIu32, *(uint32_t*)v); v += sizeof (uint32_t); break;
 						case cereal_u64: fprintf (file, " %"PRIu64, *(uint64_t*)v); v += sizeof (uint64_t); break;
 						case cereal_f32: fprintf (file, " %f", *(float*)v); v += sizeof (float); break;
+						case cereal_string: fprintf (file, " %"PRIu64" %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
 					}
 				}
 			} break;
@@ -44,6 +47,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *
 			case cereal_u32: fprintf (file, "%"PRIu32, *(uint32_t*)cereal[i].var); break;
 			case cereal_u64: fprintf (file, "%"PRIu64, *(uint64_t*)cereal[i].var); break;
 			case cereal_f32: fprintf (file, "%f", *(float*)cereal[i].var); break;
+			case cereal_string: fprintf (file, "%"PRIu64" %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
 		}
 		fprintf (file, "]\n");
 	}
@@ -86,20 +90,62 @@ bool cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, FILE 
 			case cereal_u32: scan_result = sscanf (c, "%"SCNu32, (uint32_t*)cer.var); break;
 			case cereal_u64: scan_result = sscanf (c, "%"SCNu64, (uint64_t*)cer.var); break;
 			case cereal_f32: scan_result = sscanf (c, "%f", (float*)cer.var); break;
+			case cereal_string: {
+				uint64_t string_length;
+				int strlen_chars_read = 0;
+				scan_result = sscanf (c, "%"SCNu64"%n", &string_length, &strlen_chars_read);
+				if (scan_result != 1) {
+					LOG ("Game save file [%s] corrupted. Failed to read first value on line [%s]", update_data.game_save_filename, buf);
+					return false;
+				}
+				if (string_length == 0) {
+					((char *)cer.var)[0] = 0;
+				}
+				else {
+					if (string_length > cer.u.string.capacity) {
+						LOG ("Game save file [%s] corrupted. String length [%"PRIu64"] exceeds capacity [%"PRIu16"]. Line [%s]", update_data.game_save_filename, string_length, cer.u.string.capacity, buf);
+						return false;
+					}
+					else {
+						((char*)cer.var)[string_length] = 0;
+						c += strlen_chars_read;
+						if (*c != ' ') {
+							LOG ("Game save file [%s] corrupted. String length is not followed by a space. Line [%s]", update_data.game_save_filename, buf);
+							return false;
+						}
+						++c;
+						uint64_t chars_copied = 0;
+						for (; chars_copied < string_length; ++chars_copied) {
+							char ch = c[chars_copied];
+							if (ch == 0) {
+								LOG ("Game save file [%s] corrupted. String length [%"PRIu64"] but only read [%"PRIi64"]. Line [%s]", update_data.game_save_filename, string_length, chars_copied, buf);
+								return false;
+							}
+							((char*)cer.var)[chars_copied] = ch;
+						}
+						if (chars_copied != string_length) {
+							LOG ("Game save file [%s] corrupted. String length [%"PRIu64"] but only read [%"PRIi64"]. Line [%s]", update_data.game_save_filename, string_length, chars_copied, buf);
+							return false;
+						}
+					}
+				}
+			} break;
 			case cereal_array: {
 				uint64_t count = 0;
-				assert (cer.array_counter_type != cereal_array);
-				assert (cer.array_counter_type != cereal_f32);
-				assert (cer.array_counter_type != cereal_bool);
-				assert (cer.array_type != cereal_array);
+				assert (cer.u.array.counter_type != cereal_array);
+				assert (cer.u.array.counter_type != cereal_f32);
+				assert (cer.u.array.counter_type != cereal_bool);
+				assert (cer.u.array.counter_type != cereal_string);
+				assert (cer.u.array.type != cereal_array);
 				int chars_read = 0;
-				switch (cer.array_counter_type) {
-					case cereal_u8: scan_result = sscanf (c, "%"SCNu8"%n", (uint8_t*)cer.array_counter, &chars_read); count = *(uint8_t*)cer.array_counter; break;
-					case cereal_u16: scan_result = sscanf (c, "%"SCNu16"%n", (uint16_t*)cer.array_counter, &chars_read); count = *(uint16_t*)cer.array_counter; break;
-					case cereal_u32: scan_result = sscanf (c, "%"SCNu32"%n", (uint32_t*)cer.array_counter, &chars_read); count = *(uint32_t*)cer.array_counter; break;
-					case cereal_u64: scan_result = sscanf (c, "%"SCNu64"%n", (uint64_t*)cer.array_counter, &chars_read); count = *(uint64_t*)cer.array_counter; break;
+				switch (cer.u.array.counter_type) {
+					case cereal_u8: scan_result = sscanf (c, "%"SCNu8"%n", (uint8_t*)cer.u.array.counter, &chars_read); count = *(uint8_t*)cer.u.array.counter; break;
+					case cereal_u16: scan_result = sscanf (c, "%"SCNu16"%n", (uint16_t*)cer.u.array.counter, &chars_read); count = *(uint16_t*)cer.u.array.counter; break;
+					case cereal_u32: scan_result = sscanf (c, "%"SCNu32"%n", (uint32_t*)cer.u.array.counter, &chars_read); count = *(uint32_t*)cer.u.array.counter; break;
+					case cereal_u64: scan_result = sscanf (c, "%"SCNu64"%n", (uint64_t*)cer.u.array.counter, &chars_read); count = *(uint64_t*)cer.u.array.counter; break;
 					case cereal_bool:
 					case cereal_f32:
+					case cereal_string:
 					case cereal_array: __builtin_unreachable();
 				}
 				c += chars_read;
@@ -109,13 +155,54 @@ bool cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, FILE 
 				}
 				char *arr = (char*)cer.var;
 				for (uint64_t i = 0; i < count; ++i) {
-					switch (cer.array_type) {
+					switch (cer.u.array.type) {
 						case cereal_bool: {uint8_t temp = 0; scan_result = sscanf (c, "%"SCNu8, &temp); *(bool*)arr = temp; arr += sizeof (bool); } break;
 						case cereal_u8: scan_result = sscanf (c, " %"SCNu8"%n", (uint8_t*)arr, &chars_read); arr += sizeof (uint8_t); break;
 						case cereal_u16: scan_result = sscanf (c, " %"SCNu16"%n", (uint16_t*)arr, &chars_read); arr += sizeof (uint16_t); break;
 						case cereal_u32: scan_result = sscanf (c, " %"SCNu32"%n", (uint32_t*)arr, &chars_read); arr += sizeof (uint32_t); break;
 						case cereal_u64: scan_result = sscanf (c, " %"SCNu64"%n", (uint64_t*)arr, &chars_read); arr += sizeof (uint64_t); break;
 						case cereal_f32: scan_result = sscanf (c, " %f%n", (float*)arr, &chars_read); arr += sizeof (float); break;
+						case cereal_string: { // UNTESTED
+							uint64_t string_length;
+							int strlen_chars_read = 0;
+							scan_result = sscanf (c, " %"SCNu64"%n", &string_length, &strlen_chars_read);
+							if (scan_result != 1) {
+								LOG ("Game save file [%s] corrupted. Failed to read first value on line [%s]", update_data.game_save_filename, buf);
+								return false;
+							}
+							if (string_length == 0) {
+								((char *)cer.var)[0] = 0;
+							}
+							else {
+								if (string_length > cer.u.string.capacity) {
+									LOG ("Game save file [%s] corrupted. String length [%"PRIu64"] exceeds capacity [%"PRIu16"]. Line [%s]", update_data.game_save_filename, string_length, cer.u.string.capacity, buf);
+									return false;
+								}
+								else {
+									((char*)cer.var)[string_length] = 0;
+									c += strlen_chars_read;
+									if (*c != ' ') {
+										LOG ("Game save file [%s] corrupted. String length is not followed by a space. Line [%s]", update_data.game_save_filename, buf);
+										return false;
+									}
+									++c;
+									uint64_t chars_copied = 0;
+									for (; chars_copied < string_length; ++chars_copied) {
+										char ch = c[chars_copied];
+										if (ch == 0) {
+											LOG ("Game save file [%s] corrupted. String length [%"PRIu64"] but only read [%"PRIi64"]. Line [%s]", update_data.game_save_filename, string_length, chars_copied, buf);
+											return false;
+										}
+										((char*)cer.var)[chars_copied] = ch;
+									}
+									if (chars_copied != string_length) {
+										LOG ("Game save file [%s] corrupted. String length [%"PRIu64"] but only read [%"PRIi64"]. Line [%s]", update_data.game_save_filename, string_length, chars_copied, buf);
+										return false;
+									}
+									chars_read += 1 + string_length;
+								}
+							}
+						} break;
 						case cereal_array: __builtin_unreachable();
 					}
 					c += chars_read;

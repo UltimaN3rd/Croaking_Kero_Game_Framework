@@ -56,7 +56,6 @@ struct submenu_t {
 #include "render.h"
 
 typedef struct {
-    int submenu_count;
     typeof((render_state_t){}.background.type) background;
     struct { int x, y, w, h, textw, topoffset; } dimensions;
     const char *filename_to_delete;

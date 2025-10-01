@@ -49,6 +49,18 @@ void PlayerDie ();
 
 void UpdateAlive ();
 void UpdateDead ();
+void SaveHighScore ();
+
+static submenu_t menu_high_score_name_entry = {
+    "New high score",
+    .type = menu_type_name_creator,
+    .name_creator = {
+        .text_buffer = (char[]){[sizeof((game_save_data_t){}.high_score.name)] = 0},
+        .buffer_size = &(const size_t){sizeof((game_save_data_t){}.high_score.name)},
+        .confirm_func = SaveHighScore,
+    },
+};
+static menu_t menu_death = {.background = background_type_blank, .submenu = &menu_high_score_name_entry};
 
 void (*StateUpdate[GAMEPLAY_STATE_COUNT]) () = {
     [state_alive] = UpdateAlive,
@@ -81,28 +93,30 @@ void gameplay_Update () {
     
     StateUpdate[data.state] ();
 
+    int depth = -1;
+
     for (int i = 0; i < PIPES_MAX; ++i) {
         int x = data.pipes[i].x.high;
         int b = data.pipes[i].bottom;
         int t = b + data.pipes[i].gap_size;
-        Render_Sprite (.sprite = &resources_gameplay_pipe_top, .x = x, .y = b, .sprite_flags.center_horizontally = true, .originy = resources_gameplay_pipe_top.h-1);
-        Render_Sprite (.sprite = &resources_gameplay_pipe_top, .x = x, .y = t, .originy = resources_gameplay_pipe_top.h-1, .sprite_flags = {.center_horizontally = true, .flip_vertically = true});
+        Render_Sprite (.sprite = &resources_gameplay_pipe_top, .x = x, .y = b, .sprite_flags.center_horizontally = true, .originy = resources_gameplay_pipe_top.h-1, .depth = -1);
+        Render_Sprite (.sprite = &resources_gameplay_pipe_top, .x = x, .y = t, .originy = resources_gameplay_pipe_top.h-1, .sprite_flags = {.center_horizontally = true, .flip_vertically = true}, .depth = -1);
         for (int y = b - resources_gameplay_pipe_top.h; y > 0; y -= resources_gameplay_pipe_body.h)
-            Render_Sprite (.sprite = &resources_gameplay_pipe_body, .x = x, .y = y, .sprite_flags.center_horizontally = true, .originy = resources_gameplay_pipe_body.h-1);
+            Render_Sprite (.sprite = &resources_gameplay_pipe_body, .x = x, .y = y, .sprite_flags.center_horizontally = true, .originy = resources_gameplay_pipe_body.h-1, .depth = -1);
         for (int y = t + resources_gameplay_pipe_top.h; y < RESOLUTION_HEIGHT; y += resources_gameplay_pipe_body.h)
-            Render_Sprite (.sprite = &resources_gameplay_pipe_body, .x = x, .y = y, .sprite_flags.center_horizontally = true);
-        if (x > PLAYERX) Render_Sprite (.sprite = &resources_gameplay_coin, .x = x, .y = (b + t) / 2, .sprite_flags = {.center_horizontally = true, .center_vertically = true});
+            Render_Sprite (.sprite = &resources_gameplay_pipe_body, .x = x, .y = y, .sprite_flags.center_horizontally = true, .depth = -1);
+        if (x > PLAYERX) Render_Sprite (.sprite = &resources_gameplay_coin, .x = x, .y = (b + t) / 2, .sprite_flags = {.center_horizontally = true, .center_vertically = true}, .depth = -1);
     }
 
     {
         int x = 1;
         int y = RESOLUTION_HEIGHT - 2;
-        Render_Sprite (.sprite = &resources_gameplay_coin, .x = x, .y = y, .originy = resources_gameplay_coin.h-1);
+        Render_Sprite (.sprite = &resources_gameplay_coin, .x = x, .y = y, .originy = resources_gameplay_coin.h-1, .depth = -1);
         x += resources_gameplay_coin.w + 1;
         y += 1;
         char buf[32];
         snprintf (buf, sizeof(buf), "%"PRIu64, data.player.coins);
-        Render_Text (.string = buf, .x = x, .y = y);
+        Render_Text (.string = buf, .x = x, .y = y, .depth = 1);
     }
 }
 
@@ -144,6 +158,8 @@ void PlayerDie () {
 
     if (data.player.coins > game_save_data.high_score.score) {
         data.dead.new_high_score = true;
+        memset(menu_high_score_name_entry.name_creator.text_buffer, 0, *menu_high_score_name_entry.name_creator.buffer_size);
+        menu_high_score_name_entry.name_creator.cursor = 0;
     }
 }
 
@@ -192,7 +208,6 @@ void UpdateAlive () {
     }
 
     Render_Sprite (.sprite = &resources_gameplay_heli, .x = PLAYERX, .y = data.player.y.high, .rotation = data.player.pitch, .sprite_flags = {.center_horizontally = true, .center_vertically = true});
-    Render_Shape (.shape = {.type = render_shape_circle, .circle = {.x = PLAYERX, .y = data.player.y.high, .r = 2, .color_edge = 1}});
     // Propellers
     {
         float spin = data.player.propeller.high / 360.0;
@@ -212,36 +227,45 @@ void UpdateAlive () {
 
 void UpdateDead () {
     auto keyboard = update_data.frame.keyboard_state;
+	auto mouse = update_data.frame.mouse;
+	auto mouse_buttons = update_data.frame.mouse_state;
 
     if (data.dead.cooldown > 0) {
         --data.dead.cooldown;
     }
     else {
-        if (keyboard[os_KEY_SPACE] & KEY_PRESSED) {
-            gameplay_Init ();
+        if (data.dead.new_high_score) {
+            Render_Text (.string = "New high score!!!\nEnter your name:", .x = 110, .y = 200);
+            #define PRESSORREPEAT (KEY_PRESSED | KEY_REPEATED)
+            menu_inputs_t inputs = {
+                .up = keyboard[os_KEY_UP] & PRESSORREPEAT, .down = keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
+                .backspace = keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = keyboard[os_KEY_DELETE] & PRESSORREPEAT,
+                .mouse = {.x = mouse.x, .y = mouse.y, .left = mouse_buttons[MOUSE_LEFT]}};
+            int keys = 0;
+            for (int i = os_KEY_FIRST_WRITABLE; i <= os_KEY_LAST_WRITABLE; ++i) {
+                if (!(keyboard[i] & PRESSORREPEAT)) continue;
+                char c;
+                if (keyboard[os_KEY_SHIFT] & KEY_HELD) c = os_key_shifted (i);
+                else c = i;
+                inputs.typing[keys] = c;
+                ++keys;
+                if (keys > sizeof (inputs.typing)) break;
+            }
+            menu_Update (&menu_death, inputs);
+            menu_Render (&menu_death, 20);
         }
-        Render_Text (.string = "Press [SPACE] to respawn", .x = 50, .y = 100);
-    }
-
-    if (data.dead.new_high_score) {
-        Render_Text (.string = "New high score!!!", .x = 60, .y = RESOLUTION_HEIGHT/2);
+        else {
+            if (keyboard[os_KEY_SPACE] & KEY_PRESSED) {
+                gameplay_Init ();
+            }
+            Render_Text (.string = "Press [SPACE] to respawn", .x = 100, .y = 100, .depth = 10);
+        }
     }
 }
-
-void SaveHighScore ();
-
-submenu_t menu_high_score_name_entry = {
-    "New high score",
-    .type = menu_type_name_creator,
-    .name_creator = {
-        .text_buffer = (char[]){[sizeof((game_save_data_t){}.high_score.name)] = 0},
-        .buffer_size = &(const size_t){sizeof((game_save_data_t){}.high_score.name)},
-        .confirm_func = SaveHighScore,
-    },
-};
 
 void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
     game_SaveGame ();
+    gameplay_Init ();
 }

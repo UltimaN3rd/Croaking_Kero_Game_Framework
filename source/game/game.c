@@ -111,6 +111,12 @@ void menu_Options_Debug_OpenFolder () {
 	os_OpenFileBrowser(buf);
 }
 
+void menu_Options_Debug_OpenSaveFolder () {
+	char buf[1024];
+	snprintf (buf, sizeof(buf), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
+	os_OpenFileBrowser(buf);
+}
+
 submenu_t submenus_options[] = {
 	[0] = {
 		.name = "Options",
@@ -148,23 +154,24 @@ submenu_t submenus_options[] = {
 		.type = menu_type_list,
 		.retain_selection = true,
 		.list = {
-			.item_count = 5,
+			.item_count = 6,
 			.items = {
 				{.name = "Framerate", .type = menu_list_item_type_toggle, .toggle.var = &submenu_vars.debug.show_framerate},
 				{.name = "Simulation time", .type = menu_list_item_type_toggle, .toggle.var = &submenu_vars.debug.show_simtime},
 				{.name = "Rendering time", .type = menu_list_item_type_toggle, .toggle.var = &submenu_vars.debug.show_rendertime},
 				{.name = "Open config/log folder", .type = menu_list_item_type_function, .Function = menu_Options_Debug_OpenFolder},
+				{.name = "Open save data folder", .type = menu_list_item_type_function, .Function = menu_Options_Debug_OpenSaveFolder},
 				{.name = "Back", .type = menu_list_item_type_submenu, .submenu = NULL},
 			},
 		},
 	},
 };
 
-game_save_data_t game_data = {};
+game_save_data_t game_save_data = {};
 
 const cereal_t cereal_savedata[] = {
-	{"Name", cereal_string, game_data.high_score.name, .u.string = {.capacity = sizeof (game_data.high_score.name)}},
-	{"Score", cereal_u64, &game_data.high_score.score},
+	{"Name", cereal_string, game_save_data.high_score.name, .u.string = {.capacity = sizeof (game_save_data.high_score.name)}},
+	{"Score", cereal_u64, &game_save_data.high_score.score},
 };
 
 const size_t cereal_savedata_size = sizeof(cereal_savedata) / sizeof(*cereal_savedata);

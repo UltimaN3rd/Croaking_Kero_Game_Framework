@@ -1,4 +1,5 @@
 #include "game.h"
+#include "resources.h"
 
 #include <stdarg.h>
 
@@ -26,10 +27,7 @@ submenu_t submenus[] = {
 	},
 };
 
-menu_t menu = {
-	.background = background_type_checkers,
-	.submenu_count = 2,
-};
+menu_t menu = {.background = background_type_checkers};
 
 void menu_Function_Quit () {
 	quit = true;
@@ -70,6 +68,11 @@ void game_menu_Update () {
 	menu_Update (&menu, inputs);
 
 	menu_Render (&menu, 1);
+
+	char buf[64];
+	snprintf (buf, sizeof(buf), "High score:\n    %"PRIu64"\n%s", game_save_data.high_score.score, game_save_data.high_score.name);
+	Render_Text (.string = buf, .x = 136, .y = 220);
+	Render_Sprite (.sprite = &resources_gameplay_coin, .x = 134, .y = 197);
 } // menu ()
 
 void menu_Function_NewGame () {
