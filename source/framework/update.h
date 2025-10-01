@@ -54,6 +54,19 @@ typedef struct update_data_s { // update_data_t
 	char config_filename[560];
 	bool new_game;
 	char debug_frame_time_string[64];
+	struct {
+		#ifndef FLOATY_TEXT_MAX
+		#define FLOATY_TEXT_MAX 8
+		#endif
+		unsigned int count;
+		struct {
+			int x;
+			int32split_t y;
+			int vy;
+			int time;
+			char string[32];
+		} text[FLOATY_TEXT_MAX];
+	} floaty_text;
 } update_data_t;
 
 typedef struct {
@@ -75,3 +88,11 @@ typedef struct {
 void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float direction, int32_t velocity, CreateParticlesFromSprite_arguments arguments);
 
 void Update_ChangeState (update_state_e new_state);
+
+#define FloatyTextPrintf(x, y, vy, time, str, ...) do {\
+	char s[32];\
+	snprintf (s, 32, str, __VA_ARGS__);\
+	FloatyTextCreate (x, y, vy, time, s);\
+} while (0)
+void FloatyTextCreate (int x, int y, int vy, int time, const char *const str);
+void FloatyTextDelete (unsigned int i);

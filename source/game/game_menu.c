@@ -70,9 +70,12 @@ void game_menu_Update () {
 	menu_Render (&menu, 1);
 
 	char buf[64];
-	snprintf (buf, sizeof(buf), "High score:\n    %"PRIu64"\n%s", game_save_data.high_score.score, game_save_data.high_score.name);
-	Render_Text (.string = buf, .x = 136, .y = 220);
-	Render_Sprite (.sprite = &resources_gameplay_coin, .x = 134, .y = 197);
+	snprintf (buf, sizeof(buf), "High score:");
+	Render_Text (.string = buf, .y = 224, .center_horizontally_on_screen = true);
+	snprintf (buf, sizeof(buf), "%"PRIu64, game_save_data.high_score.score);
+	Render_Text (.string = buf, .y = 210, .x = RESOLUTION_WIDTH/2);
+	Render_Text (.string = game_save_data.high_score.name, .y = 196, .center_horizontally_on_screen = true);
+	Render_Sprite (.sprite = &resources_gameplay_coin, .x = RESOLUTION_WIDTH/2-resources_gameplay_coin.w-1, .y = 197);
 } // menu ()
 
 void menu_Function_NewGame () {

@@ -100,6 +100,14 @@ void Render_Text_ (Render_Text_arguments arguments) {
 	strncpy (render_state_being_edited->elements[count].text.string, arguments.string, sizeof(render_state_being_edited->elements[count].text.string)-1);
 	render_state_being_edited->elements[count].text.string[sizeof(render_state_being_edited->elements[count].text.string)-1] = 0;
 	if (arguments.length == 0) render_state_being_edited->elements[count].text.length = strlen (render_state_being_edited->elements[count].text.string);
+	if (arguments.center_horizontally_on_screen) {
+		auto w = font_StringDimensions(&resources_font, render_state_being_edited->elements[count].text.string).w;
+		render_state_being_edited->elements[count].text.x = (RESOLUTION_WIDTH - w) / 2;
+	}
+	if (arguments.center_vertically_on_screen) {
+		auto h = font_StringDimensions(&resources_font, render_state_being_edited->elements[count].text.string).h;
+		render_state_being_edited->elements[count].text.y = (RESOLUTION_HEIGHT - h) / 2;
+	}
 }
 
 void Render_Background_ (Render_Background_arguments background) {

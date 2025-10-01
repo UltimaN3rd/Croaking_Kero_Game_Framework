@@ -9,6 +9,9 @@ static_assert(true); // Solves clang getting confused about pragma push/pop. Rel
 
 static uint64_t random_state;
 
+void FloatyTextUpdate ();
+void FloatyTextDraw ();
+
 void *Update(void*) {
 	LOG ("Update thread started");
 	while (!render_data.thread_initialized) os_uSleepEfficient (1000);
@@ -174,6 +177,8 @@ void *Update(void*) {
 			for (int i = 0; i < update_data.gameplay.particles.count; ++i) {
 				Render_Particle (update_data.gameplay.particles.position[i].x.high, update_data.gameplay.particles.position[i].y.high, update_data.gameplay.particles.pixel[i], false);
 			}
+			FloatyTextUpdate();
+			FloatyTextDraw();
 
 			char temp[64];
 			if (current_state == update_state_gameplay) {
@@ -358,4 +363,42 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 void Update_ChangeState (update_state_e new_state) {
 	assert (new_state >= 0 && new_state < update_state_count); if (new_state < 0 || new_state >= update_state_count) { LOG ("Update new state %d out of bounds", new_state); new_state = 0; }
 	update_data.new_state = new_state;
+}
+
+void FloatyTextCreate (int x, int y, int vy, int time, const char *const str) {
+	assert (update_data.floaty_text.count < FLOATY_TEXT_MAX);
+
+	unsigned int i = update_data.floaty_text.count++;
+	update_data.floaty_text.text[i].x = x;
+	update_data.floaty_text.text[i].y = (int32split_t){.high = y};
+	update_data.floaty_text.text[i].vy = vy;
+	update_data.floaty_text.text[i].time = time;
+	snprintf (update_data.floaty_text.text[i].string, sizeof(update_data.floaty_text.text[i].string), str);
+}
+
+void FloatyTextDelete (unsigned int i) {
+	assert (i < update_data.floaty_text.count);
+
+	unsigned int c = --update_data.floaty_text.count;
+	auto tl = &update_data.floaty_text.text[i];
+	auto tr = tl+1;
+	while (i++ < c) *tl++ = *tr++;
+}
+
+void FloatyTextUpdate () {
+	for (int i = 0; i < update_data.floaty_text.count; ++i) {
+		auto t = &update_data.floaty_text.text[i];
+		if (--t->time == 0) {
+			FloatyTextDelete (i);
+			--i;
+		}
+		else t->y.i32 += t->vy;
+	}
+}
+
+void FloatyTextDraw () {
+	for (int i = 0; i < update_data.floaty_text.count; ++i) {
+		auto t = update_data.floaty_text.text[i];
+		Render_Text (.x = t.x, .y = t.y.high, .string = t.string);
+	}
 }

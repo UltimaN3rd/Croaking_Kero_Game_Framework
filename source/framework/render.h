@@ -137,8 +137,7 @@ typedef struct {
 	typeof ((render_state_t){}.elements[0].flags) flags;
 	typeof ((render_state_sprite_t){}.flags) sprite_flags;
 } Render_Sprite_arguments;
-#define RENDER_SPRITE_ARGUMENTS_DEFAULT .depth = 0, .x = 0, .y = 0, .rotation = 0, .flags = {}, .sprite_flags = {}
-#define Render_Sprite(...) Render_Sprite_((Render_Sprite_arguments){RENDER_SPRITE_ARGUMENTS_DEFAULT, __VA_ARGS__})
+#define Render_Sprite(...) Render_Sprite_((Render_Sprite_arguments){__VA_ARGS__})
 void Render_Sprite_ (Render_Sprite_arguments arguments);
 
 #define Render_SpriteSilhouette(__color__, ...) Render_SpriteSilhouette_ (__color__, (Render_Sprite_arguments){RENDER_SPRITE_ARGUMENTS_DEFAULT, __VA_ARGS__})
@@ -149,7 +148,7 @@ typedef struct {
 	typeof ((render_state_t){}.elements[0].flags) flags;
     render_shape_t shape;
 } Render_Shape_arguments;
-#define Render_Shape(...) Render_Shape_((Render_Shape_arguments){.depth = 0, .flags = {}, __VA_ARGS__})
+#define Render_Shape(...) Render_Shape_((Render_Shape_arguments){__VA_ARGS__})
 void Render_Shape_ (Render_Shape_arguments arguments);
 
 typedef struct {
@@ -157,8 +156,10 @@ typedef struct {
 	const typeof ((render_state_t){}.elements[0].flags) flags;
     int x, y, length;
     const char *string;
+	bool center_horizontally_on_screen;
+	bool center_vertically_on_screen;
 } Render_Text_arguments;
-#define Render_Text(...) Render_Text_((Render_Text_arguments){.depth = 0, .flags = {}, .x = 0, .y = 20, __VA_ARGS__})
+#define Render_Text(...) Render_Text_((Render_Text_arguments){.y = 20, __VA_ARGS__})
 void Render_Text_ (Render_Text_arguments arguments);
 
 typedef typeof((render_state_t){}.background) Render_Background_arguments;
