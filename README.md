@@ -7,6 +7,50 @@ This is Nick Walton's game backend framework. I've created and am using this to 
 **This is not a set-and-forget, production-ready framework like SDL and Raylib. Do not just download this and expect to start making games.
 I have released this into the public domain for educational purposes and the public good. I hope this will be useful to you as a learning resource and starting point for doing your own from-scratch programming. This is not intended to be a widely used programming library. While I appreciate bug reports and suggestions for improvements, I am not intending to coach people through using this code.
 
+## Building
+
+Most of this is written in GNUC23, so you need a recent version of GCC.
+
+### Windows
+
+Install MinGW:
+    - Open a PowerShell window.
+    - type winget install XXXX
+    - The above will include GCC, cmake, and everything else you may need in your C toolchain.
+
+### Linux
+
+Clone this repository. Open a terminal inside the repository folder.
+>mkdir build
+>cd build
+>cmake ..
+>cd ..
+>cmake --build build
+>./build/a
+
+### MacOS
+
+Requires a recent version of GCC. You can install it through Homebrew. See https://brew.sh/ for more information.
+Also requires recent XCode tools which can be installed with: >xcode-select --install
+Clone this repository. Open a terminal inside the repository folder.
+>mkdir build
+>cd build
+>CC=gcc-15 OBJC=clang cmake ..
+>cd ..
+>cmake --build build
+>./build/a
+You may have trouble with the line, >CC=gcc-15 OBJC=clang cmake ..
+Apple redirects gcc to clang, but to build this code you actually need to use GCC for all the non-Objective-C stuff. Depending on the version of GCC you installed with brew, you should be able to call it as gcc-VERSION, where VERSION is the version of GCC you have installed. At time of writing, gcc-15 is current.
+
+### Release builds
+
+>mkdir build-release
+>cd build-release
+>(for MacOS, CC=gcc-15 OBJC=clang) cmake .. -DCMAKE_BUILD_TYPE=MinSizeRel
+>cd ..
+>cmake --build build-release
+>./build-release/a (.exe for Windows, .app for MacOS)
+
 ## Why I made this framework
 
 When programming games in the past, I've listened to the advice, "Don't reinvent the wheel," and, "You probably can't do it better than X, so just use X." This advice is intended to save people time and get straight to productive game programming, but I found it difficult to become a good enough programmer while skipping so many foundational parts of the code. I also felt demotivated working on games that I ultimately may be unable to maintain - like the multitude of fantastic Flash-based games from back in the day. I finally decided to build my games from the ground up and created this framework. Now I've completed my first game (launching on Steam soon), and have become a much better and faster programmer. It was not easy to get this far, and I've encountered a significant lack of resources on how to write this kind of code, so I'm putting this in the public domain as an example for others to get over some hurdles.
@@ -28,3 +72,5 @@ The sound thread is more integrated with the OS, but overall it:
 -Repeat.
 Compression is done with a 5ms lookahead compression algorithm, using the greatest sample magnitude of the current and next buffer. The greater value is lerped to over a 5ms period, and always reached before compression of the buffer containing the peak value begins compression.
 The logic thread is where the game code is all run. It runs at a fixed 120Hz. It takes input events from a ring buffer filled by the main thread and maintains its own arrays for frame-by-frame inputs for the game logic. Whenever the "state" is changed, it runs that state's Init() function, then runs the state's Update() function every frame. On startup the 0th state is automatically started, and from there it's up to the game logic within that state's Update() or Init() function to change the state when appropriate.
+
+...
