@@ -23,7 +23,7 @@ Prerequisites
 These are included in the MinGW package from Winlibs, which can be installed with Windows' built-in package manager, winget, with the following command:
 
 ```
-winget install INSERT THE CORRECT COMMAND HERE
+winget install BrechtSanders.WinLibs.POSIX.UCRT
 ```
 
 
