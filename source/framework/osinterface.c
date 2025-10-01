@@ -1279,15 +1279,19 @@ void os_Cleanup () {}
 
 
 #define GL_SILENCE_DEPRECATION
-#include <GL/glew.h>
 #include <CoreGraphics/CoreGraphics.h>
 #import <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
 #import <objc/objc.h>
 #import <Foundation/Foundation.h>
 #import <OpenGL/gl.h>
+#import <OpenGL/glu.h>
 #import <stdint.h>
 #import <mach/mach_time.h>
+
+// MacOS is surpisingly nice for OpenGL - it apparently gets all the functions for me! I guess since it's all translated through Metal, they can guarantee everything exists in their implementation.
+#define GLFUNC(_)
+#define GLFUNC_LOCAL(_)
 
 // Keycodes taken from HIToolbox/Events.h
 enum {
@@ -1536,8 +1540,6 @@ bool os_Init (const char *window_title) {
 	os_private.osx.gl_context = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
 	[os_private.osx.gl_context setView:[os_private.osx.window contentView]];
 	[os_private.osx.gl_context makeCurrentContext];
-	glewExperimental = GL_TRUE;
-	{ auto result = glewInit (); assert (result == GLEW_OK); if (result != GLEW_OK) { LOG ("glewInit failed [%s]", glewGetErrorString (result)); return false; } }
 	[os_private.osx.gl_context setValues:(GLint[]){1} forParameter:NSOpenGLContextParameterSwapInterval];
 	[os_private.osx.window makeKeyAndOrderFront:os_private.osx.window];
 	[os_private.osx.window setAcceptsMouseMovedEvents:YES];
