@@ -30,7 +30,7 @@ extern os_private_t os_private;
 #include "resources.h"
 #include "render.h"
 #include "menu.h"
-#include "game.h"
+#include "game_exports.h"
 #include "samples.h"
 #include "sprite.h"
 #include "sound.h"

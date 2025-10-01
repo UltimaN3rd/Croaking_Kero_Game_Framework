@@ -208,14 +208,14 @@ void *Update(void*) {
 				}
 			}
 
-			if (submenu_vars.debug.show_simtime) {
+			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				if (current_state == update_state_gameplay) {
 					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
 					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-resources_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
 				}
 			}
-			if (submenu_vars.debug.show_rendertime) Render_ShowRenderTime (true);
-			if (submenu_vars.debug.show_framerate) Render_ShowFPS (true);
+			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
+			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
 
 			asm volatile("" ::: "memory");
 			Render_FinishEditingState ();

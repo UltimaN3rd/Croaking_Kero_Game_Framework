@@ -5,7 +5,7 @@
 #ifdef NDEBUG
 #include "osinterface.h"
 #include "folders.h"
-#include "game.h"
+#include "game_exports.h"
 void log_Init () {
     char output_file[1024];
     snprintf (output_file, sizeof (output_file), "%s/%s/log", os_public.directories.config, GAME_FOLDER_CONFIG);

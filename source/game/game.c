@@ -16,9 +16,6 @@ const update_state_functions_t state_functions[update_state_count] = {
 extern update_data_t update_data;
 extern const cereal_t cereal_options[];
 extern const size_t cereal_options_size;
-extern sound_internal_t sound;
-extern const cereal_t cereal_savedata[];
-extern const size_t cereal_savedata_size;
 
 void game_Init () {
 	{
@@ -48,6 +45,10 @@ void game_Init () {
 		DEFER (fclose (file););
 		cereal_ReadFromFile(cereal_savedata, cereal_savedata_size, file);
 	} while (false);
+
+	update_data.debug.show_framerate = &submenu_vars.debug.show_framerate;
+	update_data.debug.show_rendertime = &submenu_vars.debug.show_rendertime;
+	update_data.debug.show_simtime = &submenu_vars.debug.show_simtime;
 
 	Update_ChangeState (update_state_menu);
 }
@@ -85,7 +86,6 @@ submenu_vars_t submenu_vars = {
 	.fx_volume = 200,
 	.fullscreen = false,
 };
-extern sound_internal_t sound;
 const cereal_t cereal_options[] = {
 	{"Music volume", cereal_u8, &submenu_vars.music_volume},
 	{"FX volume", cereal_u8, &submenu_vars.fx_volume},
@@ -175,13 +175,3 @@ const cereal_t cereal_savedata[] = {
 };
 
 const size_t cereal_savedata_size = sizeof(cereal_savedata) / sizeof(*cereal_savedata);
-
-void game_SaveGame () {
-	FILE *file = fopen (update_data.game_save_filename, "wb");
-	if (!file) {
-		LOG ("Failed to open game save file [%s]", update_data.game_save_filename);
-		return;
-	};
-	DEFER (fclose (file););
-	cereal_WriteToFile(cereal_savedata, cereal_savedata_size, file);
-}

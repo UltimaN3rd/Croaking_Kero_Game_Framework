@@ -264,10 +264,20 @@ void UpdateDead () {
     }
 }
 
+void SaveGame () {
+	FILE *file = fopen (update_data.game_save_filename, "wb");
+	if (!file) {
+		LOG ("Failed to open game save file [%s]", update_data.game_save_filename);
+		return;
+	};
+	DEFER (fclose (file););
+	cereal_WriteToFile(cereal_savedata, cereal_savedata_size, file);
+}
+
 void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
-    game_SaveGame ();
+    SaveGame ();
     int width = font_StringDimensions(&resources_font, game_save_data.high_score.name).w;
     width += font_StringDimensions(&resources_font, "'s score saved").w;
     FloatyTextPrintf((RESOLUTION_WIDTH - width) / 2, 200, 0, 120, "%s's score saved", game_save_data.high_score.name);

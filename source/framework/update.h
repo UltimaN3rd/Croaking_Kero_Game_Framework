@@ -67,6 +67,9 @@ typedef struct update_data_s { // update_data_t
 			char string[32];
 		} text[FLOATY_TEXT_MAX];
 	} floaty_text;
+	struct {
+		bool *show_simtime, *show_rendertime, *show_framerate;
+	} debug;
 } update_data_t;
 
 typedef struct {

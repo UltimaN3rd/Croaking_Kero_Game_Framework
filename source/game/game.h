@@ -1,19 +1,6 @@
 #pragma once
 
-#define GAME_TITLE "Flappy Choppa"
-
-#define RESOLUTION_WIDTH 320
-#define RESOLUTION_HEIGHT 240
-
-typedef enum { update_state_init, update_state_gameplay, update_state_menu } update_state_e;
-#define update_state_count update_state_menu+1
-
-extern char GAME_FOLDER_SAVES[];
-extern char GAME_FOLDER_CONFIG[];
-
 #include "framework.h"
-
-extern const update_state_functions_t state_functions[update_state_count];
 
 typedef struct {
 	uint8_t music_volume, fx_volume;
@@ -43,4 +30,5 @@ typedef struct {
 } game_save_data_t;
 
 extern game_save_data_t game_save_data;
-void game_SaveGame ();
+extern const cereal_t cereal_savedata[];
+extern const size_t cereal_savedata_size;

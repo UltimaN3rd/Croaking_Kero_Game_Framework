@@ -1,4 +1,4 @@
-#include "game.h"
+#include "game_exports.h"
 #include "menu.h"
 
 explorer_t menu_explorer;
@@ -472,7 +472,7 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 	if (left_click) {
 		if (input.mouse.x >= self->dimensions.x - XMARGIN && input.mouse.x < self->dimensions.x + self->dimensions.w - 1 + XMARGIN
 		&& input.mouse.y >= self->dimensions.y && input.mouse.y < self->dimensions.y + self->dimensions.h) SelectItem (self, ItemAt (self, input.mouse.x, input.mouse.y, input));
-		else if (input.mouse.x >= 0 && input.mouse.x <= resources_menu_back.w && input.mouse.y >= RESOLUTION_HEIGHT - resources_menu_back.h && input.mouse.y <= RESOLUTION_HEIGHT) MenuBack (self);
+		else if (submenu->parent != NULL && input.mouse.x >= 0 && input.mouse.x <= resources_menu_back.w && input.mouse.y >= RESOLUTION_HEIGHT - resources_menu_back.h && input.mouse.y <= RESOLUTION_HEIGHT) MenuBack (self);
 	}
 
     input_prev = input;
@@ -600,7 +600,7 @@ void menu_Render (menu_t *self, int depth) {
 
 	// Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = self->dimensions.x, .w = self->dimensions.w, .y = self->dimensions.y, .h = self->dimensions.h, .color_edge = 1}}, .depth = depth);
 
-	if (submenu->parent >= 0) Render_Sprite (.sprite = &resources_menu_back, .y = RESOLUTION_HEIGHT - resources_menu_back.h, .depth = depth, .flags.ignore_camera = true);
+	if (submenu->parent != NULL) Render_Sprite (.sprite = &resources_menu_back, .y = RESOLUTION_HEIGHT - resources_menu_back.h, .depth = depth, .flags.ignore_camera = true);
 
 	Render_Cursor (&resources_menu_cursor, mouse.x, mouse.y, 3, resources_menu_cursor.h-1);
 }
