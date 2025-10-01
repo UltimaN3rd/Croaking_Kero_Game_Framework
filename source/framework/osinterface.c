@@ -670,6 +670,8 @@ void os_OpenFileBrowser (const char *directory) {
 #define GLFUNC(__funcname__) do { __funcname__ = (__funcname__##_t)glXGetProcAddress ((const GLubyte*)#__funcname__); assert (__funcname__); if (__funcname__ == NULL) { LOG ("GLX failed to find function ["#__funcname__"]"); return false; } } while (0)
 #define GLFUNC_LOCAL(__funcname__) __funcname__##_t __funcname__ = NULL; GLFUNC (__funcname__)
 
+typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); glUniform2f_t glUniform2f;
+
 
 
 
