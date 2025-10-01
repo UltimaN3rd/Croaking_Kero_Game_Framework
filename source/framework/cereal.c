@@ -37,7 +37,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *
 						case cereal_u32: fprintf (file, " %"PRIu32, *(uint32_t*)v); v += sizeof (uint32_t); break;
 						case cereal_u64: fprintf (file, " %"PRIu64, *(uint64_t*)v); v += sizeof (uint64_t); break;
 						case cereal_f32: fprintf (file, " %f", *(float*)v); v += sizeof (float); break;
-						case cereal_string: fprintf (file, " %"PRIu64" %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
+						case cereal_string: fprintf (file, " %lu %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
 					}
 				}
 			} break;
@@ -47,7 +47,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *
 			case cereal_u32: fprintf (file, "%"PRIu32, *(uint32_t*)cereal[i].var); break;
 			case cereal_u64: fprintf (file, "%"PRIu64, *(uint64_t*)cereal[i].var); break;
 			case cereal_f32: fprintf (file, "%f", *(float*)cereal[i].var); break;
-			case cereal_string: fprintf (file, "%"PRIu64" %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
+			case cereal_string: fprintf (file, "%lu %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
 		}
 		fprintf (file, "]\n");
 	}
