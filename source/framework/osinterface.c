@@ -51,20 +51,24 @@ os_intxy_t os_ScaledFrameBufferPositionToWindowPosition (int framex, int framey)
 
 
 
-typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1);
-glUniform2f_t glUniform2f;
-
-
 #ifdef WIN32
 
 #include <Shlobj.h>
 #include <assert.h>
 #include "NtSetTimerResolution.h"
 #include <GL/gl.h>
-#define GL_GLEXT_PROTOTYPES
+#include <GL/glu.h>
 #include <GL/glext.h>
+#include <GL/wglext.h>
 
 LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam);
+
+typedef BOOL (*wglSwapIntervalEXT_t) (int interval); wglSwapIntervalEXT_t wglSwapIntervalEXT;
+typedef HGLRC (*wglCreateContextAttribsARB_t) (HDC hDC, HGLRC hshareContext, const int *attribList); wglCreateContextAttribsARB_t wglCreateContextAttribsARB;
+typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); glUniform2f_t glUniform2f;
+
+#define GLFUNC(__funcname__) do { __funcname__ = (__funcname__##_t)wglGetProcAddress ((LPCSTR)#__funcname__); assert (__funcname__); if (__funcname__ == NULL) { LOG ("WGL failed to find function ["#__funcname__"]"); return false; } } while (0)
+#define GLFUNC_LOCAL(__funcname__) __funcname__##_t __funcname__ = NULL; GLFUNC (__funcname__)
 
 const char *os_HResultToStr (HRESULT result) {
     static char win32_error_buffer[512];
@@ -165,7 +169,15 @@ bool os_Init (const char *window_title) {
 	{
 		auto gltemp = wglCreateContext (os_private.win32.window_context); assert (gltemp); if (gltemp == FALSE) { LOG ("wglCreateContext failed [%s]", os_HResultToStr(GetLastError())); return false; }
 		{ auto result = wglMakeCurrent (os_private.win32.window_context, gltemp); assert (result); if (result == FALSE) { LOG ("wglMakeCurrent failed [%s]", os_HResultToStr(GetLastError())); return false; } }
-		{ auto result = glewInit (); assert (result == GLEW_OK); if (result != GLEW_OK) { LOG ("glewInit failed [%s]", glewGetErrorString (result)); return false; } }
+		GLFUNC (wglCreateContextAttribsARB);
+		{ os_private.win32.gl_context = wglCreateContextAttribsARB (os_private.win32.window_context, 0, (const int[]){WGL_CONTEXT_MAJOR_VERSION_ARB, 2, WGL_CONTEXT_MINOR_VERSION_ARB, 1, 0}); assert (os_private.win32.window_context); if (os_private.win32.gl_context == NULL) { LOG ("wglCreateContextAttribsARB failed [%s]", os_HResultToStr(GetLastError())); return false; } }
+		{ auto result = wglMakeCurrent (os_private.win32.window_context, os_private.win32.gl_context); assert (result); if (result == FALSE) { LOG ("wglMakeCurrent failed [%s]", os_HResultToStr(GetLastError())); return false; } }
+		if (os_LogGLErrors ()) { LOG ("OpenGL had errors");}
+		LOG ("OpenGL version: [%s]", (const char*)glGetString (GL_VERSION));
+		wglDeleteContext (gltemp);
+		
+		GLFUNC (wglSwapIntervalEXT);
+		GLFUNC (glUniform2f);
 		{
 			auto result = wglSwapIntervalEXT (-1); assert (result); if (result == FALSE) {
 				LOG ("wglSwapIntervalEXT (-1) failed. Could not enable adaptive sync [%s]", os_HResultToStr(GetLastError()));
@@ -173,12 +185,9 @@ bool os_Init (const char *window_title) {
 			}
 			if (os_LogGLErrors ()) { LOG ("OpenGL had errors");}
 		}
-		{ os_private.win32.gl_context = wglCreateContextAttribsARB (os_private.win32.window_context, 0, (const int[]){WGL_CONTEXT_MAJOR_VERSION_ARB, 2, WGL_CONTEXT_MINOR_VERSION_ARB, 1, 0}); assert (os_private.win32.window_context); if (os_private.win32.gl_context == NULL) { LOG ("wglCreateContextAttribsARB failed [%s]", os_HResultToStr(GetLastError())); return false; } }
-		{ auto result = wglMakeCurrent (os_private.win32.window_context, os_private.win32.gl_context); assert (result); if (result == FALSE) { LOG ("wglMakeCurrent failed [%s]", os_HResultToStr(GetLastError())); return false; } }
-		if (os_LogGLErrors ()) { LOG ("OpenGL had errors");}
-		LOG ("OpenGL version: [%s]", (const char*)glGetString (GL_VERSION));
-		wglDeleteContext (gltemp);
 	}
+
+	// GLFUNC (glUniform2f);
 
 	// os_SetBackgroundColor (0x40, 0x3a, 0x4d);
 	os_SetBackgroundColor (0,0,0);
@@ -2061,6 +2070,7 @@ typedef void (*glUniform3fv_t) (GLint location, GLsizei count, const GLfloat *va
 typedef GLint (*glGetUniformLocation_t) (GLuint program, const GLchar *name);
 typedef void (*glUniform1i_t) (GLint location, GLint v0);
 typedef void (*glValidateProgram_t) (GLuint program);
+typedef void (*glActiveTexture_t) (GLenum texture);
 
 bool os_CreateGLColorMap () {
 	GLFUNC_LOCAL (glCreateShader);
@@ -2079,6 +2089,7 @@ bool os_CreateGLColorMap () {
 	GLFUNC_LOCAL (glGetUniformLocation);
 	GLFUNC_LOCAL (glUniform1i);
 	GLFUNC_LOCAL (glValidateProgram);
+	GLFUNC_LOCAL (glActiveTexture);
 
 	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 	auto vertex = glCreateShader (GL_VERTEX_SHADER);

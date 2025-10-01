@@ -132,10 +132,9 @@ void os_WindowFrameBufferCalculateScale ();
 #include <string.h>
 
 
-#define GL_GLEXT_PROTOTYPES
+// #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glext.h>
+// #include <GL/glext.h>
 
 typedef struct {
 	union {
