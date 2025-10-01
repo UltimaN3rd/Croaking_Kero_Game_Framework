@@ -438,13 +438,13 @@ auto Sound_Loop_Default = Sound_Loop_i16;
 const char *HResultToStr (HRESULT result) {
     static char wasapi_error_buffer[512];
     DWORD len;  // Number of chars returned.
-    len = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, result, 0, wasapi_error_buffer, 512, NULL);
+    len = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, result, 0, wasapi_error_buffer, 512, NULL);
     if (len == 0) {
-        HINSTANCE hInst = LoadLibrary("Ntdsbmsg.dll");
+        HINSTANCE hInst = LoadLibraryA("Ntdsbmsg.dll");
         if (hInst == NULL)
             snprintf (wasapi_error_buffer, sizeof (wasapi_error_buffer), "Cannot convert error to string: Failed to load Ntdsbmsg.dll");
         else {
-            len = FormatMessage(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS, hInst, result, 0, wasapi_error_buffer, 512, NULL);
+            len = FormatMessageA(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS, hInst, result, 0, wasapi_error_buffer, 512, NULL);
             if (len == 0) snprintf (wasapi_error_buffer, sizeof (wasapi_error_buffer), "HRESULT error message not found");
             FreeLibrary( hInst );
         }
