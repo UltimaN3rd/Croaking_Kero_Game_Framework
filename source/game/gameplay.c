@@ -201,9 +201,9 @@ void UpdateAlive () {
         }
     }
 
-    if (pipe_distance < (resources_gameplay_pipe_top.w + resources_gameplay_heli.w)/2) {
-        if (data.player.y.high - resources_gameplay_heli.h/2 < data.pipes[nearest_pipe].bottom
-         || data.player.y.high + resources_gameplay_heli.h/2 > data.pipes[nearest_pipe].bottom + data.pipes[nearest_pipe].gap_size)
+    if (pipe_distance < resources_gameplay_pipe_top.w/2 + 8) {
+        if (data.player.y.high - 5 < data.pipes[nearest_pipe].bottom
+         || data.player.y.high + 5 > data.pipes[nearest_pipe].bottom + data.pipes[nearest_pipe].gap_size)
             PlayerDie ();
     }
 
