@@ -12,6 +12,19 @@ static uint64_t random_state;
 void FloatyTextUpdate ();
 void FloatyTextDraw ();
 
+#ifndef PARTICLES_BOUNDARY_LEFT
+#define PARTICLES_BOUNDARY_LEFT 0
+#endif
+#ifndef PARTICLES_BOUNDARY_RIGHT
+#define PARTICLES_BOUNDARY_RIGHT (RESOLUTION_WIDTH-1)
+#endif
+#ifndef PARTICLES_BOUNDARY_BOTTOM
+#define PARTICLES_BOUNDARY_BOTTOM -20
+#endif
+#ifndef PARTICLES_BOUNDARY_TOP
+#define PARTICLES_BOUNDARY_TOP (RESOLUTION_HEIGHT + 100)
+#endif
+
 void *Update(void*) {
 	LOG ("Update thread started");
 	while (!render_data.thread_initialized) os_uSleepEfficient (1000);

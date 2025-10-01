@@ -11,11 +11,6 @@ typedef enum { update_state_init, update_state_gameplay, update_state_menu } upd
 extern char GAME_FOLDER_SAVES[];
 extern char GAME_FOLDER_CONFIG[];
 
-#define PARTICLES_BOUNDARY_LEFT 0
-#define PARTICLES_BOUNDARY_RIGHT (RESOLUTION_WIDTH-1)
-#define PARTICLES_BOUNDARY_BOTTOM -20
-#define PARTICLES_BOUNDARY_TOP (RESOLUTION_HEIGHT*2)
-
 #include "framework.h"
 
 extern const update_state_functions_t state_functions[update_state_count];
