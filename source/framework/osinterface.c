@@ -22,7 +22,7 @@ os_public_t os_public = {};
 os_private_t os_private = {};
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-void os_CreateGLColorMap ();
+bool os_CreateGLColorMap ();
 #endif
 
 #ifdef OSINTERFACE_FRAME_BUFFER_SCALED
@@ -50,6 +50,9 @@ os_intxy_t os_ScaledFrameBufferPositionToWindowPosition (int framex, int framey)
 #endif
 
 
+
+typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1);
+glUniform2f_t glUniform2f;
 
 
 #ifdef WIN32
@@ -181,7 +184,7 @@ bool os_Init (const char *window_title) {
 	os_SetBackgroundColor (0,0,0);
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-	os_CreateGLColorMap ();
+	if (!os_CreateGLColorMap ()) { LOG ("Failed to create OpenGL color map shader"); return false;}
 #endif
 	
 #ifdef OSINTERFACE_FRAME_BUFFER_SCALED
@@ -650,15 +653,19 @@ void os_OpenFileBrowser (const char *directory) {
 
 
 #include <pwd.h>
+#define GLX_GLXEXT_PROTOTYPES
 #include <GL/glu.h>
+#include <GL/glx.h>
+#include <GL/glxext.h>
+
+#define GLFUNC(__funcname__) do { __funcname__ = (__funcname__##_t)glXGetProcAddress ((const GLubyte*)#__funcname__); assert (__funcname__); if (__funcname__ == NULL) { LOG ("GLX failed to find function ["#__funcname__"]"); return false; } } while (0)
+#define GLFUNC_LOCAL(__funcname__) __funcname__##_t __funcname__ = NULL; GLFUNC (__funcname__)
 
 
 
 
 
 bool os_Init (const char *window_title) {
-
-
 	{
 		const char *sav = getenv ("XDG_DATA_HOME");
 		if (sav) snprintf (os_public.directories.savegame, sizeof (os_public.directories.savegame), "%s", sav);
@@ -686,10 +693,6 @@ bool os_Init (const char *window_title) {
         os_private.x11.root_window = DefaultRootWindow (os_private.x11.display);
         os_private.x11.screen = DefaultScreen (os_private.x11.display);
 
-		int glx_version = gladLoaderLoadGLX(os_private.x11.display, os_private.x11.screen);
-		if (!glx_version) { LOG ("Unable to load GLX"); return false; }
-		LOG ("Loaded GLX %d.%d", GLAD_VERSION_MAJOR(glx_version), GLAD_VERSION_MINOR(glx_version));
-
         // XMatchVisualInfo(os_private.x11.display, os_private.x11.screen, 24, TrueColor, &os_private.x11.visual_info);
 		int attributes [] = { GLX_RGBA, GLX_DOUBLEBUFFER,
 			GLX_RED_SIZE, 8, GLX_BLUE_SIZE, 8, GLX_GREEN_SIZE, 8, GLX_DEPTH_SIZE, 24,
@@ -710,10 +713,10 @@ bool os_Init (const char *window_title) {
         XMapWindow (os_private.x11.display, os_private.x11.window);
 		os_GLMakeCurrent ();
 		
-		{ // Initialize GL extensions
-
-		}
-
+		#ifdef OSINTERFACE_COLOR_INDEX_MODE
+		GLFUNC (glUniform2f);
+		#endif
+		
 		glViewport (0, 0, os_public.window.w, os_public.window.h);
 		glMatrixMode (GL_PROJECTION);
 		glLoadIdentity ();
@@ -804,7 +807,7 @@ bool os_Init (const char *window_title) {
 	os_SetBackgroundColor (0,0,0);
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-	os_CreateGLColorMap ();
+	if (!os_CreateGLColorMap ()) { LOG ("Failed to create OpenGL color map shader"); return false;}
 #endif
 
 	#ifdef OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE
@@ -1546,7 +1549,7 @@ bool os_Init (const char *window_title) {
 	snprintf (msg, sizeof (msg), "swap: %d", swap_interval);
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-	os_CreateGLColorMap ();
+	if (!os_CreateGLColorMap ()) { LOG ("Failed to create OpenGL color map shader"); return false;}
 #endif
 	[os_private.osx.gl_context update];
 
@@ -2042,8 +2045,42 @@ void os_ClearScreen () {
 #endif
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-void os_CreateGLColorMap () {
-	if (os_LogGLErrors ()) LOG ("OpenGL error");
+typedef GLuint (*glCreateShader_t) (GLenum shaderType);
+typedef void (*glShaderSource_t) (GLuint shader, GLsizei count, const GLchar **string, const GLint *length);
+typedef void (*glCompileShader_t) (GLuint shader);
+typedef void (*glGetShaderiv_t) (GLuint shader, GLenum pname, GLint *params);
+typedef void (*glGetShaderInfoLog_t) (GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
+typedef GLuint (*glCreateProgram_t) ();
+typedef void (*glAttachShader_t) (GLuint program, GLuint shader);
+typedef void (*glLinkProgram_t) (GLuint program);
+typedef void (*glGetProgramiv_t) (GLuint program, GLenum pname, GLint *params);
+typedef void (*glGetProgramInfoLog_t) (GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
+typedef void (*glDeleteShader_t) (GLuint shader);
+typedef void (*glUseProgram_t) (GLuint program);
+typedef void (*glUniform3fv_t) (GLint location, GLsizei count, const GLfloat *value);
+typedef GLint (*glGetUniformLocation_t) (GLuint program, const GLchar *name);
+typedef void (*glUniform1i_t) (GLint location, GLint v0);
+typedef void (*glValidateProgram_t) (GLuint program);
+
+bool os_CreateGLColorMap () {
+	GLFUNC_LOCAL (glCreateShader);
+	GLFUNC_LOCAL (glShaderSource);
+	GLFUNC_LOCAL (glCompileShader);
+	GLFUNC_LOCAL (glGetShaderiv);
+	GLFUNC_LOCAL (glGetShaderInfoLog);
+	GLFUNC_LOCAL (glCreateProgram);
+	GLFUNC_LOCAL (glAttachShader);
+	GLFUNC_LOCAL (glLinkProgram);
+	GLFUNC_LOCAL (glGetProgramiv);
+	GLFUNC_LOCAL (glGetProgramInfoLog);
+	GLFUNC_LOCAL (glDeleteShader);
+	GLFUNC_LOCAL (glUseProgram);
+	GLFUNC_LOCAL (glUniform3fv);
+	GLFUNC_LOCAL (glGetUniformLocation);
+	GLFUNC_LOCAL (glUniform1i);
+	GLFUNC_LOCAL (glValidateProgram);
+
+	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 	auto vertex = glCreateShader (GL_VERTEX_SHADER);
 	glShaderSource (vertex, 1,&(const char *){
 R"(#version 120
@@ -2062,9 +2099,9 @@ void main()
 		glGetShaderInfoLog (vertex, 512, NULL, buf);
 		LOG ("OpenGL vertex shader compilation error [%s]", buf);
 		assert (false);
-		return;
+		return false;
 	}
-	if (os_LogGLErrors ()) LOG ("OpenGL error");
+	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 	auto fragment = glCreateShader (GL_FRAGMENT_SHADER);
 	glShaderSource (fragment, 1,&(const char *){
 R"(#version 120
@@ -2083,7 +2120,7 @@ void main()
 		glGetShaderInfoLog (fragment, 512, NULL, buf);
 		LOG ("OpenGL fragment shader compilation error [%s]", buf);
 		assert (false);
-		return;
+		return false;
 	}
 	auto program = glCreateProgram ();
 	glAttachShader (program, vertex);
@@ -2094,12 +2131,12 @@ void main()
 		char buf[512];
 		glGetProgramInfoLog (program, 512, NULL, buf);
 		LOG ("OpenGL shader linking error [%s]", buf);
-		return;
+		return false;
 	}
 	glDeleteShader (vertex);
 	glDeleteShader (fragment);
 	glUseProgram (program);
-	if (os_LogGLErrors ()) LOG ("OpenGL error");
+	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 	float float_palette[256][3];
 	for (int i = 0; i < 256; ++i) {
 		float_palette[i][0] = palette[i][0] / 255.f;
@@ -2111,14 +2148,14 @@ void main()
 	os_private.gl.locations.vertex.scale = glGetUniformLocation(program, "uni_scale");
 	os_private.gl.locations.fragment.texture = glGetUniformLocation(program, "sam_texture");
 
-	if (os_LogGLErrors ()) LOG ("OpenGL error");
+	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 	glActiveTexture (GL_TEXTURE0);
 	glGenTextures (1, &os_private.gl.texture);
 	glBindTexture (GL_TEXTURE_2D, os_private.gl.texture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glUniform1i (os_private.gl.locations.fragment.texture, 0);
-	if (os_LogGLErrors ()) LOG ("OpenGL error");
+	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 
 	// os_private.gl.vao = 0;
 	// glGenVertexArrays(1, &os_private.gl.vao);
@@ -2152,9 +2189,10 @@ void main()
 		glGetProgramInfoLog (program, 512, NULL, buf);
 		LOG ("OpenGL shader validation error [%s]", buf);
 		assert (false);
-		return;
+		return false;
 	}
-	if (os_LogGLErrors ()) LOG ("OpenGL error");
+	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
+	return true;
 }
 #endif
 
