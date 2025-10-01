@@ -132,11 +132,10 @@ void os_WindowFrameBufferCalculateScale ();
 #include <string.h>
 
 
-// #include <GL/glew.h>
-// #define GL_GLEXT_PROTOTYPES
-// #include <GL/gl.h>
-// #include <GL/glu.h>
-// #include <GL/glext.h>
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glext.h>
 
 typedef struct {
 	union {
@@ -201,17 +200,13 @@ typedef struct {
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/XKBlib.h>
-#include <GL/glew.h>
-#include <GL/gl.h>
-#define GLX_GLXEXT_PROTOTYPES
-#include <GL/glx.h>
-#include <GL/glu.h>
 #include <errno.h>
 #include <time.h>
 typedef struct timespec timespec_t;
 #include <unistd.h> // usleep
 // #include <X11/extensions/Xfixes.h> // XFixesHideCursor - Doesn't work under XWayland, so no longer necessary
 #include <X11/extensions/Xrandr.h> // Refresh rate
+#include "glad/glx.h"
 
 typedef struct {
 	union {

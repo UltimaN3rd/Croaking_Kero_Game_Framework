@@ -57,8 +57,9 @@ os_intxy_t os_ScaledFrameBufferPositionToWindowPosition (int framex, int framey)
 #include <Shlobj.h>
 #include <assert.h>
 #include "NtSetTimerResolution.h"
-#include <GL/glew.h>
-#include <GL/wglew.h>
+#include <GL/gl.h>
+#define GL_GLEXT_PROTOTYPES
+#include <GL/glext.h>
 
 LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -649,13 +650,15 @@ void os_OpenFileBrowser (const char *directory) {
 
 
 #include <pwd.h>
-#include <GL/glew.h>
+#include <GL/glu.h>
 
 
 
 
 
 bool os_Init (const char *window_title) {
+
+
 	{
 		const char *sav = getenv ("XDG_DATA_HOME");
 		if (sav) snprintf (os_public.directories.savegame, sizeof (os_public.directories.savegame), "%s", sav);
@@ -683,6 +686,10 @@ bool os_Init (const char *window_title) {
         os_private.x11.root_window = DefaultRootWindow (os_private.x11.display);
         os_private.x11.screen = DefaultScreen (os_private.x11.display);
 
+		int glx_version = gladLoaderLoadGLX(os_private.x11.display, os_private.x11.screen);
+		if (!glx_version) { LOG ("Unable to load GLX"); return false; }
+		LOG ("Loaded GLX %d.%d", GLAD_VERSION_MAJOR(glx_version), GLAD_VERSION_MINOR(glx_version));
+
         // XMatchVisualInfo(os_private.x11.display, os_private.x11.screen, 24, TrueColor, &os_private.x11.visual_info);
 		int attributes [] = { GLX_RGBA, GLX_DOUBLEBUFFER,
 			GLX_RED_SIZE, 8, GLX_BLUE_SIZE, 8, GLX_GREEN_SIZE, 8, GLX_DEPTH_SIZE, 24,
@@ -703,7 +710,9 @@ bool os_Init (const char *window_title) {
         XMapWindow (os_private.x11.display, os_private.x11.window);
 		os_GLMakeCurrent ();
 		
-		{ auto result = glewInit (); assert (result == GLEW_OK); if (result != GLEW_OK) { LOG ("glewInit failed [%s]", glewGetErrorString (result)); return false; } }
+		{ // Initialize GL extensions
+
+		}
 
 		glViewport (0, 0, os_public.window.w, os_public.window.h);
 		glMatrixMode (GL_PROJECTION);
