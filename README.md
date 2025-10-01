@@ -166,6 +166,10 @@ Included in this repository is a simple "Flappy Bird" clone, called "Flappy Chop
 
 ![](readme-media/menu.png) ![](readme-media/gameplay.png) ![](readme-media/crash.png)
 
+## File loading
+
+User configuration and save data are dynamically loaded from and saved to files in the appropriate directories based on the user's OS. However, all game assets are compiled into the binary. This removes a huge class of failures, and allows for the game to be distributed as a single file. Of course, this wouldn't be practical for a AAA game, but 2D, retro-style games may not have more than a few megabytes of assets at the high end, so the cost for this benefit is minimal. This also results in practically instant "loading", since nothing actually needs to be loaded.
+
 
 ## Why I made this framework 
 
