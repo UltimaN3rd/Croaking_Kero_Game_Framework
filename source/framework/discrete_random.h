@@ -4,7 +4,9 @@
 // uint32_t a_random_number = DiscreteRandom_Next (&my_random_state);
 // Make a local uint64_t. This is the specific state of your random sequence. Assign it whatever value you want and call call DiscreteRandom_Seed (&your_var), or just use SeedFromTime(). Then to get each random value, do: uint32_t num = DiscreteRandom_Next (&your_var);
 
-// Code copied from https://en.wikipedia.org/wiki/Permuted_congruential_generator#Example_code
+// Code based on https://en.wikipedia.org/wiki/Permuted_congruential_generator#Example_code
+// Edits have been made, though the core algorithm is unchanged.
+// Original license: https://en.wikipedia.org/wiki/Wikipedia:Text_of_the_Creative_Commons_Attribution-ShareAlike_4.0_International_License
 
 #include <stdint.h>
 
