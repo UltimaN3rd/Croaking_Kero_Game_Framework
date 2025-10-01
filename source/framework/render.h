@@ -140,7 +140,7 @@ typedef struct {
 #define Render_Sprite(...) Render_Sprite_((Render_Sprite_arguments){__VA_ARGS__})
 void Render_Sprite_ (Render_Sprite_arguments arguments);
 
-#define Render_SpriteSilhouette(__color__, ...) Render_SpriteSilhouette_ (__color__, (Render_Sprite_arguments){RENDER_SPRITE_ARGUMENTS_DEFAULT, __VA_ARGS__})
+#define Render_SpriteSilhouette(__color__, ...) Render_SpriteSilhouette_ (__color__, (Render_Sprite_arguments){__VA_ARGS__})
 void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments);
 
 typedef struct {
