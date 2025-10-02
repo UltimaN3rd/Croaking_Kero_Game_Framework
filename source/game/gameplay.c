@@ -212,6 +212,7 @@ void UpdateAlive () {
         }
         if (data.pipes[i].x.high < PLAYERX && !data.pipes[i].has_been_passed) {
             data.pipes[i].has_been_passed = true;
+            CreateParticlesFromSprite (&resources_gameplay_coin, data.pipes[i].x.high, data.pipes[i].bottom + data.pipes[i].gap_size/2, .2, UINT16_MAX*2, .originx = resources_gameplay_coin.w/2, .originy = resources_gameplay_coin.h/2);
             PlayerGetCoin ();
         }
     }
