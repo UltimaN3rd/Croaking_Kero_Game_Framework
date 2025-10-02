@@ -150,7 +150,7 @@ The provided example game, Flappy Choppa, is also architected with no memory all
 
 ## Game architecture
 
-The game code is built in its own translation unit(s). You must implement anything exported from game_exports.h, such as the state_functions[] array. Other than that, you're relatively free to architect your game however you want. You could just have 1 state with an Init() and Update() and handle your games state internally. I like to build each state as a separate translation unit, so my "game/" source code directory consists of:
+The game code is built in its own translation unit(s). You must implement anything exported from game_exports.h, such as the state_functions[] array. Other than that, you're relatively free to architect your game however you want. You could just have 1 state with an Init() and Update() and handle your game's state internally. I like to build each state as a separate translation unit, so my "game/" source code directory consists of:
 
 ```
 game.c
@@ -162,7 +162,7 @@ gameplay.c
 
 "game.h" exports things that multiple game states need access to. "game.c" implements everything exported by either game.h or game_exports.h, along with handling initialization of a few things before switching the state to the menu. The two states in this game - menu and gameplay - are fully implemented in their own self-contained .c file.
 
-Included in this repository is a simple "Flappy Bird" clone, called "Flappy Choppa", which serves as and example and proof-of-concept.
+Included in this repository is a simple "Flappy Bird" clone, called "Flappy Choppa", which serves as an example and proof-of-concept.
 
 ![](readme-media/menu.png) ![](readme-media/gameplay.png) ![](readme-media/crash.png)
 
