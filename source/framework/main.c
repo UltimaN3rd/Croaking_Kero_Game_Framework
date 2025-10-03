@@ -25,7 +25,7 @@ bool quit = false;
 mouse_t mouse = {};
 pthread_mutex_t update_render_swap_state_mutex = (pthread_mutex_t){};
 
-union{sprite_t sprite;uint8_t u8[sizeof(sprite_t)+sizeof((sprite_t){}.p[0])*RESOLUTION_WIDTH*RESOLUTION_HEIGHT];} render_data_frame_0 = {}, render_data_frame_1 = {};
+sprite_t render_data_frame_0 = {.p = {[RESOLUTION_WIDTH*RESOLUTION_HEIGHT-1] = 0}}, render_data_frame_1 = {.p = {[RESOLUTION_WIDTH*RESOLUTION_HEIGHT-1] = 0}};
 
 #ifndef NDEBUG
 typedef struct __attribute((__packed__)) {
@@ -85,8 +85,8 @@ int main (int argc, char **argv) {
 	update_data.keyboard_events.count = 0;
 	update_data.source_mouse = &mouse;
 
-	render_data.frame[0] = &render_data_frame_0.sprite;
-	render_data.frame[1] = &render_data_frame_1.sprite;
+	render_data.frame[0] = &render_data_frame_0;
+	render_data.frame[1] = &render_data_frame_1;
 	render_data.frame[0]->w = render_data.frame[1]->w = RESOLUTION_WIDTH;
 	render_data.frame[0]->h = render_data.frame[1]->h = RESOLUTION_HEIGHT;
 
