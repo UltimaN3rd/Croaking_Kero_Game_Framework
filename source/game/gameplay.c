@@ -293,8 +293,8 @@ void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
     SaveGame ();
-    int width = font_StringDimensions(&resources_font, game_save_data.high_score.name).w;
-    width += font_StringDimensions(&resources_font, "'s score saved").w;
+    int width = font_StringDimensions(&framework_font, game_save_data.high_score.name).w;
+    width += font_StringDimensions(&framework_font, "'s score saved").w;
     FloatyTextPrintf((RESOLUTION_WIDTH - width) / 2, 200, 0, 120, "%s's score saved", game_save_data.high_score.name);
     data.dead.new_high_score = false;
 }

@@ -23,15 +23,6 @@ if(NOT APPLE)
 endif()
 
 add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTERFACE_FRAME_BUFFER_SCALED OSINTERFACE_COLOR_INDEX_MODE EXPLORER_PRINT_ERRORS FOLDERS_PRINT_ERRORS)
-include_directories("../game" "../resources")
-
-if(WIN32)
-    include_directories("windows")
-elseif(LINUX)
-    include_directories("linux")
-elseif(APPLE)
-    include_directories("macos")
-endif()
     
 add_library(cereal OBJECT cereal.c)
 add_library(explorer OBJECT explorer.c)
@@ -43,12 +34,12 @@ add_library(render OBJECT render.c)
 add_library(samples OBJECT samples.c)
 add_library(sprite OBJECT sprite.c)
 add_library(update OBJECT update.c)
-add_library(resources OBJECT ../resources/resources.c)
+# add_library(resources OBJECT ../resources/resources.c)
 add_library(osinterface OBJECT osinterface.c)
 add_library(sound OBJECT sound.c)
 # add_library(internal_framework OBJECT framework.c)
 
-add_library(framework STATIC $<TARGET_OBJECTS:cereal> $<TARGET_OBJECTS:explorer> $<TARGET_OBJECTS:folders> $<TARGET_OBJECTS:log> $<TARGET_OBJECTS:menu> $<TARGET_OBJECTS:utilities> $<TARGET_OBJECTS:render> $<TARGET_OBJECTS:samples> $<TARGET_OBJECTS:sprite> $<TARGET_OBJECTS:update> $<TARGET_OBJECTS:resources> $<TARGET_OBJECTS:osinterface> $<TARGET_OBJECTS:sound>)# $<TARGET_OBJECTS:internal_framework>)
+add_library(framework STATIC $<TARGET_OBJECTS:cereal> $<TARGET_OBJECTS:explorer> $<TARGET_OBJECTS:folders> $<TARGET_OBJECTS:log> $<TARGET_OBJECTS:menu> $<TARGET_OBJECTS:utilities> $<TARGET_OBJECTS:render> $<TARGET_OBJECTS:samples> $<TARGET_OBJECTS:sprite> $<TARGET_OBJECTS:update> $<TARGET_OBJECTS:osinterface> $<TARGET_OBJECTS:sound>)# $<TARGET_OBJECTS:resources> # $<TARGET_OBJECTS:internal_framework>)
 
 target_link_options(framework PRIVATE -Wl,--whole-archive)
 

@@ -18,13 +18,8 @@
 #include <stdbool.h>
 #include "log.h"
 
-typedef struct {
-    float peak;
-    uint16_t attack;
-    uint16_t decay;
-    float sustain;
-    uint16_t release;
-} ADSR_t;
+#include "framework_types.h"
+#include "c23defs.h"
 
 typedef struct {
     float peak;
@@ -35,31 +30,6 @@ typedef struct {
 } ADSRf_t;
 
 ADSR_t ADSRf_to_ADSR (ADSRf_t in);
-
-#include "samples.h"
-
-typedef struct sound_t {
-    uint32_t t;
-    uint32_t duration;
-    const struct sound_t *next;
-    float d;
-    int16_t frequency_begin, frequency_end;
-    uint8_t ADSR_state;
-    ADSR_t ADSR;
-    const sound_sample_t *sample;
-} sound_t;
-
-#include "c23defs.h"
-
-typedef struct {
-    uint8_t count;
-    counted_by(count) const sound_t sounds[];
-} sound_group_t;
-
-typedef struct {
-    uint8_t count;
-    counted_by(count) const sound_t *sounds[];
-} sound_music_t;
 
 void *Sound(void*);
 

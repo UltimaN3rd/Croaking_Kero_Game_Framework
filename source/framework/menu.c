@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "game_exports.h"
 #include "menu.h"
+
+extern const sprite_t framework_menu_cursor;
+extern const sprite_t framework_menu_folder_open;
+extern const sprite_t framework_menu_back;
 
 explorer_t menu_explorer;
 
@@ -21,7 +24,7 @@ explorer_t menu_explorer;
 #define SLIDER_WIDTH 34
 #define SLIDER_MARGIN 2
 #define XMARGIN 2
-#define TOGGLE_WIDTH (resources_font.line_height - 2)
+#define TOGGLE_WIDTH (framework_font.line_height - 2)
 
 static struct { int l, b, r, t; } title_bounds = {};
 
@@ -55,28 +58,28 @@ vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length)
 	for (int j = 0; j < length && c != '\0'; ++j) {
         switch (c) {
             case ' ': {
-				x += resources_font.space_width;
+				x += framework_font.space_width;
 				if (x > width) width = x;
 			} break;
 
             case '\n': {
 				const char *spaces = item;
 				while (spaces > item_start && *(spaces-1) == ' ') {
-					x -= resources_font.space_width;
+					x -= framework_font.space_width;
 					--spaces;
 				}
 				if (x > width) width = x;
                 x = 0;
-				y -= resources_font.line_height;
+				y -= framework_font.line_height;
             } break;
 
             default: {
                 int i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
                 if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
-                    x += resources_font.bitmaps[i]->w;
+                    x += framework_font.bitmaps[i]->w;
                     if (x > width) width = x;
-					int b = y;// - resources_font.descent[i]; // Previously measured descent, but decided that the baseline should be used instead. Particularly caused issues when the first item contained a latter below the basline
-					int t = b + resources_font.bitmaps[i]->h-1;
+					int b = y;// - framework_font.descent[i]; // Previously measured descent, but decided that the baseline should be used instead. Particularly caused issues when the first item contained a latter below the basline
+					int t = b + framework_font.bitmaps[i]->h-1;
 					if (b < bottom) bottom = b;
 					if (t > top) top = t;
                 } // If character wasn't in the range, then we ignore it.
@@ -111,9 +114,9 @@ void menu_CalculateDimensions (menu_t *self) {
 			repeat (submenu->list.item_count) {
 				auto dimensions = menu_ItemDimensions (item->name);
 				if (item == submenu->list.items)// first item
-					top_item_offset = resources_font.line_height - dimensions.y;
+					top_item_offset = framework_font.line_height - dimensions.y;
 				if (dimensions.width > self->dimensions.w) self->dimensions.w = dimensions.width;
-				y -= resources_font.line_height;
+				y -= framework_font.line_height;
 				switch (item->type) {
 					case menu_list_item_type_function:
 					case menu_list_item_type_submenu: break;
@@ -146,9 +149,9 @@ void menu_CalculateDimensions (menu_t *self) {
 			for (int i = explorer_start; i < explorer_end; ++i) {
 				auto dimensions = menu_ItemDimensions (menu_explorer.filenames[i]);
 				if (i == explorer_start)// first item
-					top_item_offset = resources_font.line_height - dimensions.y;
+					top_item_offset = framework_font.line_height - dimensions.y;
 				if (dimensions.width > self->dimensions.w) self->dimensions.w = dimensions.width;
-				y -= resources_font.line_height;
+				y -= framework_font.line_height;
 			}
 			self->dimensions.x = 20;
 			self->dimensions.h = abs(y);
@@ -160,9 +163,9 @@ void menu_CalculateDimensions (menu_t *self) {
 			// title_bounds.r = title_bounds.l + 1 + title_dimensions.x;
 			// title_bounds.b = title_bounds.t - 1 - title_dimensions.y;
 			title_bounds.r = RESOLUTION_WIDTH-1;
-			title_bounds.l = title_bounds.r - resources_menu_folder_open.w + 1;
+			title_bounds.l = title_bounds.r - framework_menu_folder_open.w + 1;
 			title_bounds.t = RESOLUTION_HEIGHT-1;
-			title_bounds.b = title_bounds.t - resources_menu_folder_open.h + 1;
+			title_bounds.b = title_bounds.t - framework_menu_folder_open.h + 1;
 		} break;
 
 		case menu_type_name_creator: {
@@ -182,7 +185,7 @@ void menu_CalculateDimensions (menu_t *self) {
 			assert (submenu == &submenu_delete_confirmation);
 			auto dim = menu_ItemDimensions("Really delete this file?");
 			delete_confirmation_text_offset.x = (self->dimensions.w - dim.w) / 2;
-			delete_confirmation_text_offset.y = resources_font.line_height * 3;
+			delete_confirmation_text_offset.y = framework_font.line_height * 3;
 			self->dimensions.y -= delete_confirmation_text_offset.y;
 	}
 	self->dimensions.topoffset = top_item_offset;
@@ -486,7 +489,7 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 	if (left_click) {
 		if (input.mouse.x >= self->dimensions.x - XMARGIN && input.mouse.x < self->dimensions.x + self->dimensions.w - 1 + XMARGIN
 		&& input.mouse.y >= self->dimensions.y && input.mouse.y < self->dimensions.y + self->dimensions.h) SelectItem (self, ItemAt (self, input.mouse.x, input.mouse.y, input));
-		else if (submenu->parent != NULL && input.mouse.x >= 0 && input.mouse.x <= resources_menu_back.w && input.mouse.y >= RESOLUTION_HEIGHT - resources_menu_back.h && input.mouse.y <= RESOLUTION_HEIGHT) MenuBack (self);
+		else if (submenu->parent != NULL && input.mouse.x >= 0 && input.mouse.x <= framework_menu_back.w && input.mouse.y >= RESOLUTION_HEIGHT - framework_menu_back.h && input.mouse.y <= RESOLUTION_HEIGHT) MenuBack (self);
 	}
 
     input_prev = input;
@@ -523,14 +526,14 @@ void menu_Render (menu_t *self, int depth) {
 					case menu_list_item_type_submenu:
 						break;
 					case menu_list_item_type_slider: {
-						int b = y - resources_font.line_height/2 - 3;
+						int b = y - framework_font.line_height/2 - 3;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_edge = 1, .x = l, .w = SLIDER_WIDTH, .y = b, .h = 3}}, .depth = depth, .flags.ignore_camera = true);
 						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / 255.f);
 						if (item->slider.value_0_to_255 > 0) Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 255, .x0 = l+1, .x1 = l+1+w, .y0 = b+1, .y1 = b+1}}, .depth = depth, .flags.ignore_camera = true);
 					} break;
 					case menu_list_item_type_toggle: {
-						int b = y - resources_font.line_height;
+						int b = y - framework_font.line_height;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						bool fill = false;
 						uint8_t fill_color = 1;
@@ -538,7 +541,7 @@ void menu_Render (menu_t *self, int depth) {
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .flags.filled = fill, .color_edge = 1, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .flags.ignore_camera = true);
 					} break;
 				}
-				y -= resources_font.line_height;
+				y -= framework_font.line_height;
 				++item;
 			}
 		} break;
@@ -561,31 +564,31 @@ void menu_Render (menu_t *self, int depth) {
 				if (i == submenu->selected)
 					Render_Text (.x = x-10, .y = y, .string = ">", .depth = depth, .flags.ignore_camera = true);
 				Render_Text (.x = x, .y = y, .string = menu_explorer.filenames[i], .depth = depth, .flags.ignore_camera = true);
-				y -= resources_font.line_height;
+				y -= framework_font.line_height;
 			}
-			Render_Sprite (.sprite = &resources_menu_folder_open, .x = RESOLUTION_WIDTH - resources_menu_folder_open.w, .y = RESOLUTION_HEIGHT - resources_menu_folder_open.h, .depth = depth, .flags.ignore_camera = true);
+			Render_Sprite (.sprite = &framework_menu_folder_open, .x = RESOLUTION_WIDTH - framework_menu_folder_open.w, .y = RESOLUTION_HEIGHT - framework_menu_folder_open.h, .depth = depth, .flags.ignore_camera = true);
 		} break;
 
 		case menu_type_name_creator: {
 			const auto fc = &submenu->name_creator;
 			y = RESOLUTION_HEIGHT / 2;
-			int texty = y + resources_font.baseline;
+			int texty = y + framework_font.baseline;
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = y - 1, .w = self->dimensions.w, .h = 1, .color_edge = 1}}, .depth = depth);
 			auto cursorx = menu_ItemDimensions_Length(fc->text_buffer, fc->cursor).x + x;
 			vec2i_t cursorsize;
 			if (fc->cursor == strlen (fc->text_buffer)) {
 				cursorsize.x = 1;
-				cursorsize.y = resources_font.baseline;
+				cursorsize.y = framework_font.baseline;
 			}
 			else {
 				cursorsize = menu_ItemDimensions_Length(&fc->text_buffer[fc->cursor], 1);
 			}
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = y, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62, .flags.filled = true}}, .depth = depth);
-			Render_Text (.x = x, .y = y + resources_font.line_height, .string = fc->text_buffer, .depth = depth, .flags.ignore_camera = true);
+			Render_Text (.x = x, .y = y + framework_font.line_height, .string = fc->text_buffer, .depth = depth, .flags.ignore_camera = true);
 		} break;
 		case menu_type_internal: {
 			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y, .string = "Really delete this file?", .depth = depth, .flags.ignore_camera = true);
-			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - resources_font.line_height, .string = delete_confirmation_filename, .depth = depth, .flags.ignore_camera = true);
+			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - framework_font.line_height, .string = delete_confirmation_filename, .depth = depth, .flags.ignore_camera = true);
 			goto goto_render_list;
 		} break;
 	}
@@ -602,21 +605,21 @@ void menu_Render (menu_t *self, int depth) {
 				.type = render_shape_rectangle,
 				.rectangle = {
 					.w = self->dimensions.w-1 + XMARGIN * 2,
-					.h = resources_font.line_height,
+					.h = framework_font.line_height,
 					.x = self->dimensions.x - XMARGIN,
 					.color_edge = 1
 				}
 			};
-			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * resources_font.line_height - rectangle.rectangle.h;
+			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * framework_font.line_height - rectangle.rectangle.h;
 			Render_Shape (.shape = rectangle, .depth = depth - 1, .flags.ignore_camera = true);
 		} break;
 	}
 
 	// Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = self->dimensions.x, .w = self->dimensions.w, .y = self->dimensions.y, .h = self->dimensions.h, .color_edge = 1}}, .depth = depth);
 
-	if (submenu->parent != NULL) Render_Sprite (.sprite = &resources_menu_back, .y = RESOLUTION_HEIGHT - resources_menu_back.h, .depth = depth, .flags.ignore_camera = true);
+	if (submenu->parent != NULL) Render_Sprite (.sprite = &framework_menu_back, .y = RESOLUTION_HEIGHT - framework_menu_back.h, .depth = depth, .flags.ignore_camera = true);
 
-	Render_Cursor (&resources_menu_cursor, mouse.x, mouse.y, 3, resources_menu_cursor.h-1);
+	Render_Cursor (&framework_menu_cursor, mouse.x, mouse.y, 3, framework_menu_cursor.h-1);
 }
 
 static void menu_Delete_Yes () {

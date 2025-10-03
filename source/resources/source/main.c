@@ -194,26 +194,8 @@ R"(#pragma once
 
 #include <stdint.h>
 
-typedef struct {
-	uint16_t w, h;
-	uint8_t p[];
-} sprite_t;
+#include "framework.h"
 
-#include "sound.h"
-#include "samples.h"
-
-#define BITMAP_FONT_FIRST_VISIBLE_CHAR 33
-#define BITMAP_FONT_LAST_VISIBLE_CHAR 126
-#define BITMAP_FONT_NUM_VISIBLE_CHARS (BITMAP_FONT_LAST_VISIBLE_CHAR - BITMAP_FONT_FIRST_VISIBLE_CHAR + 1)
-
-typedef struct {
-    int8_t line_height, baseline;
-    uint8_t space_width;
-    const sprite_t *bitmaps[BITMAP_FONT_NUM_VISIBLE_CHARS];
-    int8_t descent[BITMAP_FONT_NUM_VISIBLE_CHARS];
-} font_t;
-
-extern const uint8_t palette[256][3];
 )");
 
 	typedef struct __attribute((__packed__)) {
@@ -261,6 +243,8 @@ const uint8_t palette[256][3] = {)", phil);
 	fclose (palettebmp); 
     fputs ("};\n", phil);
 
+	ExploreFolder("framework");
+    current_directory[0] = 0;
 	ExploreFolder("resources");
 
 	fclose(phil);

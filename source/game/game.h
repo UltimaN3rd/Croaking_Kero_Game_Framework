@@ -15,6 +15,7 @@
 #pragma once
 
 #include "framework.h"
+#include "resources.h"
 
 typedef struct {
 	uint8_t music_volume, fx_volume;

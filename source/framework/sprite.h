@@ -16,7 +16,8 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "resources.h"
+
+#include "framework_types.h"
 
 void sprite_Blit(const sprite_t *source, sprite_t *destination, int x, int y);
 

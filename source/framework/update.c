@@ -225,7 +225,7 @@ void *Update(void*) {
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				if (current_state == update_state_gameplay) {
 					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-resources_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
+					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
 				}
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
