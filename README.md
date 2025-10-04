@@ -2,7 +2,7 @@
 
 This is Nick Walton's game backend framework. I created and am using this to program small games from scratch for Windows, Linux and MacOS (aspiring to support console platforms in future).
 
-![](readme-media/gameplay.gif)
+![Flappy Choppa](https://croakingkero.com/images/Flappy_Choppa.gif)
 
 ## Warning
 
