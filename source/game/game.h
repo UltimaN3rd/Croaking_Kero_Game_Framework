@@ -26,14 +26,6 @@ typedef struct {
 } submenu_vars_t;
 extern submenu_vars_t submenu_vars;
 
-void menu_Options_Fullscreen ();
-void menu_Options_Sound_Music (float slider_0_to_1);
-float menu_Options_Sound_Music_Init ();
-void menu_Options_Sound_Effects (float slider_0_to_1);
-float menu_Options_Sound_Effects_Init ();
-void menu_Options_OnExit ();
-void menu_Options_Debug_OpenFolder ();
-
 extern submenu_t submenus_options[];
 extern const cereal_t cereal[];
 

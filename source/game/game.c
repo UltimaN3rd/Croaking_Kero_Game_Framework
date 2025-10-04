@@ -80,20 +80,22 @@ char GAME_FOLDER_CONFIG[] = "com.CroakingKero." GAME_TITLE;
 #error "Unknown platform"
 #endif
 
+#define MENU_SLIDER_VOLUME_MAX 32
+
 void menu_Options_Fullscreen () {
 	os_Fullscreen (!os_public.window.is_fullscreen);
 	submenu_vars.fullscreen = os_public.window.is_fullscreen;
 }
-void menu_Options_Sound_Music (float slider_0_to_1) {
-	SoundMusicSetVolume(slider_0_to_1);
-	submenu_vars.music_volume = slider_0_to_1 * 255;
+void menu_Options_Sound_Music (uint8_t output_0_to_max) {
+	SoundMusicSetVolume(output_0_to_max / (float)MENU_SLIDER_VOLUME_MAX);
+	submenu_vars.music_volume = output_0_to_max;
 }
-float menu_Options_Sound_Music_Init () { return submenu_vars.music_volume / 255.f; }
-void menu_Options_Sound_Effects (float slider_0_to_1) {
-	SoundFXSetVolume(slider_0_to_1);
-	submenu_vars.fx_volume = slider_0_to_1 * 255;
+uint8_t menu_Options_Sound_Music_Init () { return submenu_vars.music_volume; }
+void menu_Options_Sound_Effects (uint8_t output_0_to_max) {
+	SoundFXSetVolume(output_0_to_max / (float)MENU_SLIDER_VOLUME_MAX);
+	submenu_vars.fx_volume = output_0_to_max;
 }
-float menu_Options_Sound_Effects_Init () { return submenu_vars.fx_volume / 255.f; }
+uint8_t menu_Options_Sound_Effects_Init () { return submenu_vars.fx_volume; }
 
 submenu_vars_t submenu_vars = {
 	.music_volume = 125,
@@ -156,8 +158,8 @@ submenu_t submenus_options[] = {
 		.list = {
 			.item_count = 3,
 			.items = {
-				{.name = "Music", .type = menu_list_item_type_slider, .slider.Function = menu_Options_Sound_Music, .slider.InitialValueFunction = menu_Options_Sound_Music_Init},
-				{.name = "Effects", .type = menu_list_item_type_slider, .slider.Function = menu_Options_Sound_Effects, .slider.InitialValueFunction = menu_Options_Sound_Effects_Init},
+				{.name = "Music", .type = menu_list_item_type_slider, .slider = {.Function = menu_Options_Sound_Music, .InitialValueFunction = menu_Options_Sound_Music_Init, .max = MENU_SLIDER_VOLUME_MAX}},
+				{.name = "Effects", .type = menu_list_item_type_slider, .slider = {.Function = menu_Options_Sound_Effects, .InitialValueFunction = menu_Options_Sound_Effects_Init, .max = MENU_SLIDER_VOLUME_MAX}},
 				{.name = "Back", .type = menu_list_item_type_submenu, .submenu = NULL},
 			},
 		},

@@ -225,7 +225,7 @@ static void SwitchMenu (menu_t *self, submenu_t *new_menu) {
 						case menu_list_item_type_submenu:
 						case menu_list_item_type_function:
 						case menu_list_item_type_toggle: break;
-						case menu_list_item_type_slider: submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.InitialValueFunction () * 255; break;
+						case menu_list_item_type_slider: submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.InitialValueFunction (); break;
 					}
 				}
 			} break;
@@ -251,7 +251,7 @@ static void SelectItem (menu_t *self, int item_index) {
             auto item = submenu->list.items[item_index];
             switch (item.type) {
 				case menu_list_item_type_slider: {
-					item.slider.Function (item.slider.value_0_to_255 / 255.f);
+					item.slider.Function (item.slider.value_0_to_255);
 				} break;
                 case menu_list_item_type_function: {
                     item.Function ();
@@ -389,14 +389,8 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 
 				case menu_list_item_type_slider: {
 					auto before = item->slider.value_0_to_255;
-					if (input.left) {
-						if (item->slider.value_0_to_255 < 5) item->slider.value_0_to_255 = 0;
-						else item->slider.value_0_to_255 -= 5;
-					}
-					if (input.right) {
-						if (item->slider.value_0_to_255 > 250) item->slider.value_0_to_255 = 255;
-						else item->slider.value_0_to_255 += 5;
-					}
+					if (input.left && item->slider.value_0_to_255 > 0) --item->slider.value_0_to_255;
+					if (input.right && item->slider.value_0_to_255 < item->slider.max) ++item->slider.value_0_to_255;
 					int l = self->dimensions.x + self->dimensions.textw + SLIDER_MARGIN + 1;
 					int r = l + SLIDER_WIDTH - 2; // -1 for slider border, -1 for normal width off-by-one calculations
 					int mx = mouse.x + 1;
@@ -404,12 +398,11 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 					|| (mouse_dragging == submenu->selected)) {
 						if (mx < l) mx = l;
 						if (mx > r) mx = r;
-						item->slider.value_0_to_255 = (float)(mx - l) / (SLIDER_WIDTH - 2) * 255;
+						item->slider.value_0_to_255 = (float)(mx - l) / (SLIDER_WIDTH - 2) * item->slider.max;
 						mouse_dragging = submenu->selected;
 					}
-					if (item->slider.value_0_to_255 != before) {
-						item->slider.Function (item->slider.value_0_to_255 / 255.f);
-					}
+					if (item->slider.value_0_to_255 != before)
+						item->slider.Function (item->slider.value_0_to_255);
 				} break;
 			}
 			if (input.confirm) {
@@ -529,7 +522,7 @@ void menu_Render (menu_t *self, int depth) {
 						int b = y - framework_font.line_height/2 - 3;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_edge = 1, .x = l, .w = SLIDER_WIDTH, .y = b, .h = 3}}, .depth = depth, .flags.ignore_camera = true);
-						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / 255.f);
+						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / (float)item->slider.max);
 						if (item->slider.value_0_to_255 > 0) Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 255, .x0 = l+1, .x1 = l+1+w, .y0 = b+1, .y1 = b+1}}, .depth = depth, .flags.ignore_camera = true);
 					} break;
 					case menu_list_item_type_toggle: {

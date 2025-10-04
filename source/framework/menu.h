@@ -37,9 +37,9 @@ struct submenu_t {
                     void (*Function) ();
                     submenu_t *submenu;
                     struct {
-                        void (*Function) (float);
-                        float (*InitialValueFunction) ();
-                        uint8_t value_0_to_255;
+                        void (*Function) (uint8_t output_0_to_max);
+                        uint8_t (*InitialValueFunction) ();
+                        uint8_t value_0_to_255, max;
                     } slider;
                     struct {
                         bool *var;
