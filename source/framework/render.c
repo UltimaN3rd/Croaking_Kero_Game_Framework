@@ -576,8 +576,8 @@ void *Render (void*) {
 								c.x -= camera.x;
 								c.y -= camera.y;
 							}
-							if (c.filled && c.color_fill != 0) DrawCircleFilled (frame, c.x, c.y, c.r, c.color_fill);
-							if ((!c.filled || c.color_edge != c.color_fill) && c.color_edge != 0) DrawCircle (frame, c.x, c.y, c.r, c.color_edge);
+							if (c.color_fill != 0) DrawCircleFilled (frame, c.x, c.y, c.r, c.color_fill);
+							if ((c.color_fill == 0 || c.color_edge != c.color_fill) && c.color_edge != 0) DrawCircle (frame, c.x, c.y, c.r, c.color_edge);
 						} break;
 
 						case render_shape_line: {

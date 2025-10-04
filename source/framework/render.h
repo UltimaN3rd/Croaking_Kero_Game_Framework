@@ -47,7 +47,6 @@ typedef struct {
 		} rectangle;
 		struct {
 			int x, y, r;
-			bool filled;
 			uint8_t color_edge, color_fill;
 		} circle;
 		struct {
