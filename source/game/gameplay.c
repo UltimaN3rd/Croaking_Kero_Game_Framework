@@ -70,7 +70,7 @@ static submenu_t menu_high_score_name_entry = {
     "New high score",
     .type = menu_type_name_creator,
     .name_creator = {
-        .text_buffer = (char[]){[sizeof((game_save_data_t){}.high_score.name)] = 0},
+        .text_buffer = (char[sizeof((game_save_data_t){}.high_score.name)]){},
         .buffer_size = &(const size_t){sizeof((game_save_data_t){}.high_score.name)},
         .confirm_func = SaveHighScore,
     },
@@ -173,8 +173,6 @@ void PlayerDie () {
 
     if (data.player.coins > game_save_data.high_score.score) {
         data.dead.new_high_score = true;
-        memset(menu_high_score_name_entry.name_creator.text_buffer, 0, *menu_high_score_name_entry.name_creator.buffer_size);
-        menu_high_score_name_entry.name_creator.cursor = 0;
     }
 }
 

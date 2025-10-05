@@ -49,6 +49,42 @@ static submenu_t submenu_delete_confirmation = {
 	}
 };
 
+void submenu_Init (submenu_t *self) {
+	assert (self);
+	switch (self->type) {
+		case menu_type_explorer: {
+			explorer_Init (&menu_explorer, self->explorer.base_directory_func());
+		} break;
+		case menu_type_list: {
+			for (int i = 0; i < self->list.item_count; ++i) {
+				switch (self->list.items[i].type) {
+					case menu_list_item_type_submenu:
+					case menu_list_item_type_function:
+					case menu_list_item_type_toggle: break;
+					case menu_list_item_type_slider: {
+						self->list.items[i].slider.value_0_to_255 = self->list.items[i].slider.InitialValueFunction ();
+						if (self->list.items[i].slider.value_0_to_255 > self->list.items[i].slider.max)
+							self->list.items[i].slider.value_0_to_255 = self->list.items[i].slider.max;
+					} break;
+				}
+			}
+		} break;
+		case menu_type_name_creator: {
+			memset (self->name_creator.text_buffer, 0, sizeof (self->name_creator.buffer_size));
+			self->name_creator.cursor = 0;
+		} break;
+		case menu_type_internal:
+			unreachable();
+	}
+}
+
+void menu_Init (menu_t *self, submenu_t *initial_submenu) {
+	self->submenu = initial_submenu;
+	initial_submenu->parent = NULL;
+	submenu_Init (initial_submenu);
+	menu_CalculateDimensions(self);
+}
+
 vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length) {
 	const char *item = item_start;
 	char c = *item;
@@ -215,31 +251,7 @@ static void SwitchMenu (menu_t *self, submenu_t *new_menu) {
 	else {
 		self->submenu = new_menu;
 		submenu = self->submenu;
-		switch (submenu->type) {
-			case menu_type_explorer: {
-				explorer_Init (&menu_explorer, submenu->explorer.base_directory_func());
-			} break;
-			case menu_type_list: {
-				for (int i = 0; i < submenu->list.item_count; ++i) {
-					switch (submenu->list.items[i].type) {
-						case menu_list_item_type_submenu:
-						case menu_list_item_type_function:
-						case menu_list_item_type_toggle: break;
-						case menu_list_item_type_slider: {
-							submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.InitialValueFunction ();
-							if (submenu->list.items[i].slider.value_0_to_255 > submenu->list.items[i].slider.max)
-								submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.max;
-						} break;
-					}
-				}
-			} break;
-			case menu_type_name_creator: {
-				memset (submenu->name_creator.text_buffer, 0, sizeof (submenu->name_creator.buffer_size));
-				submenu->name_creator.cursor = 0;
-			} break;
-			case menu_type_internal:
-				unreachable();
-		}
+		submenu_Init (self->submenu);
 	}
 	menu_CalculateDimensions (self);
 }

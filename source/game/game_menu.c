@@ -50,8 +50,7 @@ void menu_Function_Quit () {
 void game_menu_Init () {
 	// auto keyboard = update_data.frame.keyboard_state;
 
-	menu.submenu = &submenus[0];
-	menu_CalculateDimensions (&menu);
+	menu_Init (&menu, &submenus[0]);
 	// SoundPlayMusic (&resources_music_ost1);
 }
 

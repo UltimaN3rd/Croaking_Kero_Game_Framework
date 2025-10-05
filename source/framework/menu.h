@@ -89,7 +89,7 @@ vec2i_t menu_ItemDimensions (const char *item_start);
 void menu_CalculateDimensions (menu_t *self);
 void menu_Update (menu_t *self, menu_inputs_t inputs);
 void menu_Render (menu_t *self, int depth);
-void menu_Init (menu_t *self);
+void menu_Init (menu_t *self, submenu_t *initial_submenu);
 
 extern explorer_t menu_explorer;
 void MenuBack (menu_t *self);
