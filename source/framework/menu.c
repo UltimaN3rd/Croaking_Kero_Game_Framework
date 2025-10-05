@@ -290,7 +290,7 @@ static void SelectItem (menu_t *self, int item_index) {
     }
 };
 
-static void MenuBack (menu_t *self) {
+void MenuBack (menu_t *self) {
 	auto submenu = self->submenu;
     if (submenu->type == menu_type_explorer && menu_explorer.depth > 0) {
         char *source_child = menu_explorer.current_directory_string;

@@ -92,3 +92,4 @@ void menu_Render (menu_t *self, int depth);
 void menu_Init (menu_t *self);
 
 extern explorer_t menu_explorer;
+void MenuBack (menu_t *self);
