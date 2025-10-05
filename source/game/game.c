@@ -98,8 +98,8 @@ void menu_Options_Sound_Effects (uint8_t output_0_to_max) {
 uint8_t menu_Options_Sound_Effects_Init () { return submenu_vars.fx_volume; }
 
 submenu_vars_t submenu_vars = {
-	.music_volume = 125,
-	.fx_volume = 200,
+	.music_volume = MENU_SLIDER_VOLUME_MAX * 0.6,
+	.fx_volume = MENU_SLIDER_VOLUME_MAX,
 	.fullscreen = false,
 };
 const cereal_t cereal_options[] = {

@@ -225,7 +225,11 @@ static void SwitchMenu (menu_t *self, submenu_t *new_menu) {
 						case menu_list_item_type_submenu:
 						case menu_list_item_type_function:
 						case menu_list_item_type_toggle: break;
-						case menu_list_item_type_slider: submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.InitialValueFunction (); break;
+						case menu_list_item_type_slider: {
+							submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.InitialValueFunction ();
+							if (submenu->list.items[i].slider.value_0_to_255 > submenu->list.items[i].slider.max)
+								submenu->list.items[i].slider.value_0_to_255 = submenu->list.items[i].slider.max;
+						} break;
 					}
 				}
 			} break;
