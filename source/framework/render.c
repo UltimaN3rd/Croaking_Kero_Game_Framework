@@ -556,7 +556,7 @@ void *Render (void*) {
 							for (int y = ibottom; y <= itop; ++y) {
 								if (left == rl && r.color_edge != 0)
 									frame->p[left + y * frame->w] = r.color_edge;
-								if (r.flags.filled && r.color_fill != 0) {
+								if (r.color_fill != 0) {
 									for (int x = ileft; x <= iright; ++x) {
 										frame->p[x + y * frame->w] = r.color_fill;
 									}

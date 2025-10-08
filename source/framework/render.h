@@ -39,7 +39,6 @@ typedef struct {
 		struct {
 			int x, y, w, h;
 			struct {
-				bool filled:1;
 				bool center_horizontally:1;
 				bool center_vertically:1;
 			} flags;

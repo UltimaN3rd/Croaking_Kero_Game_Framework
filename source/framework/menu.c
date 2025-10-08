@@ -544,10 +544,9 @@ void menu_Render (menu_t *self, int depth) {
 					case menu_list_item_type_toggle: {
 						int b = y - framework_font.line_height;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
-						bool fill = false;
-						uint8_t fill_color = 1;
-						if (*item->toggle.var) { fill_color = 255; fill = true; }
-						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .flags.filled = fill, .color_edge = 1, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .flags.ignore_camera = true);
+						uint8_t fill_color = 0;
+						if (*item->toggle.var) fill_color = 255;
+						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .color_edge = 1, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .flags.ignore_camera = true);
 					} break;
 				}
 				y -= framework_font.line_height;
@@ -592,7 +591,7 @@ void menu_Render (menu_t *self, int depth) {
 			else {
 				cursorsize = menu_ItemDimensions_Length(&fc->text_buffer[fc->cursor], 1);
 			}
-			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = y, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62, .flags.filled = true}}, .depth = depth);
+			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = y, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62}}, .depth = depth);
 			Render_Text (.x = x, .y = y + framework_font.line_height, .string = fc->text_buffer, .depth = depth, .flags.ignore_camera = true);
 		} break;
 		case menu_type_internal: {
