@@ -228,7 +228,7 @@ uint32_t SoundFXPlayGroup (const sound_group_t *group) {
     // assert (!sound_extern_data.prepared_sounds_ready);
     uint32_t channels = 0;
     for (int i = 0; i < group->count; ++i)
-        SoundAddCommand (.type = sound_command_fx_prepare, .data.fx_prepare.sound = &group->sounds[i]);
+        SoundAddCommand (.type = sound_command_fx_prepare, .data.fx_prepare.sound = group->sounds[i]);
     SoundFXPlayPrepared ();
     return channels;
 }

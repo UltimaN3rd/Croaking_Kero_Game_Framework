@@ -104,7 +104,7 @@ typedef struct sound_t {
 
 typedef struct {
     uint8_t count;
-    counted_by(count) const sound_t sounds[];
+    counted_by(count) const sound_t *sounds[];
 } sound_group_t;
 
 typedef struct {
