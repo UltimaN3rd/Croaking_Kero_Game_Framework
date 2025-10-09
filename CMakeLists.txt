@@ -40,7 +40,6 @@ add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTE
 include_directories("source/game" "source/framework" "source/resources")
 
 add_subdirectory("source/framework")
-target_include_directories(framework PRIVATE "source/game")
 
 add_library(resources STATIC source/resources/resources.c)
 
