@@ -617,19 +617,7 @@ void os_OpenFileBrowser (const char *directory) {
 
 
 #include <pwd.h>
-#define GLX_GLXEXT_PROTOTYPES
-#include <GL/glu.h>
-#include <GL/glx.h>
-#include <GL/glxext.h>
-
-#define GLFUNC(__funcname__) do { __funcname__ = (__funcname__##_t)glXGetProcAddress ((const GLubyte*)#__funcname__); assert (__funcname__); if (__funcname__ == NULL) { LOG ("GLX failed to find function ["#__funcname__"]"); return false; } } while (0)
-#define GLFUNC_LOCAL(__funcname__) __funcname__##_t __funcname__ = NULL; GLFUNC (__funcname__)
-
-typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); glUniform2f_t glUniform2f;
-
-
-
-
+#include "OpenGL2_1.h"
 
 bool os_Init (const char *window_title) {
 	{
@@ -660,14 +648,11 @@ bool os_Init (const char *window_title) {
         os_private.x11.screen = DefaultScreen (os_private.x11.display);
 
         // XMatchVisualInfo(os_private.x11.display, os_private.x11.screen, 24, TrueColor, &os_private.x11.visual_info);
-		int attributes [] = { GLX_RGBA, GLX_DOUBLEBUFFER,
-			GLX_RED_SIZE, 8, GLX_BLUE_SIZE, 8, GLX_GREEN_SIZE, 8, GLX_DEPTH_SIZE, 24,
-			GLX_CONTEXT_MAJOR_VERSION_ARB, 2,
-			GLX_CONTEXT_MINOR_VERSION_ARB, 1,
-			0 };
-		os_private.x11.gl_visual_info = glXChooseVisual (os_private.x11.display, os_private.x11.screen, attributes); assert (os_private.x11.gl_visual_info); if (os_private.x11.gl_visual_info == NULL) { LOG ("GLX failed to select suitable visual. Is there an undefined attribute in the list?"); return false; };
 
-		os_private.x11.gl_context = glXCreateContext (os_private.x11.display, os_private.x11.gl_visual_info, 0, true); assert (os_private.x11.gl_context); if (os_private.x11.gl_context == NULL) { LOG ("GLX failed to create context"); return false; }
+		auto gl = OpenGL2_1_Init_Linux (os_private.x11.display, os_private.x11.screen);
+		assert (gl.success); if (!gl.success) { LOG ("Failed to initialize OpenGL"); return false; }
+		os_private.x11.gl_visual_info = gl.visual_info;
+		os_private.x11.gl_context = gl.context;
 
         XSetWindowAttributes window_attributes;
         // window_attributes.background_pixel = 0xff808080;
@@ -678,10 +663,8 @@ bool os_Init (const char *window_title) {
 		os_public.window.is_fullscreen = false;
         XMapWindow (os_private.x11.display, os_private.x11.window);
 		os_GLMakeCurrent ();
-		
-		#ifdef OSINTERFACE_COLOR_INDEX_MODE
-		GLFUNC (glUniform2f);
-		#endif
+
+		OpenGL2_1_EnableSwapTear_FallbackSwap_Linux(os_private.x11.display, os_private.x11.window);
 		
 		glViewport (0, 0, os_public.window.w, os_public.window.h);
 		glMatrixMode (GL_PROJECTION);
@@ -729,43 +712,6 @@ bool os_Init (const char *window_title) {
 
         XFlush(os_private.x11.display);
     }
-
-	const char *glx_extensions = glXQueryExtensionsString (os_private.x11.display,0);
-	bool swap_tear_extension_present = false;
-	const char *e = glx_extensions;
-
-	do {
-		e = strstr (e, "GLX_EXT_swap_control_tear");
-		if (e == NULL) break;
-		char next = *(e + strlen("GLX_EXT_swap_control_tear"));
-		if (next == ' ' || next == '\0') {
-			glXSwapIntervalEXT (os_private.x11.display, os_private.x11.window, -1);
-			swap_tear_extension_present = true;
-			break;
-		}
-		e += strlen ("GLX_EXT_swap_control_tear");
-	} while (true);
-
-	if (!swap_tear_extension_present) {
-		LOG ("OpenGL extension 'GLX_EXT_swap_control_tear' not found.");
-		bool swap_extension_present = false;
-		e = glx_extensions;
-		do {
-			e = strstr (e, "GLX_EXT_swap_control");
-			if (e == NULL) break;
-			char next = *(e + strlen("GLX_EXT_swap_control"));
-			if (next == ' ' || next == '\0') {
-				glXSwapIntervalEXT (os_private.x11.display, os_private.x11.window, 1);
-				swap_extension_present = true;
-				break;
-			}
-			e += strlen("GLX_EXT_swap_control");
-		} while (true);
-
-		if (!swap_extension_present) {
-			LOG ("OpenGL extension 'GLX_EXT_swap_control' not found.");
-		}
-	}
 
 	// os_private.background_color.r = 0x40;
 	// os_private.background_color.g = 0x3a;

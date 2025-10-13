@@ -9,8 +9,37 @@
 
 typedef BOOL (*wglSwapIntervalEXT_t) (int interval); extern wglSwapIntervalEXT_t wglSwapIntervalEXT;
 typedef HGLRC (*wglCreateContextAttribsARB_t) (HDC hDC, HGLRC hshareContext, const int *attribList); extern wglCreateContextAttribsARB_t wglCreateContextAttribsARB;
-typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); extern glUniform2f_t glUniform2f;
 typedef void (*glActiveTexture_t) (GLenum texture); extern glActiveTexture_t glActiveTexture;
+
+HGLRC OpenGL2_1_Init_Win32 (HDC window_context);
+
+#elif __linux__
+
+#include <GL/glx.h>
+#include <GL/glxext.h>
+#include <GL/glu.h>
+
+typedef struct {
+    bool success;
+    XVisualInfo *visual_info;
+    GLXContext context;
+} OpenGL2_1_Init_Linux_return_t;
+OpenGL2_1_Init_Linux_return_t OpenGL2_1_Init_Linux (Display *display, int screen);
+
+typedef void (*glXSwapIntervalEXT_t)(Display *dpy, GLXDrawable drawable, int interval); extern glXSwapIntervalEXT_t glXSwapIntervalEXT;
+
+// Returns 0 on failure. -1 on Tear success. 1 on fallback swap success.
+int OpenGL2_1_EnableSwapTear_FallbackSwap_Linux (Display *display, Window window);
+
+#elif __APPLE__
+
+#else
+
+#error "Unsupported platform"
+
+#endif
+
+typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); extern glUniform2f_t glUniform2f;
 typedef GLuint (*glCreateShader_t) (GLenum shaderType); extern glCreateShader_t glCreateShader;
 typedef void (*glShaderSource_t) (GLuint shader, GLsizei count, const GLchar **string, const GLint *length); extern glShaderSource_t glShaderSource;
 typedef void (*glCompileShader_t) (GLuint shader); extern glCompileShader_t glCompileShader;
@@ -27,20 +56,3 @@ typedef void (*glUniform3fv_t) (GLint location, GLsizei count, const GLfloat *va
 typedef GLint (*glGetUniformLocation_t) (GLuint program, const GLchar *name); extern glGetUniformLocation_t glGetUniformLocation;
 typedef void (*glUniform1i_t) (GLint location, GLint v0); extern glUniform1i_t glUniform1i;
 typedef void (*glValidateProgram_t) (GLuint program); extern glValidateProgram_t glValidateProgram;
-
-HGLRC OpenGL2_1_Init_Win32 (HDC window_context);
-
-#elif __linux__
-
-#define GLX_GLXEXT_PROTOTYPES
-#include <GL/glx.h>
-#include <GL/glxext.h>
-#include <GL/glu.h>
-
-#elif __APPLE__
-
-#else
-
-#error "Unsupported platform"
-
-#endif

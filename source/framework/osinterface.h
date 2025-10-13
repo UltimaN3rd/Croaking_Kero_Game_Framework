@@ -212,9 +212,8 @@ typedef struct {
 #include <time.h>
 typedef struct timespec timespec_t;
 #include <unistd.h> // usleep
-// #include <X11/extensions/Xfixes.h> // XFixesHideCursor - Doesn't work under XWayland, so no longer necessary
+// #include <X11/extensions/Xfixes.h> // XFixesHideCursor
 #include <X11/extensions/Xrandr.h> // Refresh rate
-#define GLX_GLXEXT_PROTOTYPES
 #include <GL/glx.h>
 
 typedef struct {
