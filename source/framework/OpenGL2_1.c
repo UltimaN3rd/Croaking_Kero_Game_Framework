@@ -23,6 +23,9 @@ static bool LogGLErrors () {
 	return had_error;
 }
 
+#if __APPLE__
+#else
+
 glUniform2f_t glUniform2f;
 glCreateShader_t glCreateShader;
 glShaderSource_t glShaderSource;
@@ -40,6 +43,8 @@ glUniform3fv_t glUniform3fv;
 glGetUniformLocation_t glGetUniformLocation;
 glUniform1i_t glUniform1i;
 glValidateProgram_t glValidateProgram;
+
+#endif
 
 #if WIN32
 
@@ -210,6 +215,8 @@ int OpenGL2_1_EnableSwapTear_FallbackSwap_Linux (Display *display, Window window
 
 
 #elif __APPLE__
+
+// Nothing to do on Apple since they have a good implementation which guarantees GL2.1 if you ask for it!
 
 #else
 

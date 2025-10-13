@@ -1191,14 +1191,9 @@ void os_Cleanup () {}
 #import <Cocoa/Cocoa.h>
 #import <objc/objc.h>
 #import <Foundation/Foundation.h>
-#import <OpenGL/gl.h>
-#import <OpenGL/glu.h>
+#include "OpenGL2_1.h"
 #import <stdint.h>
 #import <mach/mach_time.h>
-
-// MacOS is surpisingly nice for OpenGL - it apparently gets all the functions for me! I guess since it's all translated through Metal, they can guarantee everything exists in their implementation.
-#define GLFUNC(_)
-#define GLFUNC_LOCAL(_)
 
 // Keycodes taken from HIToolbox/Events.h
 enum {

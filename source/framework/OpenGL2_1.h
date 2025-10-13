@@ -33,11 +33,19 @@ int OpenGL2_1_EnableSwapTear_FallbackSwap_Linux (Display *display, Window window
 
 #elif __APPLE__
 
+// OpenGL2.1 is easy to set up on Apple since all the functions get retrieved automatically. Yay Apple! So this is basically a stub on Apple.
+#define GL_SILENCE_DEPRECATION
+#include <Cocoa/Cocoa.h>
+#include <OpenGL/glu.h>
+
 #else
 
 #error "Unsupported platform"
 
 #endif
+
+#if __APPLE__
+#else
 
 typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); extern glUniform2f_t glUniform2f;
 typedef GLuint (*glCreateShader_t) (GLenum shaderType); extern glCreateShader_t glCreateShader;
@@ -56,3 +64,5 @@ typedef void (*glUniform3fv_t) (GLint location, GLsizei count, const GLfloat *va
 typedef GLint (*glGetUniformLocation_t) (GLuint program, const GLchar *name); extern glGetUniformLocation_t glGetUniformLocation;
 typedef void (*glUniform1i_t) (GLint location, GLint v0); extern glUniform1i_t glUniform1i;
 typedef void (*glValidateProgram_t) (GLuint program); extern glValidateProgram_t glValidateProgram;
+
+#endif

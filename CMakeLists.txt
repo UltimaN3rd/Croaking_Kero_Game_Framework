@@ -50,7 +50,7 @@ add_library(game_menu STATIC source/game/game_menu.c)
 if(NOT APPLE)
     target_link_libraries(a "$<LINK_GROUP:RESCAN,game,gameplay,game_menu,framework,resources>")
 else()
-    target_link_libraries(a game gameplay game_menu framework)
+    target_link_libraries(a game gameplay game_menu resources framework)
 endif()
 
 if(WIN32)
