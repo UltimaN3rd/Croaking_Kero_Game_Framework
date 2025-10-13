@@ -70,21 +70,11 @@ os_intxy_t os_ScaledFrameBufferPositionToWindowPosition (int framex, int framey)
 #include <Shlobj.h>
 #include <assert.h>
 #include "NtSetTimerResolution.h"
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glext.h>
-#include <GL/wglext.h>
+#include "OpenGL2_1.h"
 
 LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam);
 
-typedef BOOL (*wglSwapIntervalEXT_t) (int interval); wglSwapIntervalEXT_t wglSwapIntervalEXT;
-typedef HGLRC (*wglCreateContextAttribsARB_t) (HDC hDC, HGLRC hshareContext, const int *attribList); wglCreateContextAttribsARB_t wglCreateContextAttribsARB;
-typedef void (*glUniform2f_t) (GLint location, GLfloat v0, GLfloat v1); glUniform2f_t glUniform2f;
-
-#define GLFUNC(__funcname__) do { __funcname__ = (__funcname__##_t)wglGetProcAddress ((LPCSTR)#__funcname__); assert (__funcname__); if (__funcname__ == NULL) { LOG ("WGL failed to find function ["#__funcname__"]"); return false; } } while (0)
-#define GLFUNC_LOCAL(__funcname__) __funcname__##_t __funcname__ = NULL; GLFUNC (__funcname__)
-
-const char *os_HResultToStr (HRESULT result) {
+static const char *os_HResultToStr (HRESULT result) {
     static char win32_error_buffer[512];
     DWORD len;  // Number of chars returned.
     len = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, result, 0, win32_error_buffer, 512, NULL);
@@ -180,28 +170,7 @@ bool os_Init (const char *window_title) {
 	{ pixel_format = ChoosePixelFormat (os_private.win32.window_context, &format_descriptor); assert (pixel_format); if (pixel_format == 0) { LOG ("ChoosePixelFormat() failed [%s]", os_HResultToStr(GetLastError())); return false; } }
 	{ auto result = SetPixelFormat (os_private.win32.window_context, pixel_format, &format_descriptor); assert (result); if (result == FALSE) { LOG ("SetPixelFormat failed [%s]", os_HResultToStr(GetLastError())); return false; } }
 
-	{
-		auto gltemp = wglCreateContext (os_private.win32.window_context); assert (gltemp); if (gltemp == FALSE) { LOG ("wglCreateContext failed [%s]", os_HResultToStr(GetLastError())); return false; }
-		{ auto result = wglMakeCurrent (os_private.win32.window_context, gltemp); assert (result); if (result == FALSE) { LOG ("wglMakeCurrent failed [%s]", os_HResultToStr(GetLastError())); return false; } }
-		GLFUNC (wglCreateContextAttribsARB);
-		{ os_private.win32.gl_context = wglCreateContextAttribsARB (os_private.win32.window_context, 0, (const int[]){WGL_CONTEXT_MAJOR_VERSION_ARB, 2, WGL_CONTEXT_MINOR_VERSION_ARB, 1, 0}); assert (os_private.win32.window_context); if (os_private.win32.gl_context == NULL) { LOG ("wglCreateContextAttribsARB failed [%s]", os_HResultToStr(GetLastError())); return false; } }
-		{ auto result = wglMakeCurrent (os_private.win32.window_context, os_private.win32.gl_context); assert (result); if (result == FALSE) { LOG ("wglMakeCurrent failed [%s]", os_HResultToStr(GetLastError())); return false; } }
-		if (os_LogGLErrors ()) { LOG ("OpenGL had errors");}
-		LOG ("OpenGL version: [%s]", (const char*)glGetString (GL_VERSION));
-		wglDeleteContext (gltemp);
-		
-		GLFUNC (wglSwapIntervalEXT);
-		GLFUNC (glUniform2f);
-		{
-			auto result = wglSwapIntervalEXT (-1); assert (result); if (result == FALSE) {
-				LOG ("wglSwapIntervalEXT (-1) failed. Could not enable adaptive sync [%s]", os_HResultToStr(GetLastError()));
-				{ auto result = wglSwapIntervalEXT (1); assert (result); if (result == FALSE) { LOG ("wglSwapIntervalEXT (1) failed. Could not enable VSync [%s]", os_HResultToStr(GetLastError())); } }
-			}
-			if (os_LogGLErrors ()) { LOG ("OpenGL had errors");}
-		}
-	}
-
-	// GLFUNC (glUniform2f);
+	os_private.win32.gl_context = OpenGL2_1_Init_Win32 (os_private.win32.window_context); assert (os_private.win32.gl_context); if (os_private.win32.gl_context == NULL) { LOG ("Failed to initialize OpenGL"); return false; }
 
 	// os_SetBackgroundColor (0x40, 0x3a, 0x4d);
 	os_SetBackgroundColor (0,0,0);
@@ -297,23 +266,27 @@ void os_HideCursor () {
 	ShowCursor (false);
 }
 
+#define OS_INTERNAL_EVENTS_SIZE 256
+static struct {
+	uint32_t pushed, popped;
+	os_event_t event[OS_INTERNAL_EVENTS_SIZE];
+} events = {};
+
+static inline void PushEvent (os_event_t event) { events.event[events.pushed++ % OS_INTERNAL_EVENTS_SIZE] = event; }
+
 os_event_t os_NextEvent () {
     MSG message = {};
-    os_private.win32.event.type = os_EVENT_INTERNAL;
-	while (os_private.win32.event.type == os_EVENT_INTERNAL) {
+	do {
+		assert (events.pushed - events.popped < OS_INTERNAL_EVENTS_SIZE);
+		if (events.pushed > events.popped)
+			return events.event[events.popped++ % OS_INTERNAL_EVENTS_SIZE];
 		if (PeekMessage (&message, NULL, 0, 0, PM_REMOVE)) {
-			// WM_QUIT is a weird special case. It can't be passed into the MessageProcessing function by DispatchMessage. If using GetMessage it will only return 0 when it finally gets WM_QUIT, whereas with PeekMessage we must check it here.
-			if (message.message == WM_QUIT) {
-				os_private.win32.event.type = os_EVENT_QUIT;
-				os_private.win32.event.exit_code = message.wParam;
+			if (message.message == WM_QUIT) // WM_QUIT is a weird special case. It can't be passed into the MessageProcessing function by DispatchMessage. If using GetMessage it will only return 0 when it finally gets WM_QUIT, whereas with PeekMessage we must check it here.
+				return (os_event_t){ .type = os_EVENT_QUIT, .exit_code = message.wParam };
+			else DispatchMessage (&message); // Fills out event structure by passing on message to Internal_WindowProcessMessage
 			}
-			else {
-				DispatchMessage (&message); // Fills out event structure by passing on message to Internal_WindowProcessMessage
-			}
-		}
-		else os_private.win32.event.type = os_EVENT_NULL;
-	}
-    return os_private.win32.event;
+	} while (events.pushed > events.popped);
+    return (os_event_t){ .type = os_EVENT_NULL };
 }
 
 // void os_WindowPositionToFrameBufferPosition (int windowx, int windowy, int *resultx, int *resulty) {
@@ -327,15 +300,12 @@ void os_SendQuitEvent () {
 
 LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam) {
     static bool has_focus = true;
-
     switch (message) {
 		case WM_DESTROY: {
 			PostQuitMessage (0);
 		} break;
         
 		case WM_PAINT: {
-            os_private.win32.event.type = os_EVENT_INTERNAL;
-
 			// glClearColor (os_private.background_color.r / 255.f, os_private.background_color.g / 255.f, os_private.background_color.b / 255.f, 1);
 			// glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -347,10 +317,7 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 		} break;
         
 		case WM_SIZE: {
-            os_private.win32.event.type = os_EVENT_WINDOW_RESIZE;
-
-			os_private.win32.event.width  = os_public.window.w = LOWORD(lParam);
-			os_private.win32.event.height = os_public.window.h = HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_WINDOW_RESIZE, .width = os_public.window.w = LOWORD(lParam), .height = os_public.window.h = HIWORD(lParam)});
 
 			glViewport (0, 0, os_public.window.w, os_public.window.h);
 			glMatrixMode (GL_PROJECTION);
@@ -385,6 +352,7 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 			has_focus = false;
 			memset(os_public.keyboard, 0, sizeof(os_public.keyboard));
 			os_public.mouse.buttons = 0;
+			// Should I send a "released all inputs" event back?
 		} break;
 
 		case WM_SETFOCUS: has_focus = true; break;
@@ -453,6 +421,10 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 						case VK_UP: key = os_KEY_UP; break;
 						case VK_RMENU: key = os_KEY_RALT; break;
 						case VK_LMENU: key = os_KEY_LALT; break;
+						case VK_HOME: key = os_KEY_HOME; break;
+						case VK_END: key = os_KEY_END; break;
+						case VK_PRIOR: key = os_KEY_PAGEUP; break;
+						case VK_NEXT: key = os_KEY_PAGEDOWN; break;
 						case VK_F1: key = os_KEY_F1; break;
 						case VK_F2: key = os_KEY_F2; break;
 						case VK_F3: key = os_KEY_F3; break;
@@ -483,92 +455,59 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 						default: key = os_KEY_INVALID; break;
 					}
 					os_public.keyboard[key] = key_is_down;
-					os_private.win32.event.key = key;
-					if(key_is_down) {
-						os_private.win32.event.type = os_EVENT_KEY_PRESS;
-					}
-					else {
-						os_private.win32.event.type = os_EVENT_KEY_RELEASE;
-					}
+					PushEvent ((os_event_t){.type = key_is_down ? os_EVENT_KEY_PRESS : os_EVENT_KEY_RELEASE, .key = key});
 				}
 			}
 		} break;
 
 		case WM_MOUSEMOVE: {
-			os_private.win32.event.type = os_EVENT_MOUSE_MOVE;
-			os_private.win32.event.previous_position.x = os_public.mouse.p.x;
-			os_private.win32.event.previous_position.y = os_public.mouse.p.y;
-			os_public.mouse.p.x = os_private.win32.event.new_position.x = LOWORD(lParam);
-			os_public.mouse.p.y = os_private.win32.event.new_position.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_MOVE, .previous_position = os_public.mouse.p, .new_position = { .x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}});
+			os_public.mouse.p.x = LOWORD(lParam);
+			os_public.mouse.p.y = os_public.window.h - 1 - HIWORD(lParam);
 		} break;
 
 		case WM_LBUTTONDOWN: {
 			os_public.mouse.buttons |=  os_MOUSE_LEFT;
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_PRESS;
-			os_private.win32.event.button.button = os_MOUSE_LEFT;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_PRESS, .button = {.button = os_MOUSE_LEFT, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 		case WM_LBUTTONUP: {
 			os_public.mouse.buttons &= ~os_MOUSE_LEFT;
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_RELEASE;
-			os_private.win32.event.button.button = os_MOUSE_LEFT;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_RELEASE, .button = {.button = os_MOUSE_LEFT, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 
 		case WM_RBUTTONDOWN: {
 			os_public.mouse.buttons |=  os_MOUSE_RIGHT;
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_PRESS;
-			os_private.win32.event.button.button = os_MOUSE_RIGHT;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_PRESS, .button = {.button = os_MOUSE_RIGHT, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 		case WM_RBUTTONUP: {
 			os_public.mouse.buttons &= ~os_MOUSE_RIGHT;
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_RELEASE;
-			os_private.win32.event.button.button = os_MOUSE_RIGHT;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_RELEASE, .button = {.button = os_MOUSE_RIGHT, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 
 		case WM_MBUTTONDOWN: {
 			os_public.mouse.buttons |=  os_MOUSE_MIDDLE;
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_PRESS;
-			os_private.win32.event.button.button = os_MOUSE_MIDDLE;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_PRESS, .button = {.button = os_MOUSE_MIDDLE, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 		case WM_MBUTTONUP: {
 			os_public.mouse.buttons &= ~os_MOUSE_MIDDLE;
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_RELEASE;
-			os_private.win32.event.button.button = os_MOUSE_MIDDLE;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_RELEASE, .button = {.button = os_MOUSE_MIDDLE, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 
 		case WM_XBUTTONDOWN: {
 			if(GET_XBUTTON_WPARAM(wParam) == XBUTTON1) {
 					 os_public.mouse.buttons |= os_MOUSE_X1;
 			} else { os_public.mouse.buttons |= os_MOUSE_X2; }
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_PRESS;
-			os_private.win32.event.button.button = os_MOUSE_X1;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_PRESS, .button = {.button = os_MOUSE_X1, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 		case WM_XBUTTONUP: {
 			if(GET_XBUTTON_WPARAM(wParam) == XBUTTON1) {
 					 os_public.mouse.buttons &= ~os_MOUSE_X1;
 			} else { os_public.mouse.buttons &= ~os_MOUSE_X2; }
-			os_private.win32.event.type = os_EVENT_MOUSE_BUTTON_RELEASE;
-			os_private.win32.event.button.button = os_MOUSE_X1;
-			os_private.win32.event.button.p.x = LOWORD(lParam);
-			os_private.win32.event.button.p.y = os_public.window.h - 1 - HIWORD(lParam);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_BUTTON_RELEASE, .button = {.button = os_MOUSE_X1, .p = {.x = LOWORD(lParam), .y = os_public.window.h - 1 - HIWORD(lParam)}}});
 		} break;
 
 		case WM_MOUSEWHEEL: {
-			os_private.win32.event.type = os_EVENT_MOUSE_SCROLL;
-			os_private.win32.event.scrolled_up = !(wParam & 0b10000000000000000000000000000000);
+			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_SCROLL, .scrolled_up = !(wParam & 0b10000000000000000000000000000000)});
 		} break;
 
 		default: return DefWindowProc(window_handle, message, wParam, lParam);
@@ -629,13 +568,15 @@ void os_MessageBox_ (os_MessageBox_arguments arguments) {
 }
 
 os_char1024_t os_OpenFileDialog (const char *title) {
-	os_char1024_t str;
+	os_char1024_t str = {};
 	OPENFILENAMEA name = {
-		.lStructSize = sizeof(OPENFILENAME),
+		.lStructSize = sizeof(OPENFILENAMEA),
+		.hwndOwner = os_private.win32.window_handle,
 		.lpstrFile = str.str,
 		.nMaxFile = sizeof(str.str),
 	};
 	if (!GetOpenFileNameA (&name)) {
+		LOG ("Failed to open file dialog");
 		return (os_char1024_t){};
 	}
 	return str;
@@ -937,6 +878,10 @@ os_event_t os_NextEvent () {
 						case XK_Alt_R: key = os_KEY_RALT; break;
 						case XK_Alt_L: key = os_KEY_LALT; break;
 						case XK_Control_L: case XK_Control_R: key = os_KEY_CTRL; break;
+						case XK_Home: key = os_KEY_HOME; break;
+						case XK_End: key = os_KEY_END; break;
+						case XK_Page_Up: key = os_KEY_PAGEUP; break;
+						case XK_Page_Down: key = os_KEY_PAGEDOWN; break;
 						case XK_F1: key = os_KEY_F1; break;
 						case XK_F2: key = os_KEY_F2; break;
 						case XK_F3: key = os_KEY_F3; break;
@@ -1724,6 +1669,10 @@ os_event_t os_NextEvent () {
 					case kVK_Option: key = os_KEY_LALT; break;
 					case kVK_RightOption: key = os_KEY_RALT; break;
 					case kVK_Control: case kVK_RightControl: key = os_KEY_CTRL; abort ();  break;
+					case kVK_Home: key = os_KEY_HOME; break;
+					case kVK_End: key = os_KEY_END; break;
+					case kVK_PageUp: key = os_KEY_PAGEUP; break;
+					case kVK_PageDown: key = os_KEY_PAGEDOWN; break;
 					case kVK_F1: key = os_KEY_F1; break;
 					case kVK_F2: key = os_KEY_F2; break;
 					case kVK_F3: key = os_KEY_F3; break;
@@ -2072,43 +2021,8 @@ void os_ClearScreen () {
 #endif
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-typedef GLuint (*glCreateShader_t) (GLenum shaderType);
-typedef void (*glShaderSource_t) (GLuint shader, GLsizei count, const GLchar **string, const GLint *length);
-typedef void (*glCompileShader_t) (GLuint shader);
-typedef void (*glGetShaderiv_t) (GLuint shader, GLenum pname, GLint *params);
-typedef void (*glGetShaderInfoLog_t) (GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-typedef GLuint (*glCreateProgram_t) ();
-typedef void (*glAttachShader_t) (GLuint program, GLuint shader);
-typedef void (*glLinkProgram_t) (GLuint program);
-typedef void (*glGetProgramiv_t) (GLuint program, GLenum pname, GLint *params);
-typedef void (*glGetProgramInfoLog_t) (GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-typedef void (*glDeleteShader_t) (GLuint shader);
-typedef void (*glUseProgram_t) (GLuint program);
-typedef void (*glUniform3fv_t) (GLint location, GLsizei count, const GLfloat *value);
-typedef GLint (*glGetUniformLocation_t) (GLuint program, const GLchar *name);
-typedef void (*glUniform1i_t) (GLint location, GLint v0);
-typedef void (*glValidateProgram_t) (GLuint program);
-typedef void (*glActiveTexture_t) (GLenum texture);
 
 bool os_CreateGLColorMap () {
-	GLFUNC_LOCAL (glCreateShader);
-	GLFUNC_LOCAL (glShaderSource);
-	GLFUNC_LOCAL (glCompileShader);
-	GLFUNC_LOCAL (glGetShaderiv);
-	GLFUNC_LOCAL (glGetShaderInfoLog);
-	GLFUNC_LOCAL (glCreateProgram);
-	GLFUNC_LOCAL (glAttachShader);
-	GLFUNC_LOCAL (glLinkProgram);
-	GLFUNC_LOCAL (glGetProgramiv);
-	GLFUNC_LOCAL (glGetProgramInfoLog);
-	GLFUNC_LOCAL (glDeleteShader);
-	GLFUNC_LOCAL (glUseProgram);
-	GLFUNC_LOCAL (glUniform3fv);
-	GLFUNC_LOCAL (glGetUniformLocation);
-	GLFUNC_LOCAL (glUniform1i);
-	GLFUNC_LOCAL (glValidateProgram);
-	GLFUNC_LOCAL (glActiveTexture);
-
 	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
 	auto vertex = glCreateShader (GL_VERTEX_SHADER);
 	glShaderSource (vertex, 1,&(const char *){

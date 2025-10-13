@@ -34,12 +34,11 @@ add_library(render OBJECT render.c)
 add_library(samples OBJECT samples.c)
 add_library(sprite OBJECT sprite.c)
 add_library(update OBJECT update.c)
-# add_library(resources OBJECT ../resources/resources.c)
 add_library(osinterface OBJECT osinterface.c)
 add_library(sound OBJECT sound.c)
-# add_library(internal_framework OBJECT framework.c)
+add_library(OpenGL2_1 OBJECT OpenGL2_1.c)
 
-add_library(framework STATIC $<TARGET_OBJECTS:cereal> $<TARGET_OBJECTS:explorer> $<TARGET_OBJECTS:folders> $<TARGET_OBJECTS:log> $<TARGET_OBJECTS:menu> $<TARGET_OBJECTS:utilities> $<TARGET_OBJECTS:render> $<TARGET_OBJECTS:samples> $<TARGET_OBJECTS:sprite> $<TARGET_OBJECTS:update> $<TARGET_OBJECTS:osinterface> $<TARGET_OBJECTS:sound>)# $<TARGET_OBJECTS:resources> # $<TARGET_OBJECTS:internal_framework>)
+add_library(framework STATIC $<TARGET_OBJECTS:cereal> $<TARGET_OBJECTS:explorer> $<TARGET_OBJECTS:folders> $<TARGET_OBJECTS:log> $<TARGET_OBJECTS:menu> $<TARGET_OBJECTS:utilities> $<TARGET_OBJECTS:render> $<TARGET_OBJECTS:samples> $<TARGET_OBJECTS:sprite> $<TARGET_OBJECTS:update> $<TARGET_OBJECTS:osinterface> $<TARGET_OBJECTS:sound> $<TARGET_OBJECTS:OpenGL2_1>)
 
 target_link_options(framework PRIVATE -Wl,--whole-archive)
 

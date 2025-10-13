@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if OSINTERFACE_COLOR_INDEX_MODE
+#ifdef OSINTERFACE_COLOR_INDEX_MODE
 typedef uint8_t frame_buffer_pixel_t;
 #else
 typedef uint32_t frame_buffer_pixel_t;
@@ -36,7 +36,7 @@ typedef enum {
 typedef enum { os_MOUSE_LEFT = 0b1, os_MOUSE_MIDDLE = 0b10, os_MOUSE_RIGHT = 0b100, os_MOUSE_X1 = 0b1000, os_MOUSE_X2 = 0b10000 } os_mouse_button_e;
 
 typedef enum {
-	os_KEY_INVALID, os_KEY_ENTER, os_KEY_ESCAPE, os_KEY_LEFT, os_KEY_RIGHT, os_KEY_UP, os_KEY_DOWN, os_KEY_LALT, os_KEY_RALT, os_KEY_TAB = '	', os_KEY_CTRL, os_KEY_BACKSPACE, os_KEY_DELETE, os_KEY_SHIFT,
+	os_KEY_INVALID, os_KEY_ENTER, os_KEY_ESCAPE, os_KEY_LEFT, os_KEY_RIGHT, os_KEY_UP, os_KEY_DOWN, os_KEY_LALT, os_KEY_RALT, os_KEY_TAB = '	', os_KEY_CTRL, os_KEY_BACKSPACE, os_KEY_DELETE, os_KEY_SHIFT, os_KEY_HOME, os_KEY_END, os_KEY_PAGEUP, os_KEY_PAGEDOWN,
 	os_KEY_F1, os_KEY_F2, os_KEY_F3, os_KEY_F4, os_KEY_F5, os_KEY_F6, os_KEY_F7, os_KEY_F8, os_KEY_F9, os_KEY_F10, os_KEY_F11, os_KEY_F12,
 	os_KEY_FIRST_WRITABLE = ' ', os_KEY_SPACE = ' ', os_KEY_APOSTROPHE = '\'', os_KEY_COMMA = ',', os_KEY_MINUS = '-', os_KEY_PERIOD = '.', os_KEY_SLASH = '/',  os_KEY_SEMICOLON = ';', os_KEY_EQUALS = '=', os_KEY_BRACKETLEFT = '[', os_KEY_BACKSLASH = '\\', os_KEY_BRACKETRIGHT = ']', os_KEY_GRAVE = '`',
 	os_KEY_0 = '0', os_KEY_1, os_KEY_2, os_KEY_3, os_KEY_4, os_KEY_5, os_KEY_6, os_KEY_7, os_KEY_8, os_KEY_9,
@@ -144,11 +144,7 @@ void os_WindowFrameBufferCalculateScale ();
 #include <mmsystem.h>
 #include <process.h>
 #include <string.h>
-
-
-// #define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-// #include <GL/glext.h>
+#include <wingdi.h> // Only needed for HGLRC definition
 
 typedef struct {
 	union {
@@ -162,7 +158,6 @@ typedef struct {
 		HDC bitmap_device_context;
 		HBRUSH background_brush;
 		int64_t ticks_per_microsecond;
-    	os_event_t event;
 		HGLRC gl_context;
 		HDC window_context;
 	} win32;
