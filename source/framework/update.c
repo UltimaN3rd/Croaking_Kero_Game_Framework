@@ -342,7 +342,6 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			}
 		} break;
 		case CPFSFLIP_X: {
-			x += w-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
@@ -356,7 +355,6 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			}
 		} break;
 		case CPFSFLIP_Y: {
-			y += h-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
@@ -370,8 +368,6 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			}
 		} break;
 		case CPFSFLIP_BOTH: {
-			x += w-1;
-			y += h-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
