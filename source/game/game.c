@@ -40,12 +40,7 @@ void game_Init () {
 	snprintf (update_data.config_filename, sizeof (update_data.config_filename), "%s/%s", os_public.directories.config, GAME_FOLDER_CONFIG);
 	folder_CreateDirectoryRecursive(update_data.config_filename);
 	snprintf (update_data.config_filename, sizeof (update_data.config_filename), "%s/%s/config", os_public.directories.config, GAME_FOLDER_CONFIG);
-	do { // Load config
-		FILE *file = fopen (update_data.config_filename, "rb");
-		if (!file) break;
-		DEFER (fclose (file););
-		cereal_ReadFromFile(cereal_options, cereal_options_size, file);
-	} while (false);
+	cereal_ReadFromFile(cereal_options, cereal_options_size, update_data.config_filename);
 	SoundMusicSetVolume (submenu_vars.music_volume / 255.f);
 	SoundFXSetVolume (submenu_vars.fx_volume / 255.f);
 	os_Fullscreen(submenu_vars.fullscreen);
@@ -53,12 +48,7 @@ void game_Init () {
 	snprintf (update_data.game_save_filename, sizeof(update_data.game_save_filename), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
 	folder_CreateDirectoryRecursive(update_data.game_save_filename);
 	snprintf (update_data.game_save_filename, sizeof(update_data.game_save_filename), "%s/%s/high_score", os_public.directories.savegame, GAME_FOLDER_SAVES);
-	do { // Load high score
-		FILE *file = fopen (update_data.game_save_filename, "rb");
-		if (!file) break;
-		DEFER (fclose (file););
-		cereal_ReadFromFile(cereal_savedata, cereal_savedata_size, file);
-	} while (false);
+	cereal_ReadFromFile(cereal_savedata, cereal_savedata_size, update_data.game_save_filename);
 
 	update_data.debug.show_framerate = &submenu_vars.debug.show_framerate;
 	update_data.debug.show_rendertime = &submenu_vars.debug.show_rendertime;
@@ -115,10 +105,7 @@ const size_t cereal_options_size = sizeof (cereal_options) / sizeof (*cereal_opt
 #include "DEFER.h"
 extern update_data_t update_data;
 void menu_Options_OnExit () {
-	FILE *file = fopen (update_data.config_filename, "wb");
-	if (!file) return;
-	DEFER (fclose (file););
-	cereal_WriteToFile(cereal_options, cereal_options_size, file);
+	cereal_WriteToFile(cereal_options, cereal_options_size, update_data.config_filename);
 }
 
 void menu_Options_Debug_OpenFolder () {

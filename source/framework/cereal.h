@@ -31,6 +31,7 @@ typedef struct {
 			cereal_type_e type;
 			cereal_type_e counter_type;
 			void *counter;
+			uint32_t capacity;
 		} array;
 		struct {
 			uint16_t capacity;
@@ -40,5 +41,5 @@ typedef struct {
 
 extern uint64_t cereal_dummy;
 
-bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, FILE *file);
-bool cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, FILE *file);
+bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const char *const filename);
+int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const char *const filename);

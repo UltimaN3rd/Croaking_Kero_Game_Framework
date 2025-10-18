@@ -278,13 +278,7 @@ void UpdateDead () {
 }
 
 void SaveGame () {
-	FILE *file = fopen (update_data.game_save_filename, "wb");
-	if (!file) {
-		LOG ("Failed to open game save file [%s]", update_data.game_save_filename);
-		return;
-	};
-	DEFER (fclose (file););
-	cereal_WriteToFile(cereal_savedata, cereal_savedata_size, file);
+	if (!cereal_WriteToFile(cereal_savedata, cereal_savedata_size, update_data.game_save_filename)) LOG ("Failed to save game");
 }
 
 void SaveHighScore () {

@@ -342,6 +342,7 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			}
 		} break;
 		case CPFSFLIP_X: {
+			// x += w-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
@@ -355,6 +356,7 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			}
 		} break;
 		case CPFSFLIP_Y: {
+			// y += h-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
@@ -368,6 +370,8 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			}
 		} break;
 		case CPFSFLIP_BOTH: {
+			// x += w-1;
+			// y += h-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
 					uint8_t p = sprite->p[sx + sy * w];
@@ -389,6 +393,8 @@ void Update_ChangeState (update_state_e new_state) {
 }
 
 void FloatyTextCreate (int x, int y, int vy, int time, const char *const str) {
+	assert (update_data.floaty_text.count <= FLOATY_TEXT_MAX);
+	if (update_data.floaty_text.count == FLOATY_TEXT_MAX) FloatyTextDelete (0);
 	assert (update_data.floaty_text.count < FLOATY_TEXT_MAX);
 
 	unsigned int i = update_data.floaty_text.count++;
