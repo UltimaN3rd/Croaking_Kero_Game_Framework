@@ -207,26 +207,11 @@ void *Update(void*) {
 			FloatyTextUpdate();
 			FloatyTextDraw();
 
-			char temp[64];
-			if (current_state == update_state_gameplay) {
-				switch (replay.mode) {
-					case replay_mode_playback:
-						sprintf (temp, "Frame %d", replay.frame);
-						// Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-11, .string = temp, .flags = {.ignore_camera = true});
-						break;
-					case replay_mode_ended:
-						sprintf (temp, "Replay finished on frame %d\nF3 to continue", replay.frame);
-						// Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-11, .string = temp, .flags = {.ignore_camera = true});
-						break;
-					default: break;
-				}
-			}
-
+			
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
-				if (current_state == update_state_gameplay) {
-					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
-				}
+				char temp[64];
+				sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
+				Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
 			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
