@@ -79,7 +79,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const 
 
 int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const char *const filename) {
 	FILE *file = fopen (filename, "rb");
-	assert (file); if (!file) { LOG ("Failed to read file [%s]", filename); return false; }
+	if (!file) { LOG ("Failed to read file [%s]", filename); return false; }
 	DEFER (fclose (file));
 	long start_pos = ftell (file);
 	fseek (file, 0, SEEK_END);
