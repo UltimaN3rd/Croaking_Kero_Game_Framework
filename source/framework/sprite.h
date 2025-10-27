@@ -28,7 +28,6 @@ void sprite_BlitRotated270(const sprite_t *source, sprite_t *destination, int x,
 void sprite_BlitFlippedHorizontally(const sprite_t *source, sprite_t *destination, int x, int y);
 void sprite_BlitFlippedVertically(const sprite_t *source, sprite_t *destination, int x, int y);
 
-
 void sprite_SampleRotated(const sprite_t *source, sprite_t *destination, int x, int y, float angle, float originx, float originy);
 void sprite_SampleRotatedFlipped(const sprite_t *source, sprite_t *destination, int x, int y, float angle, float originx, float originy, bool flipx, bool flipy);
 
@@ -41,6 +40,9 @@ void sprite_BlitRotated270Color(const sprite_t *source, sprite_t *destination, i
 
 void sprite_BlitFlippedHorizontallyColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
 void sprite_BlitFlippedVerticallyColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
+
+void sprite_SampleRotatedColor(const sprite_t *source, sprite_t *destination, int x, int y, float angle, float originx, float originy, uint8_t color);
+void sprite_SampleRotatedFlippedColor(const sprite_t *source, sprite_t *destination, int x, int y, float angle, float originx, float originy, bool flipx, bool flipy, uint8_t color);
 
 
 static inline void sprite_SetPixelsToZero (sprite_t *sprite) {

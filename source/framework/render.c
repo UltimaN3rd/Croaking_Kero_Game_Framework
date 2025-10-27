@@ -487,7 +487,7 @@ void *Render (void*) {
 						// s.rotation = 0;
 					}
 					if (s.rotation != 0) {
-						sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
+						sprite_SampleRotatedFlippedColor(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically, color);
 					}
 					else {
 						s.position.x -= s.originx;
