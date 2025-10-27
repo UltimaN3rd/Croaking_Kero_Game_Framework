@@ -82,7 +82,7 @@ typedef struct {
         int x, y;
         uint8_t left;
     } mouse;
-    char typing[4];
+    char typing[32];
 } menu_inputs_t;
 
 vec2i_t menu_ItemDimensions (const char *item_start);

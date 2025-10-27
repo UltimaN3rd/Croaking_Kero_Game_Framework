@@ -25,6 +25,10 @@ typedef struct update_data_s { // update_data_t
 	#define KEY_REPEATED 0b1000
 	struct {
 		uint8_t keyboard_state[256];
+		struct {
+			uint8_t count;
+			char chars[33];
+		} typing;
 		uint8_t mouse_state[MOUSE_BUTTON_COUNT];
 		mouse_t mouse;
 	} frame;
@@ -78,7 +82,7 @@ typedef struct update_data_s { // update_data_t
 			int32split_t y;
 			int vy;
 			int time;
-			char string[32];
+			char string[64];
 		} text[FLOATY_TEXT_MAX];
 	} floaty_text;
 	struct {

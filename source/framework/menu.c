@@ -459,12 +459,14 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 				menu_NameCreatorDeleteCharacter(fc);
 			constexpr bool character_illegal[256] = {['/']=1,['\\']=1, [':']=1,['*']=1,['?']=1,['"']=1,['<']=1,['>']=1,['|']=1,};
 			for (int i = 0; i < sizeof (input.typing) && input.typing[i] != 0; ++i) {
-				if (character_illegal[(int)input.typing[i]]) continue;
+				char c = input.typing[i];
+				if (character_illegal[(int)c]) continue;
+				if (c < ' ' || c > '~') continue;
 				size_t len = strlen (fc->text_buffer);
 				if (len < *fc->buffer_size-1) {
 					for (int j = len; j > fc->cursor; --j)
 						fc->text_buffer[j] = fc->text_buffer[j-1];
-					fc->text_buffer[fc->cursor] = input.typing[i];
+					fc->text_buffer[fc->cursor] = c;
 					++fc->cursor;
 				}
 			}

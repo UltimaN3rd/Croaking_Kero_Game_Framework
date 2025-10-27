@@ -39,6 +39,16 @@ void FloatyTextDraw ();
 #define PARTICLES_BOUNDARY_TOP (RESOLUTION_HEIGHT + 100)
 #endif
 
+static void TypeThisFrame (os_key_e key) {
+	char c = update_data.frame.keyboard_state[os_KEY_SHIFT] & (KEY_PRESSED | KEY_HELD) ? os_key_shifted(key) : key;
+
+	if (c < ' ' || c > '~') return;
+	assert (update_data.frame.typing.count < sizeof (update_data.frame.typing.chars)-1); if (update_data.frame.typing.count >= sizeof (update_data.frame.typing.chars)-1) { LOG ("Exceeded max typing chars in 1 frame"); return;}
+
+	update_data.frame.typing.chars[update_data.frame.typing.count++] = c;
+	update_data.frame.typing.chars[update_data.frame.typing.count] = 0; // Always append NULL terminator
+}
+
 void *Update(void*) {
 	LOG ("Update thread started");
 	while (!render_data.thread_initialized) os_uSleepEfficient (1000);
@@ -80,6 +90,7 @@ void *Update(void*) {
 		memcpy (&mouse_previous, &mouse, sizeof (mouse));
 		memcpy (keyboard, os_public.keyboard, sizeof (keyboard));
 		memcpy (&mouse, &os_public.mouse, sizeof (mouse));
+		update_data.frame.typing = (typeof(update_data.frame.typing)){};
 
 		if (current_state != update_data.new_state) {
 			folder_ReturnToBaseDirectory ();
@@ -113,6 +124,7 @@ void *Update(void*) {
 				if (keyboard_repeat_time[i] > KEYBOARD_REPEAT_INITIAL_DELAY) {
 					*pk |= KEY_REPEATED;
 					keyboard_repeat_time[i] = KEYBOARD_REPEAT_INITIAL_DELAY - KEYBOARD_REPEAT_DELAY;
+					TypeThisFrame(*pk);
 				}
 			}
 		}
@@ -142,6 +154,9 @@ void *Update(void*) {
 			auto event = replay.keyboard_events.events;
 			repeat (keyboard_events_this_frame) {
 				update_data.frame.keyboard_state[event->key] |= (event->pressed ? KEY_PRESSED : KEY_RELEASED);
+				if (event->pressed == KEY_PRESSED) {
+					TypeThisFrame (event->key);
+				}
 				++event;
 			}
 		}
@@ -207,11 +222,11 @@ void *Update(void*) {
 			FloatyTextUpdate();
 			FloatyTextDraw();
 
-			
+
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				char temp[64];
-				sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-				Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
+					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
+					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
 			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
