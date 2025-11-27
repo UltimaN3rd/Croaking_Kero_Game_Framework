@@ -256,7 +256,7 @@ void UpdateDead () {
                 .up = keyboard[os_KEY_UP] & PRESSORREPEAT, .down = keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
                 .backspace = keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = keyboard[os_KEY_DELETE] & PRESSORREPEAT,
                 .mouse = {.x = mouse.x, .y = mouse.y, .left = mouse_buttons[MOUSE_LEFT]}};
-            for (int i = 0; i < typing.count && i < sizeof ((menu_inputs_t){}.typing); ++i)     inputs.typing[i] = typing.chars[i];
+	        memcpy (inputs.typing, typing.chars, MIN (sizeof(inputs.typing), typing.count));
             menu_Update (&menu_death, inputs);
             menu_Render (&menu_death, 20);
         }

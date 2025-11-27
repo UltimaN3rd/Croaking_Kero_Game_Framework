@@ -60,6 +60,7 @@ void game_menu_Update () {
 	auto keyboard = update_data.frame.keyboard_state;
 	auto mouse = update_data.frame.mouse;
 	auto mouse_buttons = update_data.frame.mouse_state;
+	auto typing = update_data.frame.typing;
 	static vec2i_t last_mouse_position = {};
 	auto m = menu.submenu;
 	
@@ -68,16 +69,7 @@ void game_menu_Update () {
 		.up = keyboard[os_KEY_UP] & PRESSORREPEAT, .down = keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
 		.backspace = keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = keyboard[os_KEY_DELETE] & PRESSORREPEAT,
 		.mouse = {.x = mouse.x, .y = mouse.y, .left = mouse_buttons[MOUSE_LEFT]}};
-	int keys = 0;
-	for (int i = os_KEY_FIRST_WRITABLE; i <= os_KEY_LAST_WRITABLE; ++i) {
-		if (!(keyboard[i] & PRESSORREPEAT)) continue;
-		char c;
-		if (keyboard[os_KEY_SHIFT] & KEY_HELD) c = os_key_shifted (i);
-		else c = i;
-		inputs.typing[keys] = c;
-		++keys;
-		if (keys > sizeof (inputs.typing)) break;
-	}
+	memcpy (inputs.typing, typing.chars, MIN (sizeof(inputs.typing), typing.count));
 	menu_Update (&menu, inputs);
 
 	menu_Render (&menu, 1);
