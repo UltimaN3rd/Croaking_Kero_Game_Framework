@@ -2,6 +2,8 @@
 
 This is Nick Walton's game backend framework. I created and am using this to program small games from scratch for Windows, Linux and MacOS (aspiring to support console platforms in future).
 
+Used to make my games on Steam: [Nick's Saturday Morning Games](https://store.steampowered.com/app/2572310/Nicks_Saturday_Morning_Games/)
+
 ![Flappy Choppa](https://raw.githubusercontent.com/UltimaN3rd/ultiman3rd.github.io/refs/heads/main/images/Flappy_Choppa.gif)
 
 ## Warning
@@ -173,7 +175,7 @@ User configuration and save data are dynamically loaded from and saved to files 
 
 ## Why I made this framework 
 
-When programming games in the past, I've listened to the advice, "Don't reinvent the wheel," and, "You probably can't do it better than X, so just use X." This advice is intended to save people time and get straight to productive game programming, but I found it difficult to become a good enough programmer while skipping so many foundational parts of the code. I ran into bugs and issues which required understanding the underlying code, which was very difficult when I'd never written code as low-level as the libraries/engines I depended on. I also felt demotivated working on games that I ultimately may be unable to maintain - like the multitude of fantastic Flash-based games from back in the day. I finally decided to build my games from the ground up and created this framework. Now I've completed my first game (launching on Steam soon), and have become a much better and faster programmer. It was not easy to get this far, and I've encountered a significant lack of resources on how to write this kind of code, so I'm putting this in the public domain as an example for others to get over some early hurdles.
+When programming games in the past, I've listened to the advice, "Don't reinvent the wheel," and, "You probably can't do it better than X, so just use X." This advice is intended to save people time and get straight to productive game programming, but I found it difficult to become a good enough programmer while skipping so many foundational parts of the code. I ran into bugs and issues which required understanding the underlying code, which was very difficult when I'd never written code as low-level as the libraries/engines I depended on. I also felt demotivated working on games that I ultimately may be unable to maintain - like the multitude of fantastic Flash-based games from back in the day. I finally decided to build my games from the ground up and created this framework. Now I've completed my [first game](https://store.steampowered.com/app/2572310/Nicks_Saturday_Morning_Games/), and have become a much better and faster programmer. It was not easy to get this far, and I've encountered a significant lack of resources on how to write this kind of code, so I'm putting this in the public domain as an example for others to get over some early hurdles.
 
 Relevant background: Between 2015-2019 I published 5 games, made in Godot, PICO-8, and C (relying on various libraries). I've also made several unpublished prototypes in GameMaker Studio, Love2D (Lua), Unity, Unreal, and more.
 
