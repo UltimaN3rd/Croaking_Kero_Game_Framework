@@ -22,6 +22,9 @@
 
 void DrawCircle(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color);
 void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color);
+void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color);
+void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color);
+
 
 render_state_t *render_state_being_edited = NULL;
 extern pthread_mutex_t update_render_swap_state_mutex;
@@ -98,7 +101,19 @@ void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments)
 
 void Render_Shape_ (Render_Shape_arguments arguments) {
 	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (arguments.shape.type == render_shape_ellipse && arguments.shape.ellipse.rx == arguments.shape.ellipse.ry) {
+		const render_shape_t circ = {
+			.type = render_shape_circle,
+			.circle = {
+				.x = arguments.shape.ellipse.x,
+				.y = arguments.shape.ellipse.y,
+				.r = arguments.shape.ellipse.rx,
+				.color_edge = arguments.shape.ellipse.color_edge,
+				.color_fill = arguments.shape.ellipse.color_fill,
+			},
+		};
+		arguments.shape = circ;
+	}
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_shape,
 		.depth = arguments.depth,
@@ -619,6 +634,16 @@ void *Render (void*) {
 							if ((c.color_fill == 0 || c.color_edge != c.color_fill) && c.color_edge != 0) DrawCircle (frame, c.x, c.y, c.r, c.color_edge);
 						} break;
 
+						case render_shape_ellipse: {
+							auto e = s.ellipse;
+							if (!element->ignore_camera) {
+								e.x -= camera.x;
+								e.y -= camera.y;
+							}
+							if (e.color_fill != 0) DrawEllipseFilled (frame, e.x, e.y, e.rx, e.ry, e.color_fill);
+							if ((e.color_fill == 0 || e.color_edge != e.color_fill) && e.color_edge != 0) DrawEllipse (frame, e.x, e.y, e.rx, e.ry, e.color_edge);
+						} break;
+
 						case render_shape_line: {
 							auto l = s.line;
 							if (!element->flags.ignore_camera) {
@@ -851,6 +876,84 @@ void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float r
 		if(d < 0) { d += 4*x     +  6; ++x; }
 		else      { d += 4*(x-y) + 10; ++x; --y; }
 	}
+}
+
+void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
+	int16_t l = center_x - radiusx,
+			r = center_x + radiusx,
+			b_ = center_y - radiusy,
+			t = center_y + radiusy;
+	int32_t a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	int32_t dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	int32_t err = dx+dy+b1*a*a, e2; /* error of 1.step */
+
+	if (l > r) SWAP (l, r);
+	if (b_ > t) SWAP (b_, t);
+	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
+	a *= 8*a; b1 = 8*b*b;
+
+	#pragma push_macro ("PXY")
+	#undef PXY
+	#define PXY(x__, y__) do { auto xx = (x__); auto yy = (y__); if (xx >= 0 && xx < destination->w && yy >= 0 && yy < destination->h) destination->p[xx + yy*destination->w] = color; } while (0) 
+	do {
+		PXY(r, b_); /*   I. Quadrant */
+		PXY(l, b_); /*  II. Quadrant */
+		PXY(l, t); /* III. Quadrant */
+		PXY(r, t); /*  IV. Quadrant */
+		e2 = 2*err;
+		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
+		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
+	} while (l <= r);
+
+	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
+		break;
+		PXY(l-1, b_); /* -> finish tip of ellipse */
+		PXY(r+1, b_++); 
+		PXY(l-1, t);
+		PXY(r+1, t--); 
+	}
+	#pragma pop_macro ("PXY")
+}
+
+void DrawLineHorizontal (sprite_t *destination, int16_t l, int16_t r, int16_t y, uint8_t color) {
+	if (y < 0 || color == 0 || y > destination->h-1) return;
+	if (l > r) SWAP (l, r);
+	if (l > destination->w-1 || r < 0) return;
+	if (l < 0) l = 0;
+	if (r > destination->w-1) r = destination->w-1;
+	memset (&destination->p[l + y * destination->w], color, r - l + 1);
+}
+
+void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
+	int16_t l = center_x - radiusx,
+			r = center_x + radiusx,
+			b_ = center_y - radiusy,
+			t = center_y + radiusy;
+	int a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	long err = dx+dy+b1*a*a, e2; /* error of 1.step */
+
+	if (l > r) { l = r; r += a; } /* if called with swapped points */
+	if (b_ > t) b_ = t; /* .. exchange them */
+	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
+	a *= 8*a; b1 = 8*b*b;
+
+	#pragma push_macro ("LINE")
+	#undef LINE
+	#define LINE(l__, r__, y__) DrawLineHorizontal (destination, l__, r__, y__, color)
+	do {
+		LINE(l, r, b_); /*   I. Quadrant */
+		LINE(l, r, t); /* III. Quadrant */
+		e2 = 2*err;
+		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
+		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
+	} while (l <= r);
+
+	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
+		LINE(l-1, r+1, b_); /* -> finish tip of ellipse */
+		LINE(l-1, r+1, t);
+	}
+	#pragma pop_macro ("LINE")
 }
 
 void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length) {

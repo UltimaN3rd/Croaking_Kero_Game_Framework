@@ -33,11 +33,11 @@ typedef struct {
     } flags;
 } render_state_sprite_t;
 
-typedef struct {
-	enum { render_shape_rectangle, render_shape_circle, render_shape_line, render_shape_dot } type;
-	union {
-		struct {
-			int x, y, w, h;
+typedef struct __attribute__((__packed__)) {
+	enum : uint8_t { render_shape_rectangle, render_shape_circle, render_shape_line, render_shape_dot, render_shape_triangle, render_shape_ellipse } type;
+	union __attribute__((__packed__)) {
+		struct __attribute__((__packed__)) {
+			int16_t x, y, w, h;
 			struct {
 				bool center_horizontally:1;
 				bool center_vertically:1;
@@ -48,7 +48,11 @@ typedef struct {
 			int x, y, r;
 			uint8_t color_edge, color_fill;
 		} circle;
-		struct {
+		struct __attribute__((__packed__)) {
+			int16_t x, y, rx, ry;
+			uint8_t color_edge, color_fill;
+		} ellipse;
+		struct __attribute__((__packed__)) {
 			int x0, y0, x1, y1;
 			uint8_t color;
 		} line;
