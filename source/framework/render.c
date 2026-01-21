@@ -1277,5 +1277,21 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
     if (!string_is_visible) {
         return (font_StringDimensions_return_t){.width = 0, .height = 0};
     }
-    return (font_StringDimensions_return_t){.width = width, .height = y};
+    return (font_StringDimensions_return_t){.w = width, .h = y};
+}
+
+void Render_Screenshot (sprite_t *destination) {
+	assert (destination->w >= RESOLUTION_WIDTH);
+	assert (destination->h >= RESOLUTION_HEIGHT);
+	if (destination->w < RESOLUTION_WIDTH || destination->h < RESOLUTION_HEIGHT) return;
+
+	render_data.resume_thread = false;
+	render_data.pause_thread = true;
+	while (render_data.pause_thread) os_uSleepEfficient(1000);
+
+	sprite_t *frame = render_data.frame[!frame_select];
+	for (int y = 0; y < RESOLUTION_HEIGHT; ++y) {
+		memcpy (&destination->p[y * destination->w], &frame->p[y * RESOLUTION_WIDTH], RESOLUTION_WIDTH);
+	}
+	render_data.resume_thread = true;
 }
