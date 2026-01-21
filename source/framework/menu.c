@@ -14,7 +14,7 @@
 
 #include "menu.h"
 
-extern const sprite_t framework_menu_cursor;
+extern const cursor_t framework_cursor;
 extern const sprite_t framework_menu_folder_open;
 extern const sprite_t framework_menu_back;
 
@@ -629,7 +629,7 @@ void menu_Render (menu_t *self, int depth) {
 
 	if (submenu->parent != NULL) Render_Sprite (.sprite = &framework_menu_back, .y = RESOLUTION_HEIGHT - framework_menu_back.h, .depth = depth, .flags.ignore_camera = true);
 
-	Render_Cursor (&framework_menu_cursor, mouse.x, mouse.y, 3, framework_menu_cursor.h-1);
+    Render_CursorAtRawMousePos (&framework_cursor);
 }
 
 static void menu_Delete_Yes () {

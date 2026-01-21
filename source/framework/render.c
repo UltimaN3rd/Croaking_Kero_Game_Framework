@@ -31,12 +31,17 @@ extern bool quit;
 void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length);
 void font_Write (const font_t *font, sprite_t *destination, int left, int top, char *text);
 
-void Render_Cursor (const sprite_t *sprite, int x, int y, int offsetx, int offsety) {
+void Render_Cursor (const cursor_t *cursor, int x, int y) {
 	render_state_being_edited->cursor = (typeof (render_state_being_edited->cursor)) {
-		.sprite = sprite,
-		.x = x - offsetx,
-		.y = y - offsety,
+		.sprite = cursor->sprite,
+		.x = x - cursor->offset.x,
+		.y = y - cursor->offset.y,
 	};
+}
+
+void Render_CursorAtRawMousePos(const cursor_t *cursor) {
+	const auto m = Update_GetUneditedFrameInputState().mouse;
+	Render_Cursor (cursor, m.x, m.y);
 }
 
 void Render_Camera (int x, int y) {

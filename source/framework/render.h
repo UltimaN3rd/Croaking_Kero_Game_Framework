@@ -182,7 +182,8 @@ void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera);
 
 render_state_t *Render_GetCurrentEditableState ();
 
-void Render_Cursor (const sprite_t *sprite, int x, int y, int offsetx, int offsety);
+void Render_Cursor (const cursor_t *cursor, int x, int y);
+void Render_CursorAtRawMousePos (const cursor_t *cursor);
 
 typedef union {
     struct {int width, height;};

@@ -137,7 +137,25 @@ void ExploreFolder(const char *directory) {
 					fprintf (phil, "%d,", font.descent[i]);
 				}
 				fprintf (phil, "}};\n");
-			} else {
+                continue;
+            } else if (strcmp (folder.name, "cursor") == 0) {
+                char codename[2048] = "";
+                int namelen = strlen(current_directory);
+                char *s, *d;
+                s = current_directory;
+                d = codename;
+                for (int i = 0; i < namelen; ++i) {
+                    if (*s == '/')
+                        *d = '_';
+                    else
+                        *d = *s;
+                    ++d, ++s;
+                } 
+                namelen = strlen(codename);
+                assert(snprintf(&codename[namelen], sizeof(codename) - namelen, "%s", folder.name) == strlen(folder.name));
+                if (LoadCursor (folder.name, codename)) continue;
+                // If didn't successfully treat folder as a cursor, instead pass through and treat it as a normal folder
+            }
 				ExploreFolder(folder.name);
 			}
 			continue;
@@ -843,4 +861,62 @@ char *ReadEntireFile (char *filename, int *return_file_length) {
     buffer[file_length] = 0;
     if (return_file_length) *return_file_length = file_length;
     return buffer;
+}
+
+bool LoadCursor (const char *const folder, const char *const codename) {
+    printf ("Loading cursor [%s]\n", codename);
+    auto result = folder_ChangeDirectory(folder);
+    if (result.is_error) return false;
+    DEFER (folder_ChangeDirectory (".."););
+
+    struct {
+        int x, y;
+    } cursor = {};
+    
+
+    int len = 0;
+    auto props = ReadEntireFile("properties.txt", &len);
+    if (props == NULL) {
+        printf ("Cursor properties file not found\n");
+        return false;
+    }
+    DEFER (free (props););
+
+    {
+        FILE *file_sprite = fopen ("sprite.bmp", "rb");
+        if (file_sprite == NULL) {
+            printf ("sprite.bmp file not found\n");
+            return false;
+        }
+        fclose (file_sprite);
+    }
+
+    auto sprite = sprite_LoadBMP("sprite.bmp");
+    if (sprite.w == 0 || sprite.h == 0) {
+        printf ("Sprite file invalid\n");
+        return false;
+    }
+
+    const char *p = props;
+    while (p < props + len) {
+        char key;
+        int value;
+        if (sscanf (p, "%c %d", &key, &value) != 2) break;
+        switch (key) {
+            case 'x': cursor.x = value; break;
+            case 'y': cursor.y = value; break;
+            default: printf ("Invalid key [%c]\n", key); return false;
+        }
+        while (*p != '\n' && p < props + len) ++p;
+        ++p;
+    }
+
+    fprintf (header, "extern const cursor_t %s;\n", codename);
+    fprintf (phil, "const cursor_t %s = {.offset = {.x = %d, .y = %d}, .sprite = &(sprite_t){.w = %d, .h = %d, .p = {", codename, cursor.x, cursor.y, sprite.w, sprite.h);
+    for (int i = 0; i < sprite.w * sprite.h; ++i) {
+        fprintf (phil, "%d,", sprite.p[i]);
+    }
+    fprintf (phil, "}}};\n");
+
+    return true;
 }

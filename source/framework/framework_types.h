@@ -111,3 +111,10 @@ typedef struct {
     uint8_t count;
     counted_by(count) const sound_t *sounds[];
 } sound_music_t;
+
+typedef struct {
+    struct {
+        int16_t x, y;
+    } offset;
+    const sprite_t *sprite;
+} cursor_t;
