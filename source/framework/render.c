@@ -122,6 +122,14 @@ void Render_Shape_ (Render_Shape_arguments arguments) {
 	};
 }
 
+static uint16_t Render_AllocInState (uint16_t bytes) {
+	assert (render_state_being_edited->mem.position < RENDER_STATE_MEM_AMOUNT - bytes);
+	if (render_state_being_edited->mem.position >= RENDER_STATE_MEM_AMOUNT - bytes) return RENDER_STATE_MEM_AMOUNT;
+	auto pos = render_state_being_edited->mem.position;
+	render_state_being_edited->mem.position += bytes;
+	return pos;
+}
+
 void Render_Text_ (Render_Text_arguments arguments) {
 	if (arguments.string == NULL) return;
 	if (arguments.length == 0) arguments.length = strlen (arguments.string);
@@ -153,9 +161,21 @@ void Render_Text_ (Render_Text_arguments arguments) {
 
 	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
 
-	const auto count = render_state_being_edited->elements[count].text.string).h;
-		render_state_being_edited->elements[count].text.y = (RESOLUTION_HEIGHT - h) / 2;
-	}
+	const auto count = render_state_being_edited->element_count++;
+
+	auto mem = Render_AllocInState(arguments.length);
+	if (mem == RENDER_STATE_MEM_AMOUNT) // Out of memory, cannot render this string
+		return;
+	auto str = &render_state_being_edited->mem.bytes[mem];
+
+	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
+		.type = render_element_text,
+		.depth = arguments.depth,
+		.ignore_camera = arguments.ignore_camera,
+		.text = {.x = arguments.x, .y = arguments.y, .length = arguments.length, .string = str},
+	};
+	strcpy (str, arguments.string); // Already checked length above
+	str[arguments.length-1] = 0;
 }
 
 void Render_Background_ (Render_Background_arguments background) {

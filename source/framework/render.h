@@ -100,6 +100,11 @@ enum : uint8_t {render_element_sprite, render_element_shape, render_element_text
 		#define RENDER_MAX_ELEMENTS 4096
 	} elements[RENDER_MAX_ELEMENTS];
 	int32_t element_count;
+	#define RENDER_STATE_MEM_AMOUNT UINT16_MAX
+	struct {
+		uint16_t position;
+		char bytes[RENDER_STATE_MEM_AMOUNT];
+	} mem;
 	#define PARTICLES_MAX 4096
 	struct {
 		uint8_t pixel[PARTICLES_MAX];
