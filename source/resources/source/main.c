@@ -51,7 +51,7 @@ typedef struct {
 	union { int width,  w; };
 	union { int height, h; };
 	uint8_t *p;
-} sprite_t;
+} resources_sprite_t;
 
 #define BITMAP_FONT_FIRST_VISIBLE_CHAR 33
 #define BITMAP_FONT_LAST_VISIBLE_CHAR 126
@@ -64,7 +64,7 @@ typedef struct {
     uint8_t *pixels;
     struct {int w, h, offset;} bitmaps[BITMAP_FONT_NUM_VISIBLE_CHARS];
     int8_t descent[BITMAP_FONT_NUM_VISIBLE_CHARS];
-} font_t;
+} resources_font_t;
 
 static bool LoadMusic (const char *filename);
 resources_sprite_t sprite_LoadBMP (const char *filename);
@@ -180,7 +180,7 @@ void ExploreFolder(const char *directory) {
 	folder_ChangeDirectory(directory);
 	auto result = folder_FindFirstFile("./");
 	if (result.is_error) {
-		PopDir();
+	    chdir("../");
 		return;
 	}
 	int curlen = strlen(current_directory);
@@ -191,7 +191,7 @@ void ExploreFolder(const char *directory) {
 	do {
 		if (folder.is_folder) {
 			if (strcmp(folder.name, "font") == 0) {
-				font_t font;
+				resources_font_t font;
 				font_Load(&font, folder.name);
 				char codename[2048] = "";
 				int len = strlen(current_directory);
@@ -207,12 +207,6 @@ void ExploreFolder(const char *directory) {
 				}
 				assert(snprintf(&codename[len], sizeof(codename) - len, "%s",
 								folder.name) == strlen(folder.name));
-				// fprintf (phil, "const uint8_t %s_pixels[]={", codename);
-				// for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
-				// 	for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
-				// 		fprintf (phil, "%d,", font.pixels[font.bitmaps[i].offset + j]);
-				// 	}
-				// }
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
 					fprintf (phil, "const sprite_t %s_bitmap_%d={.w=%d,.h=%d,.p={", codename, i, font.bitmaps[i].w, font.bitmaps[i].h);
 					for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
@@ -224,11 +218,6 @@ void ExploreFolder(const char *directory) {
 				fprintf (phil, "const font_t %s={.line_height=%d,.baseline=%d,.space_width=%d,.bitmaps={", codename, font.line_height, font.baseline, font.space_width);
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
 					fprintf (phil, "&%s_bitmap_%d,", codename, i);
-					/*fprintf (phil, "&(sprite_t){.w=%d,.h=%d,.p={", font.bitmaps[i].w, font.bitmaps[i].h);
-					for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
-						fprintf (phil, "%d,", font.pixels[font.bitmaps[i].offset + j]);
-					}
-					fprintf (phil, "}},");*/
 				}
 				fprintf (phil, "},.descent={");
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
@@ -254,8 +243,7 @@ void ExploreFolder(const char *directory) {
                 if (LoadCursor (folder.name, codename)) continue;
                 // If didn't successfully treat folder as a cursor, instead pass through and treat it as a normal folder
             }
-				ExploreFolder(folder.name);
-			}
+            ExploreFolder(folder.name);
 			continue;
 		}
 		const char *extension = StringGetFileExtension(folder.name);
@@ -278,7 +266,7 @@ void ExploreFolder(const char *directory) {
 		*d = 0;
 		if (StringCompareCaseInsensitive(extension, "bmp") == 0) {
 			printf("Loading bmp: %s%s\n", current_directory, folder.name);
-			sprite_t spr = sprite_LoadBMP(folder.name);
+			resources_sprite_t spr = sprite_LoadBMP(folder.name);
 			fprintf (header, "extern const sprite_t %s;\n", codename);
 			fprintf(phil, "const sprite_t %s = {.w = %u, .h = %u, .p = {",
 					codename, spr.w, spr.h);
@@ -400,7 +388,7 @@ const uint8_t palette[256][3] = {)", phil);
 
 
 
-sprite_t sprite_LoadBMP (const char *filename) {
+resources_sprite_t sprite_LoadBMP (const char *filename) {
 	assert (filename != NULL);
 
 	struct {
@@ -419,7 +407,7 @@ sprite_t sprite_LoadBMP (const char *filename) {
 	fread(&header, sizeof (header), 1, file);
 
 	pixel_count = header.width * header.height;
-	int required_memory = sizeof ((sprite_t){}.p[0]) * pixel_count;
+	int required_memory = sizeof ((resources_sprite_t){}.p[0]) * pixel_count;
 
 	assert (header.bit_depth == 8);
 
@@ -438,7 +426,7 @@ sprite_t sprite_LoadBMP (const char *filename) {
 
 	fclose (file);
 
-	return (sprite_t){.w = header.width, .h = header.height, .p = pixels};
+	return (resources_sprite_t){.w = header.width, .h = header.height, .p = pixels};
 }
 
 
@@ -448,7 +436,7 @@ sprite_t sprite_LoadBMP (const char *filename) {
 
 // Pass in the folder which contains the font files: font.bmp/tga and properties.txt
 // Returns false on failure and true on success
-bool font_Load (font_t *font, char *directory) {
+bool font_Load (resources_font_t *font, char *directory) {
     assert (directory);
     bool return_value = false;
 
@@ -467,7 +455,7 @@ bool font_Load (font_t *font, char *directory) {
     char filename[600];
     
     sprintf (filename, "%sfont.bmp", directory_fixed);
-    sprite_t bitmap = sprite_LoadBMP (filename);
+    resources_sprite_t bitmap = sprite_LoadBMP (filename);
 
     // Convert bitmap to individual character bitmaps
     int width, height;
@@ -687,9 +675,9 @@ static void PrepareTrackPattern (uint8_t track, uint8_t pattern) {
         else {
             if (beat < pattern_width-1) nextsound = &prepared_sounds[track][pattern][beat+1];
             prepared_sounds[track][pattern][beat] = SoundGenerate (.waveform = sound_waveform_silence, .duration_samples = samples_per_beat, .next = nextsound);
-            }
         }
     }
+}
 
 static void PrepareTrack (uint8_t track) {
     track_is_used[track] = false;
