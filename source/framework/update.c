@@ -46,6 +46,34 @@ static void TypeThisFrame (os_key_e key) {
 	update_data.frame.typing.chars[update_data.frame.typing.count] = 0; // Always append NULL terminator
 }
 
+static update_state_e current_state = 0;
+static void Update_ObjectClearTopUnusedMemory ();
+static void Update_ObjectDelete (uint16_t index);
+static void Update_ObjectSort (uint16_t starting_index);
+static bool object_created_or_destroyed_this_frame = false;
+static struct {
+	update_state_e new_state;
+	bool happened;
+	char data[UPDATE_CHANGE_STATE_DATA_SIZE_MAX];
+	void (*FuncRunAfterStateChange) ();
+} state_change;
+
+static typeof(update_data.frame) unedited_frameinput = {}; // Save input state in case game modifies it
+
+typedef struct __attribute__((__packed__)) {
+	uint32_t id;
+	uint32_t memory_offset;
+	Update_Object_Func_t UpdateAndRender;
+	int8_t layer; // Objects are ordered by layer - higher layer means processed first. Objects in higher layers may occlude input from objects in lower layers.
+	bool survive_state_change : 1;
+} update_object_t;
+
+// Placed at the base address of every object's memory
+typedef struct {
+	bool used : 1;
+	uint32_t size : 31;
+} update_object_header_t;
+
 void *Update(void*) {
 	LOG ("Update thread started");
 	while (!render_data.thread_initialized) os_uSleepEfficient (1000);
@@ -194,11 +222,21 @@ update_data.frame.mouse.scroll = 0;
 	
 		static int64_t max_recorded_frame_time = 0;
 
+		unedited_frameinput = update_data.frame; // Save input state in case game modifies it
+		object_created_or_destroyed_this_frame = false;
+
 		{	// Create a render state based on current game state
 			// update_data.render_state = UpdateSelectRenderState (update_data);
 			asm volatile("" ::: "memory");
 			Render_SelectStateToEdit ();
 			asm volatile("" ::: "memory");
+
+			for (int16_t i = update_data.objects.count-1; i >= 0; --i) {
+				const auto obj = &((update_object_t*)update_data.objects.mem)[i];
+				const auto objdata = update_data.objects.mem + obj->memory_offset;
+				if (!obj->UpdateAndRender (objdata))
+					Update_ObjectDelete (i);
+			}
 
 			state_functions[current_state].Update ();
 
@@ -392,24 +430,48 @@ void FloatyTextCreate (int x, int y, int vy, int time, const char *const str) {
 	snprintf (update_data.floaty_text.text[i].string, sizeof(update_data.floaty_text.text[i].string), str);
 }
 
-void FloatyTextDelete (unsigned int i) {
-	assert (i < update_data.floaty_text.count);
+// Sort starting from index, continuing up. If 0 or 1, sort all objects.
+static void Update_ObjectSort (uint16_t starting_index) {
+	if (update_data.objects.count == 0) return;
+	assert (starting_index < update_data.objects.count);
+	auto index = starting_index;
+	if (index == 0) index = 1;
+	while (index < update_data.objects.count) {
+		auto obj = &((update_object_t*)update_data.objects.mem)[index];
+		auto objbelow = &((update_object_t*)update_data.objects.mem)[index-1];
+		for (auto i = index; i > 0; --i, --obj, --objbelow) {
+			if (objbelow->layer >= obj->layer) break;
+			SWAP (*obj, *objbelow);
+		}
+		++index;
+	}
 
-	unsigned int c = --update_data.floaty_text.count;
-	auto tl = &update_data.floaty_text.text[i];
-	auto tr = tl+1;
-	while (i++ < c) *tl++ = *tr++;
+	object_created_or_destroyed_this_frame = true;
 }
 
-void FloatyTextUpdate () {
-	for (int i = 0; i < update_data.floaty_text.count; ++i) {
-		auto t = &update_data.floaty_text.text[i];
-		if (--t->time == 0) {
-			FloatyTextDelete (i);
-			--i;
-		}
-		else t->y.i32 += t->vy;
-	}
+uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change) {
+	uint16_t object_size = sizeof (update_object_header_t) + data_size;
+	// object_size += object_size % 8; // Align by 8 bytes
+	const auto new_bottom = update_data.objects.bottom_used + sizeof (update_object_t);
+	const auto new_top = update_data.objects.top_used + object_size;
+	if (new_bottom + new_top >= UPDATE_OBJECT_MEMORY_SIZE) return 0; // Out of memory
+	const auto id = update_data.objects.nextid++;
+	auto obj = &((update_object_t*)update_data.objects.mem)[update_data.objects.count++];
+	*obj = (update_object_t) {
+		.id = id,
+		.memory_offset = UPDATE_OBJECT_MEMORY_SIZE - new_top + sizeof(update_object_header_t),
+		.UpdateAndRender = UpdateAndRenderFunc,
+		.layer = layer,
+		.survive_state_change = survive_state_change,
+	};
+	memcpy (&update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE - new_top], &(update_object_header_t){.used = 1, .size = object_size}, sizeof (update_object_header_t));
+	memcpy (&update_data.objects.mem[obj->memory_offset], data, data_size);
+	update_data.objects.bottom_used = new_bottom;
+	update_data.objects.top_used = new_top;
+
+	object_created_or_destroyed_this_frame = true;
+
+	return id;
 }
 
 void FloatyTextDraw () {

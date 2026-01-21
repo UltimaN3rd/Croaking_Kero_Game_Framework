@@ -93,6 +93,12 @@ typedef struct update_data_s { // update_data_t
 	struct {
 		bool *show_simtime, *show_rendertime, *show_framerate;
 	} debug;
+	#define UPDATE_OBJECT_MEMORY_SIZE 65535
+	// Fixed memory buffer. Bottom contains array of object descriptors. Each object has a fixed size component in the bottom region of the memory, and a pointer to memory in the top region.
+	struct {
+		uint32_t bottom_used, top_used, count, nextid;
+		char mem[UPDATE_OBJECT_MEMORY_SIZE];
+	} objects;
 } update_data_t;
 
 typedef struct {
