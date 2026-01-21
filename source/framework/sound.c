@@ -24,16 +24,43 @@
 #define MUSIC_CHANNELS 10
 #define MUSIC_CHANNELS_LAST (MUSIC_CHANNELS - 1)
 #define FX_CHANNELS_FIRST MUSIC_CHANNELS
-#define FX_CHANNELS 16
+#define FX_CHANNELS 10
 #define FX_CHANNELS_LAST (MUSIC_CHANNELS + FX_CHANNELS - 1)
-#define CHANNELS (MUSIC_CHANNELS + FX_CHANNELS)
-static_assert (SOUND_CHANNELS == CHANNELS);
+#define SOUND_CHANNELS (MUSIC_CHANNELS + FX_CHANNELS)
 
 sound_extern_t sound_extern_data;
 
-sound_internal_t sound = {
+typedef struct {
+    sound_t sound;
+    uint8_t ADSR_state;
+    uint32_t t;
+    float d; // Wave position where 0 = start, 1 = full period. Not reset to 0 when sound channels change, in order to transition between waves smoothly. This value is like degrees or radians, but measures turns.
+	float vibrato_d; // Same as d, but for vibrato
+    union {
+        struct {
+            int16_t current_duty_cycle;
+        } pulse;
+    } u;
+} sound_channel_t;
+
+typedef struct {
+    sound_channel_t channels[SOUND_CHANNELS];
+    struct {
+        float volume;
+    } fx;
+    struct {
+        const sound_music_t *new_source;
+        float volume;
+        enum {music_state_pause, music_state_playing} state;
+        sound_music_t source;
+    } music;
+    float master_volume;
+} sound_internal_t;
+
+static sound_internal_t sound = {
     .music.volume = 1,
     .fx.volume = 1,
+    .master_volume = .5,
 };
 
 static struct {
@@ -71,7 +98,7 @@ static void _SoundAddCommand (typeof(command_buffer.commands[0]) command) {
 
 static inline int SelectFXChannel () {
     for (int i = FX_CHANNELS_FIRST; i <= FX_CHANNELS_LAST; ++i) {
-        if (sound.channels[i].sample == NULL) {
+        if (sound.channels[i].sound.waveform == sound_waveform_none) {
             return i;
         }
     }
@@ -89,21 +116,23 @@ static inline void SoundExecuteCommands () {
         switch (c.type) {
             case sound_command_fx_stop: {
                 for (int i = FX_CHANNELS_FIRST; i <= FX_CHANNELS_LAST; ++i)
-                    sound.channels[i].sample = NULL;
+                    sound.channels[i].sound.waveform = sound_waveform_none;
             } break;
             case sound_command_fx_play: {
                 int selected_channel = SelectFXChannel ();
                 if (selected_channel == -1) break;
-                sound.channels[selected_channel] = c.data.fx_play.sound;
-                sound.channels[selected_channel].d = 0;
+                sound.channels[selected_channel] = (typeof(sound.channels[selected_channel])){ .sound = c.data.fx_play.sound };
             } break;
             case sound_command_fx_prepare: {
                 int selected_channel = SelectFXChannel ();
                 if (selected_channel == -1) break;
-                sound.channels[selected_channel].sample = &sound_sample_preparing;
-                sound.channels[selected_channel].duration = UINT32_MAX;
-                sound.channels[selected_channel].next = c.data.fx_prepare.sound;
-                sound.channels[selected_channel].d = 0;
+                sound.channels[selected_channel] = (typeof(sound.channels[selected_channel])){
+                    .sound = {
+                        .waveform = sound_waveform_preparing,
+                        .duration = UINT32_MAX,
+                        .next = c.data.fx_prepare.sound,
+                    }
+                };
             } break;
             case sound_command_fx_play_prepared: {
                 sound_extern_data.prepared_sounds_ready = true;
@@ -117,11 +146,11 @@ static inline void SoundExecuteCommands () {
                 sound.music.state = music_state_playing;
                 sound.music.new_source = c.data.music_new.music;
                 for (int c = MUSIC_CHANNELS_FIRST; c <= MUSIC_CHANNELS_LAST; ++c)
-                    sound.channels[c].sample = &sound_sample_silence;
+                    sound.channels[c].sound.waveform = sound_waveform_silence;
                 int channel_count = sound.music.new_source->count;
                 assert (channel_count <= MUSIC_CHANNELS); if (channel_count > MUSIC_CHANNELS) { LOG ("New music requested has too many channels [%d] > [%d]", channel_count, MUSIC_CHANNELS); channel_count = MUSIC_CHANNELS; }
                 for (int c = 0; c < channel_count; ++c)
-                    sound.channels[c] = *sound.music.new_source->sounds[c];
+                    sound.channels[c] = (typeof(sound.channels[c])){.sound = *sound.music.new_source->sounds[c]};
             } break;
             case sound_command_music_pause: {
                 sound.music.state = music_state_pause;
@@ -187,27 +216,33 @@ int16_t sample_buffer_size = 0;
 ADSR_t ADSRf_to_ADSR (ADSRf_t in) { return (ADSR_t){.peak = in.peak, .attack = in.attack * SAMPLING_RATE, .decay = in.decay * SAMPLING_RATE, .sustain = in.sustain, .release = in.release * SAMPLING_RATE}; }
 
 sound_t SoundGenerate_(SoundFXPlay_args args) {
-    assert (args.sample);
-    if (args.sample == NULL) return (sound_t){};
-    if (args.frequency_end == UINT16_MAX) {
-        args.frequency_end = args.frequency;
-    }
+    assert (args.waveform);
+    if (args.waveform == sound_waveform_none) return (sound_t){};
     args.ADSR.peak *= args.volume;
     args.ADSR.sustain *= args.volume;
+    uint32_t duration = args.duration_samples;
+    if (duration == 0) duration = args.duration_seconds * SAMPLING_RATE;
     sound_t sound = {
-        .sample = args.sample,
-        .duration = args.duration * SAMPLING_RATE,
-        .next = NULL,
+        .waveform = args.waveform,
+        .duration = duration,
+        .next = args.next,
         .ADSR = ADSRf_to_ADSR(args.ADSR),
-        .frequency_begin = args.frequency,
-        .frequency_end = args.frequency_end,
+        .frequency = args.frequency,
+        .sweep = args.sweep,
+        .vibrato = args.vibrato,
+        .square_duty_cycle = args.square_duty_cycle,
+        .square_duty_cycle_sweep = args.square_duty_cycle_sweep,
     };
-    int duration = sound.ADSR.attack + sound.ADSR.decay + sound.ADSR.release;
-    if (sound.duration < duration) { // There isn't enough time for the full envelope, even with 0 sustain. Get ratio of envelope and apply to the reduced duration
+    // if (sound.waveform == sound_waveform_pulse) {
+    //     if (sound.vibrato.frequency_range < sound.frequency * .005f) sound.vibrato.frequency_range = sound.frequency * .005f;
+    //     if (sound.vibrato.vibrations_per_hundred_seconds < sound.frequency/20) sound.vibrato.vibrations_per_hundred_seconds = sound.frequency/20;
+    // }
+    int duration_ADSR = sound.ADSR.attack + sound.ADSR.decay + sound.ADSR.release;
+    if (sound.duration < duration_ADSR) { // There isn't enough time for the full envelope, even with 0 sustain. Get ratio of envelope and apply to the reduced duration
         float total = args.ADSR.attack + args.ADSR.decay + args.ADSR.release;
         sound.ADSR.attack = (args.ADSR.attack / total) * sound.duration;
-        sound.ADSR.decay = (args.ADSR.decay / total) * sound.duration;
-        sound.ADSR.release = sound.duration - sound.ADSR.attack - sound.ADSR.decay;
+        sound.ADSR.release = (args.ADSR.release / total) * sound.duration;
+        sound.ADSR.decay = sound.duration - sound.ADSR.attack - sound.ADSR.release;
     }
     return sound;
 }
@@ -244,77 +279,121 @@ void SoundStopAll () {
     SoundMusicStop ();
     SoundFXStop ();
     // for (int c = 0; c < CHANNELS; ++c) {
-    //     sound.channels[c].sample = NULL;
+    //     sound.channels[c].sound.waveform = sound_waveform_none;
     // }
 }
 
 static inline float CosineInterpolate (float d) { return (1.f - cos_turns(d/2)) / 2.f; }
 static inline int16_t Lerpi16 (int16_t from, int16_t to, float ratio) { return (1-ratio)*from + to*ratio;}
 
-
-
-
+static inline float PolyBLEP (float t, float frequency) {
+    float dt = frequency / SAMPLING_RATE;
+    if (t < dt) {
+        t /= dt;
+        return t + t - t*t - 1;
+    }
+    else if (t > 1 - dt) {
+        t = (t - 1) / dt;
+        return t*t +t + t + 1;
+    }
+    else return 0;
+}
 
 static inline float CreateNextSample () {
-    static float noise_channels[CHANNELS];
+    static float noise_channels[SOUND_CHANNELS];
     float value_music = 0;
     float value_fx = 0;
     float *value = &value_music;
-    for (int c = (sound.music.state != music_state_playing ? FX_CHANNELS_FIRST : MUSIC_CHANNELS_FIRST); c < CHANNELS; ++c) {
+    for (int c = (sound.music.state != music_state_playing ? FX_CHANNELS_FIRST : MUSIC_CHANNELS_FIRST); c < SOUND_CHANNELS; ++c) {
         if (c > MUSIC_CHANNELS_LAST) value = &value_fx;
         auto channel = &sound.channels[c];
+        auto sound = &channel->sound;
         float sample = 0;
-        if (!(channel->sample == NULL || channel->sample == &sound_sample_preparing)) {
+        float envelope = 1;
+        if (!(sound->waveform == sound_waveform_none || sound->waveform == sound_waveform_preparing)) {
             channel->t++;
-            if (channel->sample != &sound_sample_silence) {
-                int16_t freq = Lerpi16(channel->frequency_begin, channel->frequency_end, (float)channel->t / channel->duration);
+            if (sound->waveform != sound_waveform_silence) {
+                int16_t freq = Lerpi16(sound->frequency, sound->frequency + sound->sweep, (float)channel->t / sound->duration);
+                if (sound->vibrato.vibrations_per_hundred_seconds) {
+                    auto vibrato_range = sound->vibrato.frequency_range;
+                    int16_t vibrato = sin_turns (channel->vibrato_d) * vibrato_range;
+                    freq += vibrato;
+                    channel->vibrato_d += sound->vibrato.vibrations_per_hundred_seconds / (float)(SAMPLING_RATE * 100);
+                }
+                // At this point, due to sweep and vibrato, freq may be negative. Turns out that's totally fine and allows for some nice effects!
                 int prevd = channel->d;
-                channel->d += (float)freq / SAMPLING_RATE;
-                if (channel->sample == &sound_sample_noise) {
-                    if (prevd != (int)channel->d) {
-                        noise_channels[c] = rand() / (float)RAND_MAX * 2 - 1;
-                    }
-                    sample = noise_channels[c];
+                float d_change = (float)freq / SAMPLING_RATE;
+                channel->d += d_change;
+                switch (sound->waveform) {
+                    case sound_waveform_sine: sample = sin_turns (channel->d); break;
+                    case sound_waveform_triangle: {
+                        float a = (channel->d - (int)channel->d);
+                        if (a > .5) a = 1 - a;
+                        sample = a * 4 - 1;
+                    } break;
+                    case sound_waveform_saw: {
+                        sample = (channel->d - (int)channel->d) * 2 - 1;
+                        sample -= PolyBLEP (channel->d - (int)channel->d, freq);
+                    } break;
+                    case sound_waveform_pulse: {
+                        float pos = channel->d - (int)channel->d;
+                        // Duty cycle 0 = 50%. 127 = 98%, -128 = 99%
+                        // Duty cycle as int8, loops with overflow. Convert to float. Divide by 129 means computed duty cycle is never 0 (avoid pop when temporarily hitting 0) and 127 == -127 for perfect looping through -128
+                        int8_t duty_cycle1 = (sound->square_duty_cycle + (int32_t)channel->t * sound->square_duty_cycle_sweep / (int32_t)sound->duration);
+                        float duty_cycle = absf(duty_cycle1) / 257.f + .5f;
+                        // if (duty_cycle < 0.5) duty_cycle = 1 - duty_cycle;
+                        assert (duty_cycle >= 0.5 && duty_cycle < 1);
+                        // sample = -2 * duty_cycle;
+                        // if (pos < duty_cycle) sample += 2;
+                        sample = pos >= duty_cycle ? -1 : 1;
+                        const auto BLEP0 = PolyBLEP (pos, freq);
+                        sample += BLEP0;
+                        float pos2 = pos + 1 - duty_cycle;
+                        pos2 -= (int)pos2;
+                        const auto BLEP1 = PolyBLEP (pos2, freq);
+                        sample -= BLEP1;
+                    } break;
+                    case sound_waveform_noise: {
+                        channel->d += 3 * d_change;
+                        if (prevd != (int)channel->d) {
+                            noise_channels[c] = rand() / (float)RAND_MAX * 2 - 1;
+                        }
+                        sample = noise_channels[c];
+                    } break;
+                    case sound_waveform_none: case sound_waveform_preparing: case sound_waveform_silence: unreachable(); break;
                 }
-                else {
-                    float picker = channel->d * channel->sample->count;
-                    int pick0 = (int)picker % channel->sample->count;
-                    float frac = picker - (int)picker;
-                    int pick1 = (pick0 + 1) % channel->sample->count;
-                    sample = (float)Lerpi16(channel->sample->samples[pick0], channel->sample->samples[pick1], frac) / INT16_MAX;
-                }
-                assert (sample >=-1 && sample <= 1);
-                sample *= 0.8f; // Temporary attenuation solution. In future I'll do a lookahead compressor
+                // assert (sample >=-1 && sample <= 1);
                 
-                float envelope = 1;
+                envelope = 1;
                 switch (channel->ADSR_state) {
                     case 0: {
-                        if (channel->t <= channel->ADSR.attack) {
-                            envelope = (float)channel->t / channel->ADSR.attack * channel->ADSR.peak;
+                        if (channel->t < sound->ADSR.attack) {
+                            envelope = (float)channel->t / sound->ADSR.attack * sound->ADSR.peak;
                             break;
                         }
                         channel->ADSR_state = 1;
                     }
                     case 1: {
-                        uint32_t t = channel->t - channel->ADSR.attack;
-                        if (t <= channel->ADSR.decay) {
-                            float ratio = (float)t / channel->ADSR.decay;
-                            envelope = (1 - ratio) * channel->ADSR.peak + ratio * channel->ADSR.sustain;
+                        int32_t t = channel->t - sound->ADSR.attack;
+                        if (t < sound->ADSR.decay) {
+                            float ratio = (float)t / sound->ADSR.decay;
+                            envelope = (1 - ratio) * sound->ADSR.peak + ratio * sound->ADSR.sustain;
                             break;
                         }
                         channel->ADSR_state = 2;
                     }
                     case 2: {
-                        uint32_t t = channel->duration - channel->t;
-                        if (t > channel->ADSR.release) {
-                            envelope = channel->ADSR.sustain;
+                        int32_t t = sound->duration - channel->t;
+                        if (t >= sound->ADSR.release) {
+                            envelope = sound->ADSR.sustain;
                             break;
                         }
                         channel->ADSR_state = 3;
                     }
                     case 3: {
-                        uint32_t t = channel->t + (channel->ADSR.release - channel->duration);
-                        envelope = (1.f - (float)t / channel->ADSR.release) * channel->ADSR.sustain;
+                        int32_t t = channel->t + (sound->ADSR.release - sound->duration);
+                        if (t <= 0) envelope = 0;
+                        else envelope = (1.f - (float)t / sound->ADSR.release) * sound->ADSR.sustain;
                         break;
                     }
                 }
@@ -323,11 +402,19 @@ static inline float CreateNextSample () {
                 *value += sample;
             }
             
-            if (channel->t >= channel->duration){
-                if (channel->next) {
-                    *channel = *channel->next;
+            if (channel->t >= sound->duration){
+                if (sound->next) {
+                    auto tempd = channel->d;
+                    auto tempvd = channel->vibrato_d;
+                    auto tempstuff = channel->u;
+                    *channel = (typeof(*channel)){.sound = *sound->next};
+                    if (envelope > 0) {
+                        channel->d = tempd;
+                        channel->vibrato_d = tempvd;
+                        channel->u = tempstuff;
+                    }
                 }
-                else channel->sample = NULL;
+                else sound->waveform = sound_waveform_none;
             }
         }
     }
@@ -336,17 +423,17 @@ static inline float CreateNextSample () {
     //     LOG ("Clip[%d]", ++clips);
     // }
 
-    return (value_music * sound.music.volume) + (value_fx * sound.fx.volume);
+    return ((value_music * sound.music.volume) + (value_fx * sound.fx.volume)) * sound.master_volume;
 }
 
 static inline void RefillSampleBuffer () {
     SoundExecuteCommands ();
 
     if (sound_extern_data.prepared_sounds_ready) {
-        for (int c = 0; c < CHANNELS; ++c) {
-            if (sound.channels[c].sample == &sound_sample_preparing) {
-                assert (sound.channels[c].next);
-                sound.channels[c] = *sound.channels[c].next;
+        for (int c = 0; c < SOUND_CHANNELS; ++c) {
+            if (sound.channels[c].sound.waveform == sound_waveform_preparing) {
+                assert (sound.channels[c].sound.next);
+                sound.channels[c] = (typeof(sound.channels[c])){.sound = *sound.channels[c].sound.next};
             }
         }
         sound_extern_data.prepared_sounds_ready = false;
@@ -401,7 +488,7 @@ void *Sound (void *data_void) {
 
     pa_simple *simple = NULL;
     int pulse_error;
-    { simple = pa_simple_new (NULL, "Simple sound thing", PA_STREAM_PLAYBACK, NULL, "playback", &(pa_sample_spec){.format = PA_SAMPLE_S16LE, .rate = SAMPLING_RATE, .channels = 1}, NULL, &(pa_buffer_attr){.maxlength = PERIOD_SIZE * 8, .tlength = PERIOD_SIZE * 4, .prebuf = PERIOD_SIZE * 2, .minreq = -1, .fragsize = PERIOD_SIZE * 2}, &pulse_error); assert (simple); if (simple == NULL) { LOG ("Failed to initialize PulseAudio [%s]", pa_strerror (pulse_error)); return NULL; }}
+    { simple = pa_simple_new (NULL, GAME_TITLE, PA_STREAM_PLAYBACK, NULL, "playback", &(pa_sample_spec){.format = PA_SAMPLE_S16LE, .rate = SAMPLING_RATE, .channels = 1}, NULL, &(pa_buffer_attr){.maxlength = PERIOD_SIZE * 8, .tlength = PERIOD_SIZE * 4, .prebuf = PERIOD_SIZE * 2, .minreq = -1, .fragsize = PERIOD_SIZE * 2}, &pulse_error); assert (simple); if (simple == NULL) { LOG ("Failed to initialize PulseAudio [%s]", pa_strerror (pulse_error)); return NULL; }}
 
     while (!sound_extern_data.quit) {
         RefillSampleBuffer ();

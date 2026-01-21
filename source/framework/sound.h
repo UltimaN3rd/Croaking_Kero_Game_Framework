@@ -35,18 +35,21 @@ void *Sound(void*);
 
 typedef struct SoundFXPlay_args SoundFXPlay_args;
 struct SoundFXPlay_args {
-    const sound_sample_t *sample;
-    uint16_t frequency, frequency_end;
-    float duration;
+    sound_waveform_e waveform;
+    uint16_t frequency;
+    float duration_seconds;
+    int32_t duration_samples;
     float volume;
     ADSRf_t ADSR;
-    SoundFXPlay_args *next;
+    int16_t sweep;
+    vibrato_t vibrato;
+    int8_t square_duty_cycle;
+    int16_t square_duty_cycle_sweep;
+    const sound_t *next;
 };
-#define SoundFXPlay_args_default .frequency = 500, .frequency_end = UINT16_MAX, .duration = 0.25, .volume = 1.0, .ADSR = {.peak = .5, .sustain = .4, .attack = .01, .decay = .005, .release = .01}
+#define SoundFXPlay_args_default .frequency = 500, .volume = 1.0, .ADSR = {.peak = 1, .sustain = .75, .attack = .005, .decay = .002, .release = .005}
 void SoundFXPlay_ (SoundFXPlay_args args);
 #define SoundFXPlay(...) SoundFXPlay_((SoundFXPlay_args){SoundFXPlay_args_default, __VA_ARGS__})
-
-#define ADSR_DEFAULT .peak = .5, .sustain = .4, .attack = 48000 * .01, .decay = 48000 * .005, .release = 48000 * .01
 
 sound_t SoundGenerate_ (SoundFXPlay_args args);
 #define SoundGenerate(...) SoundGenerate_((SoundFXPlay_args){SoundFXPlay_args_default, __VA_ARGS__})
@@ -79,18 +82,9 @@ typedef struct {
 
 extern sound_extern_t sound_extern_data;
 
-void SoundFXPlayPrepared ();
-
 typedef struct {
-    #define SOUND_CHANNELS 26
-    sound_t channels[SOUND_CHANNELS];
-    struct {
-        float volume;
-    } fx;
-    struct {
-        const sound_music_t *new_source;
-        float volume;
-        enum {music_state_pause, music_state_playing} state;
-        sound_music_t source;
-    } music;
-} sound_internal_t;
+    uint16_t sent;
+    uint8_t signals[256]; // Ring buffer
+} sound_signals_t;
+
+void SoundFXPlayPrepared ();

@@ -33,29 +33,32 @@ void sprite_Blit(const sprite_t *source, sprite_t *destination, int x, int y) {
 	}
 }
 
-void sprite_BlitRotated90(const sprite_t *source, sprite_t *destination, int x, int y) {
-	int left, right, bottom, top;
-	left    = MAX(0, x);
-	right   = MIN(destination->w-1, x+source->h-1);
-	bottom  = MAX(0, y);
-	top     = MIN(destination->h-1, y+source->w-1);
+void sprite_BlitRotated90(const sprite_t *source, sprite_t *destination, int x, int y, int originx, int originy) {
+	x -= source->h-1-originy;
+	y -= originx;
+	const int left    = MAX(0, x);
+	const int right   = MIN(destination->w-1, x+source->h-1);
+	const int bottom  = MAX(0, y);
+	const int top     = MIN(destination->h-1, y+source->w-1);
+	const int h = source->h-1;
 	for(int y2 = bottom; y2 <= top; ++y2) {
 		for(int x2 = left; x2 <= right; ++x2) {
-			uint8_t source_pixel = source->p[y2-y + (x2-x)*source->w];
+			uint8_t source_pixel = source->p[y2-y + (h-(x2-x))*source->w];
 			if (source_pixel != 0)
 				destination->p[x2 + y2*destination->w] = source_pixel;
 		}
 	}
 }
 
-void sprite_BlitRotated180(const sprite_t *source, sprite_t *destination, int x, int y) {
-	int left, right, bottom, top, w, h;
-	left    = MAX(0, x);
-	right   = MIN(destination->w-1, x+source->w-1);
-	bottom  = MAX(0, y);
-	top     = MIN(destination->h-1, y+source->h-1);
-	w = source->w-1;
-	h = source->h-1;
+void sprite_BlitRotated180(const sprite_t *source, sprite_t *destination, int x, int y, int originx, int originy) {
+	x -= source->w-1-originx;
+	y -= source->h-1-originy;
+	const int left    = MAX(0, x);
+	const int right   = MIN(destination->w-1, x+source->w-1);
+	const int bottom  = MAX(0, y);
+	const int top     = MIN(destination->h-1, y+source->h-1);
+	const int w = source->w-1;
+	const int h = source->h-1;
 	for(int y2 = bottom; y2 <= top; ++y2) {
 		for(int x2 = left; x2 <= right; ++x2) {
 			uint8_t source_pixel = source->p[w - (x2-x) + (h-(y2-y))*source->w];
@@ -65,17 +68,17 @@ void sprite_BlitRotated180(const sprite_t *source, sprite_t *destination, int x,
 	}
 }
 
-void sprite_BlitRotated270(const sprite_t *source, sprite_t *destination, int x, int y) {
-	int left, right, bottom, top, w, h;
-	left    = MAX(0, x);
-	right   = MIN(destination->w-1, x+source->h-1);
-	bottom  = MAX(0, y);
-	top     = MIN(destination->h-1, y+source->w-1);
-	w = source->w-1;
-	h = source->h-1;
+void sprite_BlitRotated270(const sprite_t *source, sprite_t *destination, int x, int y, int originx, int originy) {
+	x -= originy;
+	y -= source->w-1-originx;
+	const int left    = MAX(0, x);
+	const int right   = MIN(destination->w-1, x+source->h-1);
+	const int bottom  = MAX(0, y);
+	const int top     = MIN(destination->h-1, y+source->w-1);
+	const int w = source->w-1;
 	for(int y2 = bottom; y2 <= top; ++y2) {
 		for(int x2 = left; x2 <= right; ++x2) {
-			uint8_t source_pixel = source->p[h-(y2-y) + (w-(x2-x))*source->w];
+			uint8_t source_pixel = source->p[w-(y2-y) + (x2-x)*source->w];
 			if (source_pixel != 0)
 				destination->p[x2 + y2*destination->w] = source_pixel;
 		}
@@ -129,29 +132,50 @@ void sprite_BlitColor(const sprite_t *source, sprite_t *destination, int x, int 
 	}
 }
 
-void sprite_BlitRotated90Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color) {
+void sprite_BlitSubstituteColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color_from, uint8_t color_to) {
+	if (color_from == color_to) return sprite_Blit (source, destination, x, y);
+	
 	int left, right, bottom, top;
 	left    = MAX(0, x);
-	right   = MIN(destination->w-1, x+source->h-1);
+	right   = MIN(destination->w-1, x+source->w-1);
 	bottom  = MAX(0, y);
-	top     = MIN(destination->h-1, y+source->w-1);
+	top     = MIN(destination->h-1, y+source->h-1);
 	for(int y2 = bottom; y2 <= top; ++y2) {
 		for(int x2 = left; x2 <= right; ++x2) {
-			uint8_t source_pixel = source->p[y2-y + (x2-x)*source->w];
+			uint8_t source_pixel = source->p[x2-x + (y2-y)*source->w];
+			if (source_pixel != 0) {
+				destination->p[x2 + y2*destination->w] = (source_pixel == color_from ? color_to : source_pixel);
+			}
+		}
+	}
+}
+
+void sprite_BlitRotated90Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color, int originx, int originy) {
+	x -= source->h-1-originy;
+	y -= originx;
+	const int left    = MAX(0, x);
+	const int right   = MIN(destination->w-1, x+source->h-1);
+	const int bottom  = MAX(0, y);
+	const int top     = MIN(destination->h-1, y+source->w-1);
+	const int h = source->h-1;
+	for(int y2 = bottom; y2 <= top; ++y2) {
+		for(int x2 = left; x2 <= right; ++x2) {
+			uint8_t source_pixel = source->p[y2-y + (h-(x2-x))*source->w];
 			if (source_pixel != 0)
 				destination->p[x2 + y2*destination->w] = color;
 		}
 	}
 }
 
-void sprite_BlitRotated180Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color) {
-	int left, right, bottom, top, w, h;
-	left    = MAX(0, x);
-	right   = MIN(destination->w-1, x+source->w-1);
-	bottom  = MAX(0, y);
-	top     = MIN(destination->h-1, y+source->h-1);
-	w = source->w-1;
-	h = source->h-1;
+void sprite_BlitRotated180Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color, int originx, int originy) {
+	x -= source->w-1-originx;
+	y -= source->h-1-originy;
+	const int left    = MAX(0, x);
+	const int right   = MIN(destination->w-1, x+source->w-1);
+	const int bottom  = MAX(0, y);
+	const int top     = MIN(destination->h-1, y+source->h-1);
+	const int w = source->w-1;
+	const int h = source->h-1;
 	for(int y2 = bottom; y2 <= top; ++y2) {
 		for(int x2 = left; x2 <= right; ++x2) {
 			uint8_t source_pixel = source->p[w - (x2-x) + (h-(y2-y))*source->w];
@@ -161,17 +185,17 @@ void sprite_BlitRotated180Color(const sprite_t *source, sprite_t *destination, i
 	}
 }
 
-void sprite_BlitRotated270Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color) {
-	int left, right, bottom, top, w, h;
-	left    = MAX(0, x);
-	right   = MIN(destination->w-1, x+source->h-1);
-	bottom  = MAX(0, y);
-	top     = MIN(destination->h-1, y+source->w-1);
-	w = source->w-1;
-	h = source->h-1;
+void sprite_BlitRotated270Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color, int originx, int originy) {
+	x -= originy;
+	y -= source->w-1-originx;
+	const int left    = MAX(0, x);
+	const int right   = MIN(destination->w-1, x+source->h-1);
+	const int bottom  = MAX(0, y);
+	const int top     = MIN(destination->h-1, y+source->w-1);
+	const int w = source->w-1;
 	for(int y2 = bottom; y2 <= top; ++y2) {
 		for(int x2 = left; x2 <= right; ++x2) {
-			uint8_t source_pixel = source->p[h-(y2-y) + (w-(x2-x))*source->w];
+			uint8_t source_pixel = source->p[w-(y2-y) + (x2-x)*source->w];
 			if (source_pixel != 0)
 				destination->p[x2 + y2*destination->w] = color;
 		}

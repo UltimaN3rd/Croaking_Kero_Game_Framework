@@ -22,21 +22,29 @@
 
 void DrawCircle(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color);
 void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color);
+void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color);
+void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color);
+
 
 render_state_t *render_state_being_edited = NULL;
 extern pthread_mutex_t update_render_swap_state_mutex;
 extern render_data_t render_data;
 extern bool quit;
 
-void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length);
-void font_Write (const font_t *font, sprite_t *destination, int left, int top, char *text);
+void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index);
+void font_Write (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index);
 
-void Render_Cursor (const sprite_t *sprite, int x, int y, int offsetx, int offsety) {
+void Render_Cursor (const cursor_t *cursor, int x, int y) {
 	render_state_being_edited->cursor = (typeof (render_state_being_edited->cursor)) {
-		.sprite = sprite,
-		.x = x - offsetx,
-		.y = y - offsety,
+		.sprite = cursor->sprite,
+		.x = x - cursor->offset.x,
+		.y = y - cursor->offset.y,
 	};
+}
+
+void Render_CursorAtRawMousePos(const cursor_t *cursor) {
+	const auto m = Update_GetUneditedFrameInputState().mouse;
+	Render_Cursor (cursor, m.x, m.y);
 }
 
 void Render_Camera (int x, int y) {
@@ -51,13 +59,14 @@ void Render_ScreenShake (int x, int y) {
 }
 
 void Render_Sprite_ (Render_Sprite_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (arguments.sprite == NULL) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
 	arguments.rotation -= (int)arguments.rotation;
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_sprite,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
+		.ignore_camera = arguments.ignore_camera,
 		.sprite = {
 			.position = {.x = arguments.x, .y = arguments.y},
 			.flags = arguments.sprite_flags,
@@ -70,13 +79,14 @@ void Render_Sprite_ (Render_Sprite_arguments arguments) {
 }
 
 void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (arguments.sprite == NULL) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
 	arguments.rotation -= (int)arguments.rotation;
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_sprite_silhouette,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
+		.ignore_camera = arguments.ignore_camera,
 		.sprite_silhouette = {
 			.color = color,
 			.sprite = {
@@ -92,36 +102,83 @@ void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments)
 }
 
 void Render_Shape_ (Render_Shape_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
+	if (arguments.shape.type == render_shape_ellipse && arguments.shape.ellipse.rx == arguments.shape.ellipse.ry) {
+		const render_shape_t circ = {
+			.type = render_shape_circle,
+			.circle = {
+				.x = arguments.shape.ellipse.x,
+				.y = arguments.shape.ellipse.y,
+				.r = arguments.shape.ellipse.rx,
+				.color_edge = arguments.shape.ellipse.color_edge,
+				.color_fill = arguments.shape.ellipse.color_fill,
+			},
+		};
+		arguments.shape = circ;
+	}
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_shape,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
+		.ignore_camera = arguments.ignore_camera,
 		.shape = arguments.shape
 	};
 }
 
+static uint16_t Render_AllocInState (uint16_t bytes) {
+	assert (render_state_being_edited->mem.position < RENDER_STATE_MEM_AMOUNT - bytes);
+	if (render_state_being_edited->mem.position >= RENDER_STATE_MEM_AMOUNT - bytes) return RENDER_STATE_MEM_AMOUNT;
+	auto pos = render_state_being_edited->mem.position;
+	render_state_being_edited->mem.position += bytes;
+	return pos;
+}
+
 void Render_Text_ (Render_Text_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (arguments.string == NULL) return;
+	if (arguments.length == 0) arguments.length = strlen (arguments.string);
+	if (arguments.length == 0) return; // Empty string
+
+	if (arguments.string[arguments.length-1] != 0) ++arguments.length; // If not null terminated, add space for it
+
+	font_StringDimensions_return_t dimensions;
+	if (arguments.translucent_background_darkness || arguments.center_horizontally_on_screen || arguments.center_vertically_on_screen) {
+		dimensions = font_StringDimensions(&framework_font, arguments.string);
+	}
+
+	if (arguments.center_horizontally_on_screen) {
+		arguments.x = (RESOLUTION_WIDTH - dimensions.w) / 2;
+		arguments.ignore_camera = true;
+	}
+	if (arguments.center_vertically_on_screen) {
+		arguments.y = (RESOLUTION_HEIGHT + dimensions.h) / 2;
+		arguments.ignore_camera = true;
+	}
+
+	if (arguments.translucent_background_darkness) {
+		const int16_t l = arguments.x-1;
+		const int16_t r = l + dimensions.w+1;
+		const int16_t t = arguments.y-2;
+		const int16_t b = t - dimensions.h+1;
+		Render_DarkenRectangle(.l = l, .b = b, .r = r, .t = t, .levels = arguments.translucent_background_darkness, .depth = arguments.depth);
+	}
+
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+
+	const auto count = render_state_being_edited->element_count++;
+
+	auto mem = Render_AllocInState(arguments.length);
+	if (mem == RENDER_STATE_MEM_AMOUNT) // Out of memory, cannot render this string
+		return;
+	auto str = &render_state_being_edited->mem.bytes[mem];
+
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_text,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
-		.text = {.x = arguments.x, .y = arguments.y, .length = arguments.length}
+		.ignore_camera = arguments.ignore_camera,
+		.text = {.x = arguments.x, .y = arguments.y, .length = arguments.length, .string = str},
 	};
-	strncpy (render_state_being_edited->elements[count].text.string, arguments.string, sizeof(render_state_being_edited->elements[count].text.string)-1);
-	render_state_being_edited->elements[count].text.string[sizeof(render_state_being_edited->elements[count].text.string)-1] = 0;
-	if (arguments.length == 0) render_state_being_edited->elements[count].text.length = strlen (render_state_being_edited->elements[count].text.string);
-	if (arguments.center_horizontally_on_screen) {
-		auto w = font_StringDimensions(&framework_font, render_state_being_edited->elements[count].text.string).w;
-		render_state_being_edited->elements[count].text.x = (RESOLUTION_WIDTH - w) / 2;
-	}
-	if (arguments.center_vertically_on_screen) {
-		auto h = font_StringDimensions(&framework_font, render_state_being_edited->elements[count].text.string).h;
-		render_state_being_edited->elements[count].text.y = (RESOLUTION_HEIGHT - h) / 2;
-	}
+	strcpy (str, arguments.string); // Already checked length above
+	str[arguments.length-1] = 0;
 }
 
 void Render_Background_ (Render_Background_arguments background) {
@@ -136,9 +193,29 @@ void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera) {
 	}
 	if (x < 0 || x > RESOLUTION_WIDTH-1 || y < 0 || y > RESOLUTION_HEIGHT-1) return;
 	int i = render_state_being_edited->particles.count++;
-	render_state_being_edited->particles.position[i].x = x;
-	render_state_being_edited->particles.position[i].y = y;
-	render_state_being_edited->particles.pixel[i] = pixel;
+	render_state_being_edited->particles.array[i].position.x = x;
+	render_state_being_edited->particles.array[i].position.y = y;
+	render_state_being_edited->particles.array[i].pixel = pixel;
+}
+
+void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args) {
+	if (args.r < args.l || args.t < args.b || args.l > RESOLUTION_WIDTH-1 || args.b > RESOLUTION_HEIGHT-1 || args.r < 0 || args.t < 0 || args.levels == 0) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
+
+	if (args.levels > 7) args.levels = 7;
+
+	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
+		.type = render_element_darkness_rectangle,
+		.depth = args.depth,
+		.darkness_rectangle = {
+			.l = args.l,
+			.b = args.b,
+			.r = args.r,
+			.t = args.t,
+			.levels = args.levels
+		},
+	};
 }
 
 render_state_t *Render_GetCurrentEditableState () {
@@ -178,6 +255,9 @@ void Render_FinishEditingState () {
 void Render_ShowRenderTime (bool show) { render_state_being_edited->debug.show_rendertime = show; }
 void Render_ShowFPS (bool show) { render_state_being_edited->debug.show_framerate = show; }
 
+static sprite_t *frame;
+static bool frame_select = 0;
+
 void *Render (void*) {
 	LOG ("Render thread started");
 	render_data.thread_initialized = true;
@@ -197,8 +277,6 @@ void *Render (void*) {
 	useconds_per_frame = 1000000 / screen_refresh;
 	// LOG ("Microseconds per frame: %"PRId64"", useconds_per_frame);
 
-	sprite_t *frame;
-	bool frame_select = 0;
 	frame = (render_data.frame[frame_select]);
 
 	int64_t sleep_time;
@@ -439,7 +517,7 @@ void *Render (void*) {
 			switch (element->type) {
 				case render_element_sprite: {
 					auto s = element->sprite;
-					if (!element->flags.ignore_camera) {
+					if (!element->ignore_camera) {
 						s.position.x -= camera.x;
 						s.position.y -= camera.y;
 					}
@@ -454,20 +532,18 @@ void *Render (void*) {
 						sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
 					}
 					else {
-						s.position.x -= s.originx;
-						s.position.y -= s.originy;
 						switch (flip) {
 							case flip_none: {
 								switch (s.flags.rotation_by_quarters) {
-									case 0: sprite_Blit (s.sprite, frame, s.position.x, s.position.y); break;
-									case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x, s.position.y); break;
-									case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y); break;
-									case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y); break;
+									case 0: sprite_Blit (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+									case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy); break;
+									case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+									case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
 								}
 							} break;
-							case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y); break;
-							case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x, s.position.y); break;
-							case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x, s.position.y); break;
+							case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+							case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+							case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
 						}
 					}
 				} break;
@@ -475,7 +551,7 @@ void *Render (void*) {
 				case render_element_sprite_silhouette: {
 					auto color = element->sprite_silhouette.color;
 					auto s = element->sprite_silhouette.sprite;
-					if (!element->flags.ignore_camera) {
+					if (!element->ignore_camera) {
 						s.position.x -= camera.x;
 						s.position.y -= camera.y;
 					}
@@ -490,20 +566,18 @@ void *Render (void*) {
 						sprite_SampleRotatedFlippedColor(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically, color);
 					}
 					else {
-						s.position.x -= s.originx;
-						s.position.y -= s.originy;
 						switch (flip) {
 							case flip_none: {
 								switch (s.flags.rotation_by_quarters) {
-									case 0: sprite_BlitColor (s.sprite, frame, s.position.x, s.position.y, color); break;
-									case 1: sprite_BlitRotated90Color (s.sprite, frame, s.position.x, s.position.y, color); break;
-									case 2: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color); break;
-									case 3: sprite_BlitRotated270Color (s.sprite, frame, s.position.x, s.position.y, color); break;
+									case 0: sprite_BlitColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+									case 1: sprite_BlitRotated90Color (s.sprite, frame, s.position.x,s.position.y, color, s.originx, s.originy); break;
+									case 2: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+									case 3: sprite_BlitRotated270Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
 								}
 							} break;
-							case flip_both: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color); break;
-							case flip_hori: sprite_BlitFlippedHorizontallyColor (s.sprite, frame, s.position.x, s.position.y, color); break;
-							case flip_vert: sprite_BlitFlippedVerticallyColor (s.sprite, frame, s.position.x, s.position.y, color); break;
+							case flip_both: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+							case flip_hori: sprite_BlitFlippedHorizontallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+							case flip_vert: sprite_BlitFlippedVerticallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
 						}
 					}
 				} break;
@@ -511,9 +585,11 @@ void *Render (void*) {
 				case render_element_shape: {
 					auto s = element->shape;
 					switch (s.type) {
+						__label__ goto_render_line;
+
 						case render_shape_rectangle: {
 							auto r = s.rectangle;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								r.x -= camera.x;
 								r.y -= camera.y;
 							}
@@ -572,7 +648,7 @@ void *Render (void*) {
 
 						case render_shape_circle: {
 							auto c = s.circle;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								c.x -= camera.x;
 								c.y -= camera.y;
 							}
@@ -580,9 +656,20 @@ void *Render (void*) {
 							if ((c.color_fill == 0 || c.color_edge != c.color_fill) && c.color_edge != 0) DrawCircle (frame, c.x, c.y, c.r, c.color_edge);
 						} break;
 
+						case render_shape_ellipse: {
+							auto e = s.ellipse;
+							if (!element->ignore_camera) {
+								e.x -= camera.x;
+								e.y -= camera.y;
+							}
+							if (e.color_fill != 0) DrawEllipseFilled (frame, e.x, e.y, e.rx, e.ry, e.color_fill);
+							if ((e.color_fill == 0 || e.color_edge != e.color_fill) && e.color_edge != 0) DrawEllipse (frame, e.x, e.y, e.rx, e.ry, e.color_edge);
+						} break;
+
 						case render_shape_line: {
+						goto_render_line:
 							auto l = s.line;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								l.x0 -= camera.x;
 								l.x1 -= camera.x;
 								l.y0 -= camera.y;
@@ -678,23 +765,259 @@ void *Render (void*) {
 
 						case render_shape_dot: {
 							auto d = s.dot;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								d.x -= camera.x;
 								d.y -= camera.y;
 							}
 							if (d.x < 0 || d.x > frame->w-1 || d.y < 0 || d.y > frame->h-1) break;
 							frame->p[d.x + d.y * frame->w] = d.color;
 						} break;
+
+						case render_shape_triangle: { // Incomplete. Only does edges, and does them kinda ugly
+							auto t = s.triangle;
+							struct {int x, y;} ps[3] = {{t.x0,t.y0}, {t.x1,t.y1}, {t.x2,t.y2}};
+							// Sort points by height
+							if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
+							if (ps[1].y > ps[0].y) SWAP (ps[0], ps[1]);
+							if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
+
+							typeof(*ps) tri1[3], tri2[3];
+							bool do_tri1 = true, do_tri2 = true;
+
+							if (ps[0].y == ps[1].y) { // Flat top triangle
+								if (ps[0].y == ps[2].y) { // Single horizontal line
+									s.type = render_shape_line;
+									s.line.x0 = MIN (ps[0].x, MIN (ps[1].x, ps[2].x));
+									s.line.x1 = MAX (ps[0].x, MAX (ps[1].x, ps[2].x));
+									s.line.y0 = s.line.y1 = ps[0].y;
+									s.line.color = t.color_edge;
+									goto goto_render_line;
+								}
+								else {
+									tri2[0] = ps[0];
+									tri2[1] = ps[1];
+									assert (tri2[0].y == tri2[1].y);
+									if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
+									tri2[2] = ps[2];
+									do_tri1 = false;
+								}
+							}
+							else if (ps[1].y == ps[2].y) { // Flat bottom triangle
+								tri1[0] = ps[0];
+								tri1[1] = ps[1];
+								tri1[2] = ps[2];
+								assert (tri1[1].y == tri1[2].y);
+								if (tri1[1].x > tri1[2].x) SWAP (tri1[0], tri1[1]);
+								do_tri2 = false;
+							}
+							else { // Split the general triangle into a flat-bottom and flat-top
+								tri1[0] = ps[0];
+								assert (ps[0].y != ps[1].y); assert (ps[1].y != ps[2].y);
+								if (ps[1].y > ps[2].y) {
+									tri1[1] = ps[1];
+									tri1[2].y = tri1[1].y;
+									float dy = ps[2].y - ps[0].y;
+									float slope = (ps[2].x - ps[0].x) / dy;
+									float distance = (ps[1].y - ps[0].y) / dy;
+									tri1[2].x = distance * (ps[2].x - ps[0].x) + ps[0].x;
+
+									tri2[0] = tri1[1];
+									tri2[1] = tri1[2];
+									tri2[2] = ps[2];
+								}
+								else {
+									tri1[1] = ps[2];
+									tri1[2].y = tri1[1].y;
+									float dy = ps[1].y - ps[0].y;
+									float slope = (ps[1].x - ps[0].x) / dy;
+									float distance = (ps[2].y - ps[0].y) / dy;
+									tri1[2].x = distance * (ps[1].x - ps[0].x) + ps[0].x;
+
+									tri2[0] = tri1[1];
+									tri2[1] = tri1[2];
+									tri2[2] = ps[1];
+								}
+							}
+
+							int y = tri1[0].y;
+							if (do_tri1) { // Flat bottom triangle
+								if (tri1[1].x > tri1[2].x) SWAP (tri1[1], tri1[2]);
+								// Guaranteed that tri1[0].y is greater than tri1[1].y & tri1[2].y
+								int bottom = tri1[1].y;
+
+								struct {
+									int x, dx, ax, sx, d;
+								} l, r;
+
+								l.x = tri1[0].x;
+								l.dx = tri1[1].x - l.x;
+								l.ax = abs (l.dx) * 2;
+								l.sx = SIGN (l.dx);
+
+								r.x = l.x;
+								r.dx = tri1[2].x - r.x;
+								r.ax = abs (r.dx) * 2;
+								r.sx = SIGN (r.dx);
+
+								int dy = tri1[1].y - tri1[0].y;
+								int ay = abs (dy) * 2;
+
+								int ly = y;
+								if (l.ax > ay) {
+									l.d = ay - (l.ax / 2);
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (l.x == tri1[1].x) break;
+										if (l.d >= 0) {
+											--ly;
+											l.d -= l.ax;
+										}
+										l.x += l.sx;
+										l.d += ay;
+									}
+								}
+								else {
+									l.d = l.ax - ay / 2;
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (ly == tri1[1].y) break;
+										if (l.d >= 0) {
+											l.x += l.sx;
+											l.d -= ay;
+										}
+										--ly;
+										l.d += l.ax;
+									}
+								}
+
+								int ry = y;
+								if (r.ax > ay) {
+									r.d = ay - (r.ax / 2);
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (r.x == tri1[2].x) break;
+										if (r.d >= 0) {
+											--ry;
+											r.d -= r.ax;
+										}
+										r.x += r.sx;
+										r.d += ay;
+									}
+								}
+								else {
+									r.d = r.ax - ay / 2;
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (ry == tri1[1].y) break;
+										if (r.d >= 0) {
+											r.x += r.sx;
+											r.d -= ay;
+										}
+										--ry;
+										r.d += r.ax;
+									}
+								}
+							}
+
+							if (do_tri2) { // Flat top triangle
+								if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
+								// Guaranteed that tri2[2].y is less than tri2[0].y & tri2[1].y
+								int bottom = tri2[2].y;
+								y = tri2[0].y;
+
+								struct {
+									int x, dx, ax, sx, d;
+								} l, r;
+
+								l.x = tri2[0].x;
+								l.dx = tri2[2].x - l.x;
+								l.ax = abs (l.dx) * 2;
+								l.sx = SIGN (l.dx);
+
+								r.x = tri2[1].x;
+								r.dx = tri2[2].x - r.x;
+								r.ax = abs (r.dx) * 2;
+								r.sx = SIGN (r.dx);
+
+								int dy = tri2[2].y - tri2[0].y;
+								int ay = abs (dy) * 2;
+
+								int ly = y;
+								if (l.ax > ay) {
+									l.d = ay - (l.ax / 2);
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (l.x == tri2[2].x) break;
+										if (l.d >= 0) {
+											--ly;
+											l.d -= l.ax;
+										}
+										l.x += l.sx;
+										l.d += ay;
+									}
+								}
+								else {
+									l.d = l.ax - ay / 2;
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (ly == tri2[2].y) break;
+										if (l.d >= 0) {
+											l.x += l.sx;
+											l.d -= ay;
+										}
+										--ly;
+										l.d += l.ax;
+									}
+								}
+
+								int ry = y;
+								if (r.ax > ay) {
+									r.d = ay - (r.ax / 2);
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (r.x == tri2[2].x) break;
+										if (r.d >= 0) {
+											--ry;
+											r.d -= r.ax;
+										}
+										r.x += r.sx;
+										r.d += ay;
+									}
+								}
+								else {
+									r.d = r.ax - ay / 2;
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (ry == tri2[2].y) break;
+										if (r.d >= 0) {
+											r.x += r.sx;
+											r.d -= ay;
+										}
+										--ry;
+										r.d += r.ax;
+									}
+								}
+							}
+						}
 					}
 				} break;
 
 				case render_element_text: {
 					auto text = element->text;
-					if (!element->flags.ignore_camera) {
+					if (!element->ignore_camera) {
 						text.x -= camera.x;
 						text.y -= camera.y;
 					}
-					font_Write_Length (&framework_font, frame, text.x, text.y, text.string, text.length);
+					font_Write_Length (&framework_font, frame, text.x, text.y, text.string, text.length, render_state->state_count);
+				} break;
+
+				case render_element_darkness_rectangle: {
+					const auto r = element->darkness_rectangle;
+					for (int16_t y = r.b; y <= r.t; ++y) {
+						for (int16_t x = r.l; x <= r.r; ++x) {
+							frame->p[x + frame->w * y] >>= r.levels;
+						}
+					}
 				} break;
 			}
 			++element;
@@ -704,11 +1027,11 @@ void *Render (void*) {
 		// Pixel particles
 		// ************************************
 		for (int i = 0; i < render_state->particles.count; ++i) {
-			int x = render_state->particles.position[i].x;
-			int y = render_state->particles.position[i].y;
+			int x = render_state->particles.array[i].position.x;
+			int y = render_state->particles.array[i].position.y;
 			assert (x >= 0 && x < frame->w && y >= 0 && y < frame->h);
 			// if (x < 0 || x >= frame->w || y < 0 || y >= frame->h) continue;
-			frame->p[x + y * frame->w] = render_state->particles.pixel[i];
+			frame->p[x + y * frame->w] = render_state->particles.array[i].pixel;
 		}
 
 		auto frame_time = zen_End (&frame_timer);
@@ -716,13 +1039,13 @@ void *Render (void*) {
 		if (render_state->debug.show_rendertime) {
 			char str[32];
 			snprintf (str, sizeof(str), "R%4"PRId64"us", frame_time);
-			font_Write (&framework_font, frame, 1, frame->h-2-framework_font.line_height, str);
+			font_Write (&framework_font, frame, 1, frame->h-2-framework_font.line_height, str, render_state->state_count);
 		}
 
 		if (render_state->debug.show_framerate) {
 			char str[32];
 			snprintf (str,sizeof (str), "FPS%d", fps_this_frame);
-			font_Write (&framework_font, frame, 1, frame->h-2, str);
+			font_Write (&framework_font, frame, 1, frame->h-2, str, render_state->state_count);
 		}
 
 		if (render_state->cursor.sprite != NULL)
@@ -738,7 +1061,7 @@ void *Render (void*) {
 		render_state->busy = false;
 		asm volatile("" ::: "memory");
 
-		// Swap frame, clear new frame and perform stateless rendering
+		// Swap frame
 		frame_select = !frame_select;
 		frame = (render_data.frame[frame_select]);
 
@@ -805,12 +1128,104 @@ void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float r
 	}
 }
 
-void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length) {
+void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
+	int16_t l = center_x - radiusx,
+			r = center_x + radiusx,
+			b_ = center_y - radiusy,
+			t = center_y + radiusy;
+	int32_t a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	int32_t dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	int32_t err = dx+dy+b1*a*a, e2; /* error of 1.step */
+
+	if (l > r) SWAP (l, r);
+	if (b_ > t) SWAP (b_, t);
+	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
+	a *= 8*a; b1 = 8*b*b;
+
+	#pragma push_macro ("PXY")
+	#undef PXY
+	#define PXY(x__, y__) do { auto xx = (x__); auto yy = (y__); if (xx >= 0 && xx < destination->w && yy >= 0 && yy < destination->h) destination->p[xx + yy*destination->w] = color; } while (0) 
+	do {
+		PXY(r, b_); /*   I. Quadrant */
+		PXY(l, b_); /*  II. Quadrant */
+		PXY(l, t); /* III. Quadrant */
+		PXY(r, t); /*  IV. Quadrant */
+		e2 = 2*err;
+		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
+		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
+	} while (l <= r);
+
+	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
+		break;
+		PXY(l-1, b_); /* -> finish tip of ellipse */
+		PXY(r+1, b_++); 
+		PXY(l-1, t);
+		PXY(r+1, t--); 
+	}
+	#pragma pop_macro ("PXY")
+}
+
+void DrawLineHorizontal (sprite_t *destination, int16_t l, int16_t r, int16_t y, uint8_t color) {
+	if (y < 0 || color == 0 || y > destination->h-1) return;
+	if (l > r) SWAP (l, r);
+	if (l > destination->w-1 || r < 0) return;
+	if (l < 0) l = 0;
+	if (r > destination->w-1) r = destination->w-1;
+	memset (&destination->p[l + y * destination->w], color, r - l + 1);
+}
+
+void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
+	int16_t l = center_x - radiusx,
+			r = center_x + radiusx,
+			b_ = center_y - radiusy,
+			t = center_y + radiusy;
+	int a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	long err = dx+dy+b1*a*a, e2; /* error of 1.step */
+
+	if (l > r) { l = r; r += a; } /* if called with swapped points */
+	if (b_ > t) b_ = t; /* .. exchange them */
+	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
+	a *= 8*a; b1 = 8*b*b;
+
+	#pragma push_macro ("LINE")
+	#undef LINE
+	#define LINE(l__, r__, y__) DrawLineHorizontal (destination, l__, r__, y__, color)
+	do {
+		LINE(l, r, b_); /*   I. Quadrant */
+		LINE(l, r, t); /* III. Quadrant */
+		e2 = 2*err;
+		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
+		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
+	} while (l <= r);
+
+	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
+		LINE(l-1, r+1, b_); /* -> finish tip of ellipse */
+		LINE(l-1, r+1, t);
+	}
+	#pragma pop_macro ("LINE")
+}
+
+void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index) {
+	const char *const text_start = text;
     char c = *(text++);
     int i;
     int x = left, y = top - font->line_height; // Current x and y, updated as we draw each character
+
+	// Escape codes (all start and end with \:
+	// \cXX\ - Color: set color to XX (in hexadecimal). Use \c0\ to reset color. Color can be 1 or 2 digits in the hex range 0 - FF.
+	// \wABC\ - Sine wave: set wave to A pixels in height, B speed, C steepness (all single digit hex values 0-f). Use \w0\ to disable wave. C can be omitted to default to 3 steepness.
+	struct {
+		uint8_t colorize;
+		struct {
+			uint8_t height : 4, speed : 4, steepness : 4;
+			float offset; // Increased with each character within the wave
+		} wave;
+	} state = {};
+
     while (c != '\0') {
         switch (c) {
+			__label__ goto_default;
             case ' ': x += font->space_width; break;
 
             case '\n': {
@@ -818,18 +1233,89 @@ void font_Write_Length (const font_t *font, sprite_t *destination, int left, int
                 y -= font->line_height;
             } break;
 
+			case '\\': { // Escape code
+        		c = *(text++);
+
+				constexpr uint8_t hex2int[256] = { // Size 255 so that when accessed by an unsigned char, doesn't go out of range. All invalid values are 0
+					['0']=0, ['1']=1, ['2']=2, ['3']=3, ['4']=4, ['5']=5, ['6']=6, ['7']=7, ['8']=8, ['9']=9, ['a']=10, ['b']=11, ['c']=12, ['d']=13, ['e']=14, ['f']=15, ['A']=10, ['B']=11, ['C']=12, ['D']=13, ['E']=14, ['F']=15
+				};
+
+				switch (c) {
+					__label__ goto_invalid_escape_sequence;
+					case 'C':
+					case 'c': { // Color
+						c = *(text++); if (c == '\0') break;
+						unsigned char hex[2] = {};
+						hex[0] = c;
+						c = *(text++); if (c == '\0') break;
+						hex[1] = c;
+						if (hex[1] == '\\') {
+							hex[1] = hex[0];
+							hex[0] = '0';
+						}
+						else {
+							c = *(text++); if (c == '\0') break;
+						}
+						assert (c == '\\');
+						state.colorize = hex2int[hex[0]] * 16 + hex2int[hex[1]];
+					} break;
+
+					case 'W':
+					case 'w': {
+						c = *(text++); if (c == '\0') break;
+						char a, b, c_;
+						a = c;  c = *(text++); if (c == '\0') break;
+						b = c;
+						if (b == '\\') { // Only 1 digit provided. Intentionally or not, this disables wave.
+							state.wave = (typeof (state.wave)){};
+							break;
+						}
+						c = *(text++); if (c == '\0') break;
+						c_ = c;
+						if (c_ == '\\') c_ = '5'; // Steepness not provided. Go to default
+						else { c = *(text++); if (c == '\0') break; }
+
+						assert (c == '\\');
+
+						if ((hex2int[(int)a] == 0 && a != '0') || (hex2int[(int)b] == 0 && b != '0')) goto goto_invalid_escape_sequence;
+						state.wave = (typeof(state.wave)){
+							.height = hex2int[(int)a],
+							.speed = hex2int[(int)b],
+							.steepness = hex2int[(int)c_],
+						};
+					} break;
+
+					case '\\': { // Pass through normal backslash character as text
+						goto goto_default;
+					} break;
+
+					default: {
+					goto_invalid_escape_sequence:
+						LOG ("Unsupported escape code in string [%s] character [%d]", text_start, (int)(text - text_start));
+						assert (false);
+					} break;
+				}
+				if (c == '\0') break;
+			} break;
+
             default: {
+			goto_default:
                 i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
                 if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
                     __label__ skip_drawing_letter;
 
                     int yy = y - font->descent[i];
+					if (state.wave.height) {
+						yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
+						state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
+					}
                     int right = x + font->bitmaps[i]->w-1;
                     int top = yy + font->bitmaps[i]->h-1;
 
                     if (right < 0 || top < 0 || x > destination->w-1 || yy > destination->h-1) goto skip_drawing_letter;
 
-					sprite_Blit (font->bitmaps[i], destination, x, yy);
+					if (state.colorize) sprite_BlitSubstituteColor (font->bitmaps[i], destination, x, yy, 255, state.colorize);
+					else sprite_Blit (font->bitmaps[i], destination, x, yy);
 
                     skip_drawing_letter:
                     x += font->bitmaps[i]->w;
@@ -840,11 +1326,11 @@ void font_Write_Length (const font_t *font, sprite_t *destination, int left, int
     }
 }
 
-void font_Write (const font_t *font, sprite_t *destination, int left, int top, char *text) {
-	font_Write_Length(font, destination, left, top, text, strlen (text));
+void font_Write (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index) {
+	font_Write_Length(font, destination, left, top, text, strlen (text), frame_index);
 }
 
-font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *text) {
+font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text) {
     char c = *(text++);
     int i;
     int x = 0, y = font->line_height; // Current x and y, updated as we draw each character
@@ -853,6 +1339,7 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
     int line_descent = 0;
     while (c != '\0') {
         switch (c) {
+			__label__ goto_default;
             case ' ': x += font->space_width; break;
 
             case '\n': {
@@ -861,7 +1348,17 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
                 line_descent = 0;
             } break;
 
+			case '\\': { // Escape sequence. Everything other than \\\\ should be ignored
+        		c = *(text++);
+				if (c == '\0') { --text; break; }
+				else if (c == '\\') goto goto_default;
+				while (c != '\\') {
+					c = *(text++); if (c == '\0') { --text; break; }
+				}
+			} break;
+
             default: {
+			goto_default:
                 i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
                 if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
                     string_is_visible = true;
@@ -877,7 +1374,23 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
     y += line_descent;
 
     if (!string_is_visible) {
-        return (font_StringDimensions_return_t){.width = 0, .height = 0};
+        return (font_StringDimensions_return_t){.w = 0, .h = 0};
     }
-    return (font_StringDimensions_return_t){.width = width, .height = y};
+    return (font_StringDimensions_return_t){.w = width, .h = y};
+}
+
+void Render_Screenshot (sprite_t *destination) {
+	assert (destination->w >= RESOLUTION_WIDTH);
+	assert (destination->h >= RESOLUTION_HEIGHT);
+	if (destination->w < RESOLUTION_WIDTH || destination->h < RESOLUTION_HEIGHT) return;
+
+	render_data.resume_thread = false;
+	render_data.pause_thread = true;
+	while (render_data.pause_thread) os_uSleepEfficient(1000);
+
+	sprite_t *frame = render_data.frame[!frame_select];
+	for (int y = 0; y < RESOLUTION_HEIGHT; ++y) {
+		memcpy (&destination->p[y * destination->w], &frame->p[y * RESOLUTION_WIDTH], RESOLUTION_WIDTH);
+	}
+	render_data.resume_thread = true;
 }

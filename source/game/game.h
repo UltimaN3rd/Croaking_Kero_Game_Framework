@@ -16,6 +16,7 @@
 
 #include "framework.h"
 #include "resources.h"
+#include "objects/text_popup.h"
 
 typedef struct {
 	uint8_t music_volume, fx_volume;
@@ -39,3 +40,4 @@ typedef struct {
 extern game_save_data_t game_save_data;
 extern const cereal_t cereal_savedata[];
 extern const size_t cereal_savedata_size;
+void SaveGame ();

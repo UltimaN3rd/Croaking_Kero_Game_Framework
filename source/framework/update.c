@@ -15,16 +15,10 @@
 #include "framework.h"
 
 extern bool quit;
-extern mouse_t mouse;
 extern update_data_t update_data;
 extern render_data_t render_data;
 
-static_assert(true); // Solves clang getting confused about pragma push/pop. Related to preamble optimization
-
 static uint64_t random_state;
-
-void FloatyTextUpdate ();
-void FloatyTextDraw ();
 
 #ifndef PARTICLES_BOUNDARY_LEFT
 #define PARTICLES_BOUNDARY_LEFT 0
@@ -40,7 +34,7 @@ void FloatyTextDraw ();
 #endif
 
 static void TypeThisFrame (os_key_e key) {
-	char c = update_data.frame.keyboard_state[os_KEY_SHIFT] & (KEY_PRESSED | KEY_HELD) ? os_key_shifted(key) : key;
+	char c = update_data.frame.keyboard[os_KEY_SHIFT] & (KEY_PRESSED | KEY_HELD) ? os_key_shifted(key) : key;
 
 	if (c < ' ' || c > '~') return;
 	assert (update_data.frame.typing.count < sizeof (update_data.frame.typing.chars)-1); if (update_data.frame.typing.count >= sizeof (update_data.frame.typing.chars)-1) { LOG ("Exceeded max typing chars in 1 frame"); return;}
@@ -48,6 +42,34 @@ static void TypeThisFrame (os_key_e key) {
 	update_data.frame.typing.chars[update_data.frame.typing.count++] = c;
 	update_data.frame.typing.chars[update_data.frame.typing.count] = 0; // Always append NULL terminator
 }
+
+static update_state_e current_state = 0;
+static void Update_ObjectClearTopUnusedMemory ();
+static void Update_ObjectDelete (uint16_t index);
+static void Update_ObjectSort (uint16_t starting_index);
+static bool object_created_or_destroyed_this_frame = false;
+static struct {
+	update_state_e new_state;
+	bool happened;
+	char data[UPDATE_CHANGE_STATE_DATA_SIZE_MAX];
+	void (*FuncRunAfterStateChange) ();
+} state_change;
+
+static typeof(update_data.frame) unedited_frameinput = {}; // Save input state in case game modifies it
+
+typedef struct __attribute__((__packed__)) {
+	uint32_t id;
+	uint32_t memory_offset;
+	Update_Object_Func_t UpdateAndRender;
+	int8_t layer; // Objects are ordered by layer - higher layer means processed first. Objects in higher layers may occlude input from objects in lower layers.
+	bool survive_state_change : 1;
+} update_object_t;
+
+// Placed at the base address of every object's memory
+typedef struct {
+	bool used : 1;
+	uint32_t size : 31;
+} update_object_header_t;
 
 void *Update(void*) {
 	LOG ("Update thread started");
@@ -58,10 +80,9 @@ void *Update(void*) {
 	us_per_frame = 1000000 / 120; // Update rate = 120Hz
 	time_last = os_uTime ();
 
-	zen_timer_t frame_timer;
+	Update_ChangeState(0);
 
-	update_state_e current_state = -1;
-	update_data.new_state = 0;
+	zen_timer_t frame_timer;
 
 	// uint32_t keyboard_event_count = 0;
 	// uint32_t mouse_event_count = 0;
@@ -85,31 +106,18 @@ void *Update(void*) {
 
 	LOG ("Update thread entering main loop");
 
-	while(!quit) { 
+	while(!quit) {
 		memcpy (keyboard_previous, keyboard, sizeof (keyboard));
 		memcpy (&mouse_previous, &mouse, sizeof (mouse));
 		memcpy (keyboard, os_public.keyboard, sizeof (keyboard));
 		memcpy (&mouse, &os_public.mouse, sizeof (mouse));
 		update_data.frame.typing = (typeof(update_data.frame.typing)){};
-
-		if (current_state != update_data.new_state) {
-			folder_ReturnToBaseDirectory ();
-			// os_ShowCursor ();
-			// sound_MusicPause ();
-
-			memset (update_data.frame.keyboard_state, 0, sizeof (update_data.frame.keyboard_state));
-			memset (update_data.frame.mouse_state, 0, sizeof (update_data.frame.mouse_state));
-			update_data.frame.mouse = (mouse_t){.x = update_data.source_mouse->x, .y = update_data.source_mouse->y};
-
-			// update_state_e previous_state = current_state;
-			current_state = update_data.new_state;
-			state_functions[current_state].Initialize ();
-		}
+		update_data.frame.mouse.scroll = 0;
 
 		frame_timer = zen_Start ();
 
 		for (int i = 0; i < 256; ++i) {
-			auto pk = &update_data.frame.keyboard_state[i];
+			auto pk = &update_data.frame.keyboard[i];
 			*pk &= ~KEY_REPEATED; // Always clear repeated flag at start of frame
 			if (*pk & KEY_RELEASED) {
 				*pk = KEY_NORMAL;
@@ -153,7 +161,7 @@ void *Update(void*) {
 		{
 			auto event = replay.keyboard_events.events;
 			repeat (keyboard_events_this_frame) {
-				update_data.frame.keyboard_state[event->key] |= (event->pressed ? KEY_PRESSED : KEY_RELEASED);
+				update_data.frame.keyboard[event->key] |= (event->pressed ? KEY_PRESSED : KEY_RELEASED);
 				if (event->pressed == KEY_PRESSED) {
 					TypeThisFrame (event->key);
 				}
@@ -162,7 +170,7 @@ void *Update(void*) {
 		}
 
 		for (int i = 0; i < MOUSE_BUTTON_COUNT; ++i) {
-			auto pk = &update_data.frame.mouse_state[i];
+			auto pk = &update_data.frame.mouse.buttons[i];
 			auto k = *pk;
 			if (k & KEY_RELEASED) *pk = KEY_NORMAL;
 			else if (k & KEY_PRESSED) *pk = KEY_HELD;
@@ -194,11 +202,14 @@ void *Update(void*) {
 			repeat (mouse_events_this_frame) {
 				switch (event->type) {
 					case mouse_event_button: {
-						update_data.frame.mouse_state[event->button.button] |= (event->button.pressed ? KEY_PRESSED : KEY_RELEASED);
+						update_data.frame.mouse.buttons[event->button.button] |= (event->button.pressed ? KEY_PRESSED : KEY_RELEASED);
 					} break;
 					case mouse_event_movement: {
 						update_data.frame.mouse.x = event->movement.x;
 						update_data.frame.mouse.y = event->movement.y;
+					} break;
+					case mouse_event_scroll: {
+						update_data.frame.mouse.scroll = event->scroll.up ? 1 : -1;
 					} break;
 				}
 				++event;
@@ -207,11 +218,20 @@ void *Update(void*) {
 	
 		static int64_t max_recorded_frame_time = 0;
 
+		unedited_frameinput = update_data.frame; // Save input state in case game modifies it
+		object_created_or_destroyed_this_frame = false;
+
 		{	// Create a render state based on current game state
-			// update_data.render_state = UpdateSelectRenderState (update_data);
 			asm volatile("" ::: "memory");
 			Render_SelectStateToEdit ();
 			asm volatile("" ::: "memory");
+
+			for (int16_t i = update_data.objects.count-1; i >= 0; --i) {
+				const auto obj = &((update_object_t*)update_data.objects.mem)[i];
+				const auto objdata = update_data.objects.mem + obj->memory_offset;
+				if (!obj->UpdateAndRender (objdata))
+					Update_ObjectDelete (i);
+			}
 
 			state_functions[current_state].Update ();
 
@@ -219,14 +239,11 @@ void *Update(void*) {
 			for (int i = 0; i < update_data.gameplay.particles.count; ++i) {
 				Render_Particle (update_data.gameplay.particles.position[i].x.high, update_data.gameplay.particles.position[i].y.high, update_data.gameplay.particles.pixel[i], false);
 			}
-			FloatyTextUpdate();
-			FloatyTextDraw();
-
 
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				char temp[64];
 					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
+					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .ignore_camera = true);
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
 			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
@@ -235,6 +252,41 @@ void *Update(void*) {
 			Render_FinishEditingState ();
 			asm volatile("" ::: "memory");
 		}
+
+		update_data.frame = unedited_frameinput; // Restore input state in case game modified it
+
+		if (state_change.happened) {
+			state_change.happened = false;
+			folder_ReturnToBaseDirectory ();
+
+			memset (update_data.frame.keyboard, 0, sizeof (update_data.frame.keyboard));
+			update_data.frame.mouse = (typeof(update_data.frame.mouse)){.x = update_data.frame.mouse.x, .y = update_data.frame.mouse.y};
+
+			for (int16_t i = update_data.objects.count-1; i >= 0; --i) {
+				const auto obj = &((update_object_t*)update_data.objects.mem)[i];
+				if (!obj->survive_state_change)
+					Update_ObjectDelete (i);
+			}
+
+			Update_ObjectClearTopUnusedMemory ();
+
+			#ifndef UPDATE_PARTICLES_DONT_CLEAR_ON_STATE_CHANGE
+			update_data.gameplay.particles.count = 0;
+			#endif
+
+			// update_state_e previous_state = current_state;
+			current_state = state_change.new_state;
+			state_functions[current_state].Initialize (&state_change.data);
+
+			if (state_change.FuncRunAfterStateChange) state_change.FuncRunAfterStateChange ();
+			if (state_change.FuncRunAfterStateChange) state_change.FuncRunAfterStateChange = NULL;
+		}
+		else {
+			Update_ObjectClearTopUnusedMemory ();
+		}
+
+		if (object_created_or_destroyed_this_frame)
+			Update_ObjectSort (0);
 
 		int64_t frame_time = zen_End (&frame_timer);
 
@@ -387,47 +439,111 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 	}
 }
 
-void Update_ChangeState (update_state_e new_state) {
+void Update_ChangeStatePrepare_ (update_state_e new_state, const void *const data_to_copy_max_1kb, const size_t data_size) {
 	assert (new_state >= 0 && new_state < update_state_count); if (new_state < 0 || new_state >= update_state_count) { LOG ("Update new state %d out of bounds", new_state); new_state = 0; }
-	update_data.new_state = new_state;
+
+	state_change = (typeof(state_change)) {
+		.new_state = new_state,
+		.FuncRunAfterStateChange = state_change.FuncRunAfterStateChange,
+	};
+	memcpy (state_change.data, data_to_copy_max_1kb, data_size);
 }
 
-void FloatyTextCreate (int x, int y, int vy, int time, const char *const str) {
-	assert (update_data.floaty_text.count <= FLOATY_TEXT_MAX);
-	if (update_data.floaty_text.count == FLOATY_TEXT_MAX) FloatyTextDelete (0);
-	assert (update_data.floaty_text.count < FLOATY_TEXT_MAX);
-
-	unsigned int i = update_data.floaty_text.count++;
-	update_data.floaty_text.text[i].x = x;
-	update_data.floaty_text.text[i].y = (int32split_t){.high = y};
-	update_data.floaty_text.text[i].vy = vy;
-	update_data.floaty_text.text[i].time = time;
-	snprintf (update_data.floaty_text.text[i].string, sizeof(update_data.floaty_text.text[i].string), str);
+void Update_ChangeStateNow_ () {
+	state_change.happened = true;
 }
 
-void FloatyTextDelete (unsigned int i) {
-	assert (i < update_data.floaty_text.count);
-
-	unsigned int c = --update_data.floaty_text.count;
-	auto tl = &update_data.floaty_text.text[i];
-	auto tr = tl+1;
-	while (i++ < c) *tl++ = *tr++;
+void Update_RunAfterStateChange (void (*func)()) {
+	state_change.FuncRunAfterStateChange = func;
 }
 
-void FloatyTextUpdate () {
-	for (int i = 0; i < update_data.floaty_text.count; ++i) {
-		auto t = &update_data.floaty_text.text[i];
-		if (--t->time == 0) {
-			FloatyTextDelete (i);
-			--i;
+static void Update_ObjectClearTopUnusedMemory () {
+	char *addr = &update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE - update_data.objects.top_used];
+	while (addr - update_data.objects.mem < UPDATE_OBJECT_MEMORY_SIZE && !((update_object_header_t*)addr)->used) {
+		assert (addr + ((update_object_header_t*)addr)->size <= &update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE]);
+		addr += ((update_object_header_t*)addr)->size;
+	}
+	const auto new_top = UPDATE_OBJECT_MEMORY_SIZE - (addr - update_data.objects.mem);
+	update_data.objects.top_used = new_top;
+}
+
+static void Update_ObjectDelete (uint16_t index) {
+	assert (index < update_data.objects.count);
+	assert (update_data.objects.count > 0);
+	--update_data.objects.count;
+	
+	const auto obj = &((update_object_t*)update_data.objects.mem)[index];
+	update_object_header_t *header = (update_object_header_t*)(update_data.objects.mem + obj->memory_offset - sizeof (update_object_header_t));
+	header->used = false;
+
+	for (uint16_t i = index; i < update_data.objects.count; ++i) {
+		((update_object_t*)update_data.objects.mem)[i] = ((update_object_t*)update_data.objects.mem)[i+1];
+	}
+
+	object_created_or_destroyed_this_frame = true;
+}
+
+// Sort starting from index, continuing up. If 0 or 1, sort all objects.
+static void Update_ObjectSort (uint16_t starting_index) {
+	if (update_data.objects.count == 0) return;
+	assert (starting_index < update_data.objects.count);
+	auto index = starting_index;
+	if (index == 0) index = 1;
+	while (index < update_data.objects.count) {
+		auto obj = &((update_object_t*)update_data.objects.mem)[index];
+		auto objbelow = &((update_object_t*)update_data.objects.mem)[index-1];
+		for (auto i = index; i > 0; --i, --obj, --objbelow) {
+			if (objbelow->layer >= obj->layer) break;
+			SWAP (*obj, *objbelow);
 		}
-		else t->y.i32 += t->vy;
+		++index;
 	}
+
+	object_created_or_destroyed_this_frame = true;
 }
 
-void FloatyTextDraw () {
-	for (int i = 0; i < update_data.floaty_text.count; ++i) {
-		auto t = update_data.floaty_text.text[i];
-		Render_Text (.x = t.x, .y = t.y.high, .string = t.string);
-	}
+uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change) {
+	uint16_t object_size = sizeof (update_object_header_t) + data_size;
+	// object_size += object_size % 8; // Align by 8 bytes
+	const auto new_bottom = update_data.objects.bottom_used + sizeof (update_object_t);
+	const auto new_top = update_data.objects.top_used + object_size;
+	if (new_bottom + new_top >= UPDATE_OBJECT_MEMORY_SIZE) return 0; // Out of memory
+	const auto id = update_data.objects.nextid++;
+	auto obj = &((update_object_t*)update_data.objects.mem)[update_data.objects.count++];
+	*obj = (update_object_t) {
+		.id = id,
+		.memory_offset = UPDATE_OBJECT_MEMORY_SIZE - new_top + sizeof(update_object_header_t),
+		.UpdateAndRender = UpdateAndRenderFunc,
+		.layer = layer,
+		.survive_state_change = survive_state_change,
+	};
+	memcpy (&update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE - new_top], &(update_object_header_t){.used = 1, .size = object_size}, sizeof (update_object_header_t));
+	memcpy (&update_data.objects.mem[obj->memory_offset], data, data_size);
+	update_data.objects.bottom_used = new_bottom;
+	update_data.objects.top_used = new_top;
+
+	object_created_or_destroyed_this_frame = true;
+
+	return id;
+}
+
+void Update_ClearInputAll () {
+	update_data.frame = (typeof(update_data.frame)){};
+}
+
+void Update_ClearInputMouse () {
+	update_data.frame.mouse = (typeof(update_data.frame.mouse)){};
+}
+
+void Update_ClearInputMouseButtons () {
+	memset (update_data.frame.mouse.buttons, 0, sizeof (update_data.frame.mouse.buttons));
+}
+
+void Update_ClearInputKeyboard () {
+	memset (update_data.frame.keyboard, 0, sizeof (update_data.frame.keyboard));
+	update_data.frame.typing = (typeof(update_data.frame.typing)){};
+}
+
+typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState () {
+	return unedited_frameinput;
 }

@@ -53,8 +53,9 @@ static struct {
 static uint64_t random_state;
 extern update_data_t update_data;
 
-const sound_t sound_coin2 = {.sample = &sound_sample_sine, .duration = 48000 * .1, .frequency_begin = 2000, .frequency_end = 2000, .ADSR = {ADSR_DEFAULT}};
-const sound_t sound_coin = {.sample = &sound_sample_sine, .duration = 48000 * .1, .next = &sound_coin2, .frequency_begin = 1600, .frequency_end = 1600, .ADSR = {ADSR_DEFAULT}};
+#define ADSR_DEFAULT ((ADSR_t){.peak = .5, .sustain = .4, .attack = 48000 * .01, .decay = 48000 * .005, .release = 48000 * .01})
+const sound_t sound_coin2 = {.waveform = sound_waveform_sine, .duration = 48000 * .1, .frequency = 2000, .ADSR = ADSR_DEFAULT};
+const sound_t sound_coin = {.waveform = sound_waveform_sine, .duration = 48000 * .1, .next = &sound_coin2, .frequency = 1600, .ADSR = ADSR_DEFAULT};
 
 void gameplay_Exit ();
 void PipeGenerate (int i);
@@ -93,11 +94,11 @@ void gameplay_Init () {
     data.pipes[0].gap_size = PIPE_GAP_MAX;
     for (int i = 1; i < PIPES_MAX; ++i) PipeGenerate (i);
 
-    SoundMusicPlay (&resources_music_ost1);
+    SoundMusicPlay (&resources_music_choppa);
 }
 
 void gameplay_Update () {
-    auto keyboard = update_data.frame.keyboard_state;
+    auto keyboard = update_data.frame.keyboard;
     
     if (keyboard[os_KEY_ESCAPE] & KEY_PRESSED) {
         gameplay_Exit ();
@@ -178,7 +179,7 @@ void PlayerDie () {
 
 
 void UpdateAlive () {
-    auto keyboard = update_data.frame.keyboard_state;
+    auto keyboard = update_data.frame.keyboard;
 
     data.player.vy += GRAVITY;
     if (keyboard[os_KEY_SPACE] & KEY_PRESSED) PlayerFlap ();
@@ -240,9 +241,8 @@ void UpdateAlive () {
 }
 
 void UpdateDead () {
-    auto keyboard = update_data.frame.keyboard_state;
+    auto keyboard = update_data.frame.keyboard;
 	auto mouse = update_data.frame.mouse;
-	auto mouse_buttons = update_data.frame.mouse_state;
 	auto typing = update_data.frame.typing;
 
     if (data.dead.cooldown > 0) {
@@ -255,7 +255,7 @@ void UpdateDead () {
             menu_inputs_t inputs = {
                 .up = keyboard[os_KEY_UP] & PRESSORREPEAT, .down = keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
                 .backspace = keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = keyboard[os_KEY_DELETE] & PRESSORREPEAT,
-                .mouse = {.x = mouse.x, .y = mouse.y, .left = mouse_buttons[MOUSE_LEFT]}};
+                .mouse = {.x = mouse.x, .y = mouse.y, .left = mouse.buttons[MOUSE_LEFT]}};
 	        memcpy (inputs.typing, typing.chars, MIN (sizeof(inputs.typing), typing.count));
             menu_Update (&menu_death, inputs);
             menu_Render (&menu_death, 20);
@@ -269,16 +269,14 @@ void UpdateDead () {
     }
 }
 
-void SaveGame () {
-	if (!cereal_WriteToFile(cereal_savedata, cereal_savedata_size, update_data.game_save_filename)) LOG ("Failed to save game");
-}
-
 void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
     SaveGame ();
     int width = font_StringDimensions(&framework_font, game_save_data.high_score.name).w;
     width += font_StringDimensions(&framework_font, "'s score saved").w;
-    FloatyTextPrintf((RESOLUTION_WIDTH - width) / 2, 200, 0, 120, "%s's score saved", game_save_data.high_score.name);
+    char buf[sizeof("%s's score saved") + sizeof(game_save_data.high_score.name)];
+    snprintf (buf, sizeof (buf), "%s's score saved", game_save_data.high_score.name);
+    TextPopup_Create(buf, (RESOLUTION_WIDTH - width) / 2, 200, 0, 120, -1, 1);
     data.dead.new_high_score = false;
 }

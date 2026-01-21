@@ -37,6 +37,9 @@
 
 #include "utilities.h"
 #include "folders.h"
+#include "framework_types.h"
+
+bool LoadCursor (const char *const folder, const char *const codename);
 
 uint8_t palette[256][3];
 
@@ -48,7 +51,7 @@ typedef struct {
 	union { int width,  w; };
 	union { int height, h; };
 	uint8_t *p;
-} sprite_t;
+} resources_sprite_t;
 
 #define BITMAP_FONT_FIRST_VISIBLE_CHAR 33
 #define BITMAP_FONT_LAST_VISIBLE_CHAR 126
@@ -61,11 +64,11 @@ typedef struct {
     uint8_t *pixels;
     struct {int w, h, offset;} bitmaps[BITMAP_FONT_NUM_VISIBLE_CHARS];
     int8_t descent[BITMAP_FONT_NUM_VISIBLE_CHARS];
-} font_t;
+} resources_font_t;
 
-void LoadSound (const char *filename, const char *codename);
-sprite_t sprite_LoadBMP (const char *filename);
-bool font_Load (font_t *font, char *directory);
+static bool LoadMusic (const char *filename);
+resources_sprite_t sprite_LoadBMP (const char *filename);
+bool font_Load (resources_font_t *font, char *directory);
 char *ReadEntireFile (char *filename, int *return_file_length);
 
 void PopDir() {
@@ -78,11 +81,106 @@ void PopDir() {
 	chdir("../");
 }
 
+
+#include "sound.h"
+#include "midi.c"
+
+typedef enum { V1_waveform_sine, V1_waveform_triangle, V1_waveform_saw, V1_waveform_square, V1_waveform_noise } V1_waveform_e;
+#define V1_WAVEFORM_COUNT (V1_waveform_noise + 1)
+
+const char *const waveform_to_string[] = { [sound_waveform_none] = "sound_waveform_none", [sound_waveform_sine] = "sound_waveform_sine", [sound_waveform_triangle] = "sound_waveform_triangle", [sound_waveform_saw] = "sound_waveform_saw", [sound_waveform_pulse] = "sound_waveform_pulse", [sound_waveform_noise] = "sound_waveform_noise", [sound_waveform_silence] = "sound_waveform_silence", [sound_waveform_preparing] = "sound_waveform_preparing" };
+
+// Max 8 full beats per pattern, split into 8ths
+#define V1_EIGHTHS_PER_PATTERN_MAX 64
+#define V1_PATTERNS_PER_TRACK 128
+
+typedef struct {
+	V1_waveform_e waveform;
+	ADSRf_t ADSR;
+    int16_t sweep;
+    vibrato_t vibrato;
+    uint32_t placeholder_color;
+    int8_t square_duty_cycle, square_duty_cycle_sweep;
+    char name[32];
+} V1_instrument_t;
+
+typedef struct {
+    uint8_t note;
+    uint8_t eighths;
+    uint8_t instrument_override;
+    bool lead_in, lead_out;
+} V1_beat_t;
+
+typedef struct {
+    bool in_use;
+    char name[17];
+    uint32_t color;
+    V1_beat_t beats[V1_EIGHTHS_PER_PATTERN_MAX];
+} V1_pattern_t;
+
+typedef struct {
+    uint8_t pattern_current;
+    uint8_t instrument;
+    uint8_t volume;
+    uint8_t patterns[V1_PATTERNS_PER_TRACK];
+} V2_track_t;
+
+typedef struct {
+    struct {
+        int current;
+        V2_track_t track[6];
+    } tracks;
+
+    // Pattern 0 is invalid
+    struct {
+        uint16_t count;
+        uint8_t eighths_per;
+        V1_pattern_t pattern[256];
+    } patterns;
+
+    // Instrument 0 is invalid
+    struct {
+        uint16_t count;
+        uint8_t current;
+        V1_instrument_t instrument[256];
+    } instruments;
+
+    struct {
+        int BPM;
+        uint8_t pattern_eighths_per_column[256];
+        uint8_t pattern_column_current;
+        int note_width;
+        int note_offset;
+        int loop_point;
+    } properties;
+} V2_music_t;
+
+V2_music_t music_data;
+constexpr int TRACK_COUNT = sizeof(music_data.tracks.track) / sizeof(*music_data.tracks.track);
+
+bool track_is_used[TRACK_COUNT] = {};
+
+uint8_t music_track_count = 0;
+
+#define EIGHTHS_PER_PATTERN_MAX 64
+#define PATTERNS_PER_TRACK 128
+#define BPM_DEFAULT 80
+#define EIGHTHS_PER_PATTERN_DEFAULT 32
+static float SPB = 1.f / ((float)BPM_DEFAULT / 60);
+static float SP8th = (1.f / ((float)BPM_DEFAULT / 60)) / 8.f;// SPB / 8.f;
+static int32_t samples_per_beat = 48000 / (BPM_DEFAULT * 8 / 60);
+// Size large enough for every single beat of every pattern of every track to be occupied
+sound_t prepared_sounds[TRACK_COUNT][PATTERNS_PER_TRACK][EIGHTHS_PER_PATTERN_MAX];
+typedef enum { waveform_sine, waveform_triangle, waveform_saw, waveform_square, waveform_noise } waveform_e;
+#define WAVEFORM_COUNT (waveform_noise + 1)
+const sound_waveform_e waveform_to_sound_sample[WAVEFORM_COUNT] = {[waveform_sine] = sound_waveform_sine, [waveform_triangle] = sound_waveform_triangle, [waveform_saw] = sound_waveform_saw, [waveform_square] = sound_waveform_pulse, [waveform_noise] = sound_waveform_noise};
+#define NOTE_MIN 33
+
 void ExploreFolder(const char *directory) {
 	folder_ChangeDirectory(directory);
 	auto result = folder_FindFirstFile("./");
 	if (result.is_error) {
-		PopDir();
+	    chdir("../");
 		return;
 	}
 	int curlen = strlen(current_directory);
@@ -93,7 +191,7 @@ void ExploreFolder(const char *directory) {
 	do {
 		if (folder.is_folder) {
 			if (strcmp(folder.name, "font") == 0) {
-				font_t font;
+				resources_font_t font;
 				font_Load(&font, folder.name);
 				char codename[2048] = "";
 				int len = strlen(current_directory);
@@ -109,12 +207,6 @@ void ExploreFolder(const char *directory) {
 				}
 				assert(snprintf(&codename[len], sizeof(codename) - len, "%s",
 								folder.name) == strlen(folder.name));
-				// fprintf (phil, "const uint8_t %s_pixels[]={", codename);
-				// for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
-				// 	for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
-				// 		fprintf (phil, "%d,", font.pixels[font.bitmaps[i].offset + j]);
-				// 	}
-				// }
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
 					fprintf (phil, "const sprite_t %s_bitmap_%d={.w=%d,.h=%d,.p={", codename, i, font.bitmaps[i].w, font.bitmaps[i].h);
 					for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
@@ -126,20 +218,32 @@ void ExploreFolder(const char *directory) {
 				fprintf (phil, "const font_t %s={.line_height=%d,.baseline=%d,.space_width=%d,.bitmaps={", codename, font.line_height, font.baseline, font.space_width);
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
 					fprintf (phil, "&%s_bitmap_%d,", codename, i);
-					/*fprintf (phil, "&(sprite_t){.w=%d,.h=%d,.p={", font.bitmaps[i].w, font.bitmaps[i].h);
-					for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
-						fprintf (phil, "%d,", font.pixels[font.bitmaps[i].offset + j]);
-					}
-					fprintf (phil, "}},");*/
 				}
 				fprintf (phil, "},.descent={");
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
 					fprintf (phil, "%d,", font.descent[i]);
 				}
 				fprintf (phil, "}};\n");
-			} else {
-				ExploreFolder(folder.name);
-			}
+                continue;
+            } else if (strcmp (folder.name, "cursor") == 0) {
+                char codename[2048] = "";
+                int namelen = strlen(current_directory);
+                char *s, *d;
+                s = current_directory;
+                d = codename;
+                for (int i = 0; i < namelen; ++i) {
+                    if (*s == '/')
+                        *d = '_';
+                    else
+                        *d = *s;
+                    ++d, ++s;
+                } 
+                namelen = strlen(codename);
+                assert(snprintf(&codename[namelen], sizeof(codename) - namelen, "%s", folder.name) == strlen(folder.name));
+                if (LoadCursor (folder.name, codename)) continue;
+                // If didn't successfully treat folder as a cursor, instead pass through and treat it as a normal folder
+            }
+            ExploreFolder(folder.name);
 			continue;
 		}
 		const char *extension = StringGetFileExtension(folder.name);
@@ -162,7 +266,7 @@ void ExploreFolder(const char *directory) {
 		*d = 0;
 		if (StringCompareCaseInsensitive(extension, "bmp") == 0) {
 			printf("Loading bmp: %s%s\n", current_directory, folder.name);
-			sprite_t spr = sprite_LoadBMP(folder.name);
+			resources_sprite_t spr = sprite_LoadBMP(folder.name);
 			fprintf (header, "extern const sprite_t %s;\n", codename);
 			fprintf(phil, "const sprite_t %s = {.w = %u, .h = %u, .p = {",
 					codename, spr.w, spr.h);
@@ -172,9 +276,37 @@ void ExploreFolder(const char *directory) {
 			free(spr.p);
 			fprintf(phil, "}};\n");
 		}
-		else if (StringCompareCaseInsensitive(extension, "ksound") == 0) {
-			printf("Loading ksound: %s%s\n", current_directory, folder.name);
-			LoadSound (folder.name, codename);
+		else if (StringCompareCaseInsensitive(extension, "ktune") == 0) {
+			printf("Loading ktune: %s%s\n", current_directory, folder.name);
+			if (LoadMusic (folder.name)) {
+                fprintf (header, "extern const sound_music_t %s;\n", codename);
+                for (uint8_t track = 0; track < TRACK_COUNT; ++track) {
+                    if (!track_is_used[track]) continue;
+                    fprintf (phil, "const sound_t %s_sounds_%"PRIu8"[] = {", codename, track);
+                    const sound_t *sound = &prepared_sounds[track][0][0];
+                    uint64_t nextindex = 0;
+                    do { // Loop through every sound until ->next == NULL (last sound of track) or it's an earlier sound, meaning it loops at that point
+                        ++nextindex;
+                        if (sound->next < sound) {
+                            const sound_t *loopsound = &prepared_sounds[track][0][0];
+                            nextindex = 0;
+                            while (loopsound != sound->next) {
+                                loopsound = loopsound->next;
+                                ++nextindex;
+                            }
+
+                        }
+                        fprintf (phil, "{.duration = %"PRIu32", .next = &%s_sounds_%"PRIu8"[%"PRIu64"], .frequency = %"PRIu16", .ADSR = {.peak = %f, .attack = %"PRIu16", .decay = %"PRIu16", .sustain = %f, .release = %"PRIu16"}, .vibrato = {.frequency_range = %"PRIu16", .vibrations_per_hundred_seconds = %"PRIu16"}, .sweep = %"PRId16", .square_duty_cycle = %"PRIi8", .square_duty_cycle_sweep = %"PRIi8", .waveform = %s},\n", sound->duration, codename, track, nextindex, sound->frequency, sound->ADSR.peak, sound->ADSR.attack, sound->ADSR.decay, sound->ADSR.sustain, sound->ADSR.release, sound->vibrato.frequency_range, sound->vibrato.vibrations_per_hundred_seconds, sound->sweep, sound->square_duty_cycle, sound->square_duty_cycle_sweep, waveform_to_string[sound->waveform]);
+                    } while (sound->next > sound && (sound = sound->next));
+                    fprintf (phil, "};\n");
+                }
+                fprintf (phil,   "const sound_music_t %s = {%"PRIu8",{", codename, music_track_count);
+                for (uint8_t track = 0; track < TRACK_COUNT; ++track) {
+                    if (!track_is_used[track]) continue;
+                    fprintf (phil, "%s_sounds_%"PRIu8"," , codename, track);
+                }
+                fprintf (phil, "},};\n");
+            }
 		}
   	} while (!folder_FindNextFile(&folder).is_error);
 	PopDir();
@@ -256,7 +388,7 @@ const uint8_t palette[256][3] = {)", phil);
 
 
 
-sprite_t sprite_LoadBMP (const char *filename) {
+resources_sprite_t sprite_LoadBMP (const char *filename) {
 	assert (filename != NULL);
 
 	struct {
@@ -275,7 +407,7 @@ sprite_t sprite_LoadBMP (const char *filename) {
 	fread(&header, sizeof (header), 1, file);
 
 	pixel_count = header.width * header.height;
-	int required_memory = sizeof ((sprite_t){}.p[0]) * pixel_count;
+	int required_memory = sizeof ((resources_sprite_t){}.p[0]) * pixel_count;
 
 	assert (header.bit_depth == 8);
 
@@ -294,7 +426,7 @@ sprite_t sprite_LoadBMP (const char *filename) {
 
 	fclose (file);
 
-	return (sprite_t){.w = header.width, .h = header.height, .p = pixels};
+	return (resources_sprite_t){.w = header.width, .h = header.height, .p = pixels};
 }
 
 
@@ -304,7 +436,7 @@ sprite_t sprite_LoadBMP (const char *filename) {
 
 // Pass in the folder which contains the font files: font.bmp/tga and properties.txt
 // Returns false on failure and true on success
-bool font_Load (font_t *font, char *directory) {
+bool font_Load (resources_font_t *font, char *directory) {
     assert (directory);
     bool return_value = false;
 
@@ -323,7 +455,7 @@ bool font_Load (font_t *font, char *directory) {
     char filename[600];
     
     sprintf (filename, "%sfont.bmp", directory_fixed);
-    sprite_t bitmap = sprite_LoadBMP (filename);
+    resources_sprite_t bitmap = sprite_LoadBMP (filename);
 
     // Convert bitmap to individual character bitmaps
     int width, height;
@@ -463,356 +595,172 @@ bool font_Load (font_t *font, char *directory) {
     return return_value;
 }
 
+bool LoadFileV2 (FILE *file) {
+    if (fread (&music_data, sizeof (music_data), 1, file) != 1) return false;
+    return true;
+}
 
+static void BPM_Change (int amount) {
+	if (amount > 0) music_data.properties.BPM = MIN (200, music_data.properties.BPM+1);
+	else if (amount < 0) music_data.properties.BPM = MAX (20, music_data.properties.BPM-1);
+	// else if amount == 0 do nothing
+	SPB = 1.f / ((float)music_data.properties.BPM / 60);
+	SP8th = (1.f / ((float)music_data.properties.BPM / 60)) / 8.f;// SPB / 8.f;
+    samples_per_beat = 48000 / (music_data.properties.BPM * 8 / 60);
+}
 
+sound_t SoundGenerate_ (SoundFXPlay_args args);
+#define SoundGenerate(...) SoundGenerate_((SoundFXPlay_args){SoundFXPlay_args_default, __VA_ARGS__})
+#define SAMPLING_RATE 48000
+ADSR_t ADSRf_to_ADSR (ADSRf_t in) { return (ADSR_t){.peak = in.peak, .attack = in.attack * SAMPLING_RATE, .decay = in.decay * SAMPLING_RATE, .sustain = in.sustain, .release = in.release * SAMPLING_RATE}; }
 
-
-
-typedef struct {
-	uint32_t count;
-	[[gnu::counted_by(count)]] int16_t samples[];
-} sound_sample_t;
-
-typedef struct {
-    float peak;
-    uint16_t attack;
-    uint16_t decay;
-    float sustain;
-    uint16_t release;
-} ADSR_t;
-
-typedef struct {
-    float peak;
-    float attack;
-    float decay;
-    float sustain;
-    float release;
-} ADSRf_t;
-
-typedef struct SoundPlay_args SoundPlay_args;
-void *Sound(void*);
-struct SoundPlay_args {
-    const sound_sample_t *sample;
-    uint16_t frequency, frequency_end;
-    float duration;
-    float volume;
-    ADSRf_t ADSR;
-    SoundPlay_args *next;
-};
-
-typedef struct sound_t {
-    uint32_t t;
-    uint32_t duration;
-    const struct sound_t *next;
-    float d;
-    int16_t frequency_begin, frequency_end;
-    uint8_t ADSR_state;
-    ADSR_t ADSR;
-    const sound_sample_t *sample;
-} sound_t;
-
-#define sampling_rate 48000
-#define period_size (sampling_rate / 200)
-
-#define SoundPlay_args_default .frequency = 500, .frequency_end = UINT16_MAX, .duration = 0.25, .volume = 1.0, .ADSR = {.peak = 1, .sustain = .8, .attack = .01, .decay = .005, .release = .01}
-
-sound_t SoundGenerate_ (SoundPlay_args args);
-#define SoundGenerate(...) SoundGenerate_((SoundPlay_args){SoundPlay_args_default, __VA_ARGS__})
-
-ADSR_t ADSRf_to_ADSR (ADSRf_t in) { return (ADSR_t){.peak = in.peak, .attack = in.attack * sampling_rate, .decay = in.decay * sampling_rate, .sustain = in.sustain, .release = in.release * sampling_rate}; }
-
-sound_t SoundGenerate_(SoundPlay_args args) {
-    if (args.frequency_end == UINT16_MAX) {
-        args.frequency_end = args.frequency;
-    }
+sound_t SoundGenerate_(SoundFXPlay_args args) {
+    assert (args.waveform);
+    if (args.waveform == sound_waveform_none) return (sound_t){};
+    args.ADSR.peak *= args.volume;
+    args.ADSR.sustain *= args.volume;
+    uint32_t duration = args.duration_samples;
+    if (duration == 0) duration = args.duration_seconds * SAMPLING_RATE;
     sound_t sound = {
-        .sample = args.sample,
-        .duration = args.duration * sampling_rate,
-        .next = NULL,
+        .waveform = args.waveform,
+        .duration = duration,
+        .next = args.next,
         .ADSR = ADSRf_to_ADSR(args.ADSR),
-        .frequency_begin = args.frequency,
-        .frequency_end = args.frequency_end,
+        .frequency = args.frequency,
+        .sweep = args.sweep,
+        .vibrato = args.vibrato,
+        .square_duty_cycle = args.square_duty_cycle,
+        .square_duty_cycle_sweep = args.square_duty_cycle_sweep,
     };
-    int duration = sound.ADSR.attack + sound.ADSR.decay + sound.ADSR.release;
-    if (sound.duration < duration) { // There isn't enough time for the full envelope, even with 0 sustain. Get ratio of envelope and apply to the reduced duration
+    // if (sound.waveform == sound_waveform_pulse) {
+    //     if (sound.vibrato.frequency_range < sound.frequency * .005f) sound.vibrato.frequency_range = sound.frequency * .005f;
+    //     if (sound.vibrato.vibrations_per_hundred_seconds < sound.frequency/20) sound.vibrato.vibrations_per_hundred_seconds = sound.frequency/20;
+    // }
+    int duration_ADSR = sound.ADSR.attack + sound.ADSR.decay + sound.ADSR.release;
+    if (sound.duration < duration_ADSR) { // There isn't enough time for the full envelope, even with 0 sustain. Get ratio of envelope and apply to the reduced duration
         float total = args.ADSR.attack + args.ADSR.decay + args.ADSR.release;
         sound.ADSR.attack = (args.ADSR.attack / total) * sound.duration;
-        sound.ADSR.decay = (args.ADSR.decay / total) * sound.duration;
-        sound.ADSR.release = sound.duration - sound.ADSR.attack - sound.ADSR.decay;
+        sound.ADSR.release = (args.ADSR.release / total) * sound.duration;
+        sound.ADSR.decay = sound.duration - sound.ADSR.attack - sound.ADSR.release;
     }
     return sound;
 }
 
-typedef enum { instrument_sine, instrument_triangle, instrument_saw, instrument_square, instrument_noise } V03_instrument_e;
-#define V03_INSTRUMENT_COUNT (instrument_noise + 1)
+static void PrepareTrackPattern (uint8_t track, uint8_t pattern) {
+    track_is_used[track] = true;
+    auto t = &music_data.tracks.track[track];
+    auto pi = t->patterns[pattern];
+    if (pi == 0) return;
+    auto p = &music_data.patterns.pattern[pi];
+    auto ti = &music_data.instruments.instrument[t->instrument];
+    uint8_t pattern_width = music_data.properties.pattern_eighths_per_column[pattern] ? music_data.properties.pattern_eighths_per_column[pattern] : music_data.patterns.eighths_per;
+    for (int beat = 0; beat < pattern_width; ++beat) {
+        auto b = &p->beats[beat];
+        sound_t *nextsound;
+        if (pattern < PATTERNS_PER_TRACK-1) nextsound = &prepared_sounds[track][pattern+1][0];
+        else nextsound = NULL;
+        if (b->eighths) {
+            auto i = ti;
+            if (b->instrument_override)
+                i = &music_data.instruments.instrument[b->instrument_override];
+            ADSRf_t ADSR = i->ADSR;
+            if (b->lead_in) ADSR.attack = ADSR.decay = 0;
+            if (b->lead_out) ADSR.release = 0;
+            uint8_t beat_width = b->eighths;
+            if (beat + b->eighths > pattern_width)
+                beat_width = pattern_width - beat;
+            if (beat + b->eighths < pattern_width) nextsound = &prepared_sounds[track][pattern][beat + beat_width];
+            prepared_sounds[track][pattern][beat] = SoundGenerate (.waveform = waveform_to_sound_sample[i->waveform], .frequency = midi_note_frequency[b->note + NOTE_MIN], .duration_samples = beat_width * samples_per_beat, .volume = t->volume / 255.f, .ADSR = ADSR, .sweep = i->sweep, .vibrato = i->vibrato, .next = nextsound, .square_duty_cycle = i->square_duty_cycle, .square_duty_cycle_sweep = i->square_duty_cycle_sweep);
+        }
+        else {
+            if (beat < pattern_width-1) nextsound = &prepared_sounds[track][pattern][beat+1];
+            prepared_sounds[track][pattern][beat] = SoundGenerate (.waveform = sound_waveform_silence, .duration_samples = samples_per_beat, .next = nextsound);
+        }
+    }
+}
 
-const char *const V03_instrument_to_sound_sample_string[V03_INSTRUMENT_COUNT] = {[instrument_sine] = "sound_sample_sine", [instrument_triangle] = "sound_sample_triangle", [instrument_saw] = "sound_sample_saw", [instrument_square] = "sound_sample_square", [instrument_noise] = "sound_sample_noise"};
+static void PrepareTrack (uint8_t track) {
+    track_is_used[track] = false;
+    auto t = &music_data.tracks.track[track];
+    for (int i = 0; i < PATTERNS_PER_TRACK; ++i) {
+        int p = t->patterns[i];
+        if (p) PrepareTrackPattern (track, i);
+        else {
+            int pattern_width = music_data.properties.pattern_eighths_per_column[i] ? music_data.properties.pattern_eighths_per_column[i] : music_data.patterns.eighths_per;
+            for (int j = 0; j < pattern_width-1; ++j) {
+                prepared_sounds[track][i][j] = SoundGenerate (.waveform = sound_waveform_silence, .duration_samples = samples_per_beat, .next = &prepared_sounds[track][i][j+1]);
+            }
+            if (track < PATTERNS_PER_TRACK) prepared_sounds[track][i][pattern_width-1] = SoundGenerate (.waveform = sound_waveform_silence, .duration_samples = samples_per_beat, .next = &prepared_sounds[track][i+1][0]);
+            else prepared_sounds[track][i][pattern_width-1] = SoundGenerate (.waveform = sound_waveform_silence, .duration_samples = samples_per_beat);
+        }
+    }
+}
 
-#define MIDI_NOTE_COUNT 129
-
-const struct {
-    const float note_frequency[MIDI_NOTE_COUNT];
-} midi = {
-    .note_frequency = {8.18,8.66,9.18,9.72,10.30,10.91,11.56,12.25,12.98,13.75,14.57,15.43,16.35,17.32,18.35,19.45,20.60,21.83,23.12,24.50,25.96,27.50,29.14,30.87,32.70,34.65,36.71,38.89,41.20,43.65,46.25,49.00,50.91,55.00,58.27,61.74,65.41,69.30,73.42,77.78,82.41,87.31,92.50,98.00,103.83,110.00,116.54,123.47,130.81,138.59,146.83,155.56,164.81,174.61,185.00,196.00,207.65,220.00,233.08,246.94,261.63,277.18,293.66,311.13,329.63,349.23,369.99,392.00,415.30,440.00,466.16,493.88,523.25,554.37,587.33,622.25,659.26,698.46,739.99,783.99,830.61,880.00,932.33,987.77,1046.50,1108.73,1174.66,1244.51,1318.51,1396.90,1479.98,1567.98,1661.22,1760.00,1864.66,1975.53,2093.00,2217.46,2349.32,2489.02,2637.02,2793.83,2959.96,3135.96,3322.44,3520.00,3729.30,3951.07,4186.01,4434.92,4698.64,4978.03,5274.04,5587.65,5919.91,6271.93,6644.88,7050.00,7458.62,7902.13,8372.02,8869.84,9397.27,9956.06,10548.08,11175.30,11839.82,12543.85,13289.75}
-};
-
-bool LoadSoundV03 (FILE *file, const char *soundname) {
-    int BPM, note_width, note_offset;
-    constexpr int SOUND_CHANNELS = 10;
-    constexpr int CHANNEL_NAME_MAX_LENGTH = 16;
-    constexpr int MAX_SOUNDS_PER_CHANNEL = 255;
+static bool LoadMusic (const char *filename) {
+    bool success = false;
+    DEFER (if (!success) { printf ("Failed to load file [%s]\n", filename); });
+    FILE *file = fopen (filename, "rb");
+    assert (file); if (!file) { LOG ("Failed to open file [%s]", filename); return false; }
+    DEFER (fclose (file));
     struct {
-        char name[CHANNEL_NAME_MAX_LENGTH+1];
-        union {
-            struct { uint8_t b, g, r, a; };
-            uint32_t u32;
-        } color;
-        struct {
-            V03_instrument_e waveform;
-            ADSRf_t envelope;
-        } instrument;
-        [[gnu::packed]] struct {
-            uint8_t note, length;
-            uint16_t beat; // beat is when this sound occurs, in 1/8ths of a beat
-        } sequence[MAX_SOUNDS_PER_CHANNEL];
-    } channels[SOUND_CHANNELS] = {};
-    int channel_sequence_length[SOUND_CHANNELS] = {};
-	fread (&BPM, sizeof (BPM), 1, file);
-	fread (&note_width, sizeof (note_width), 1, file);
-	fread (&note_offset, sizeof (note_offset), 1, file);
-	for (int c = 0; c < SOUND_CHANNELS; ++c) {
-		fread (&channels[c].color, sizeof (channels[c].color), 1, file);
-		fread (&channels[c].instrument, sizeof (channels[c].instrument), 1, file);
-		fread (&channels[c].name, sizeof (channels[c].name), 1, file);
-		fread (&channel_sequence_length[c], sizeof (channel_sequence_length[c]), 1, file);
-		fread (channels[c].sequence, sizeof (channels[c].sequence[0]), channel_sequence_length[c], file);
-	}
-
-    float SP8th = (1.f / ((float)BPM / 60)) / 8.f;
-
-    int final_beat = 0;
-    for (int c = 0; c < SOUND_CHANNELS; ++c) {
-        int beat = 0;
-        if (channel_sequence_length[c]) {
-            beat = channels[c].sequence[channel_sequence_length[c]-1].beat + channels[c].sequence[channel_sequence_length[c]-1].length;
-            if (beat > final_beat) final_beat = beat;
-        }
+        char magic[14];
+        uint32_t version;
+    } file_identifier;
+    if (fread (&file_identifier, sizeof (file_identifier), 1, file) != 1) return false;
+    if (strcmp (file_identifier.magic, "Kero Chiptune") != 0) return false;
+    bool load_result = false;
+    switch (file_identifier.version) {
+        case 2: load_result = LoadFileV2 (file); break;
+        default: {
+            printf ("Unsupported file version\n");
+        } break;
     }
+    if (!load_result) return false;
 
-    final_beat += 8;
-    int active_channels = 0;
+    BPM_Change(0); // Recalculate stuff. Does not actually set BPM to 0 when called with 0
+
+    music_track_count = 0;
     
-    fprintf (header, "extern const sound_music_t %s;\n", soundname);
-
-    int active_channel_indices[SOUND_CHANNELS] = {};
-    for (int c = 0; c < SOUND_CHANNELS; ++c) {
-        if (channel_sequence_length[c]) {
-            active_channel_indices[active_channels++] = c;
-            fprintf (phil, "const sound_t %s_%d[] = {", soundname, c);
-            int sound_index = 0;
-            int last_note_end_beat = 0;
-            for (int i = 0; i < channel_sequence_length[c]; ++i) {
-                if (last_note_end_beat < channels[c].sequence[i].beat) { // Add silence between last beat and new one
-                    auto sound = SoundGenerate (.duration = (channels[c].sequence[i].beat - last_note_end_beat) * SP8th);
-                    fprintf (phil, "{.sample=&sound_sample_silence,.duration=%u,.next=&%s_%d[%d]}, ", sound.duration, soundname, c, sound_index+1);
-                    ++sound_index;
-                }
-                auto sound = SoundGenerate (.frequency = midi.note_frequency[channels[c].sequence[i].note], .duration = SP8th * channels[c].sequence[i].length, .ADSR = channels[c].instrument.envelope);
-                fprintf (phil, "{.sample=&%s,.duration=%u,.frequency_begin=%u,.frequency_end=%u,.ADSR={.peak=%f,.attack=%u,.decay=%u,.sustain=%f,.release=%u},.next=", V03_instrument_to_sound_sample_string[channels[c].instrument.waveform], sound.duration, sound.frequency_begin, sound.frequency_end, sound.ADSR.peak, sound.ADSR.attack, sound.ADSR.decay, sound.ADSR.sustain, sound.ADSR.release);
-                if (i < channel_sequence_length[c]-1) {
-                    fprintf (phil, "&%s_%d[%d]}, ", soundname, c, sound_index+1);
-                }
-                last_note_end_beat = channels[c].sequence[i].beat + channels[c].sequence[i].length;
-                ++sound_index;
-            }
-            if (last_note_end_beat < final_beat) {
-                auto sound = SoundGenerate (.duration = (final_beat - last_note_end_beat) * SP8th);
-                fprintf (phil, "&%s_%d[%d]}, {.sample=&sound_sample_silence,.duration=%u,.next=%s_%d} };\n", soundname, c, sound_index, sound.duration, soundname, c);
-            }
-            else {
-                fprintf (phil, "%s_%d} };\n", soundname, c);
+    for (int i = 0; i < TRACK_COUNT; ++i) {
+        PrepareTrack (i);
+        if (track_is_used[i]) ++music_track_count;
+    }
+    
+    int final_column = 0;
+    for (int track = 0; track < TRACK_COUNT; ++track) {
+        for (int column = PATTERNS_PER_TRACK-1; column >= 0; --column) {
+            if (music_data.tracks.track[track].patterns[column]) {
+                final_column = MAX (final_column, column);
             }
         }
     }
+    int final_column_width = music_data.properties.pattern_eighths_per_column[final_column] ? music_data.properties.pattern_eighths_per_column[final_column] : music_data.patterns.eighths_per;
 
-    assert (active_channels);
-
-    fprintf (phil, "const sound_music_t %s = {.count = %d, .sounds = {", soundname, active_channels);
-    for (int i = 0; i < active_channels; ++i) {
-        fprintf (phil, "%s_%d,", soundname, active_channel_indices[i]);
+    // Loop
+    for (int track = 0; track < TRACK_COUNT; ++track) {
+        if (!track_is_used[track]) continue;
+        prepared_sounds[track][final_column][final_column_width-1].next = &prepared_sounds[track][music_data.properties.loop_point][0];
+        auto pi = music_data.tracks.track[track].patterns[final_column];
+        if (pi) {
+            for (int b = final_column_width-1; b >= 0; --b) {
+                auto w = music_data.patterns.pattern[pi].beats[b].eighths;
+                if (w > 0) {
+                    if (b + w == final_column_width)
+                        prepared_sounds[track][final_column][b].next = &prepared_sounds[track][music_data.properties.loop_point][0];
+                    break;
+                }
+            }
+        }
     }
-    fprintf (phil, "}};\n");
+    
+    for (int track = 0; track < TRACK_COUNT; ++track) {
+        if (!track_is_used[track]) continue;
+    }
+
+    success = true;
 
     return true;
 }
-
-void LoadSound (const char *filename, const char *codename) {
-    FILE *file = fopen (filename, "rb");
-    assert (file);
-
-	bool success = false;
-	char buf[8] = {};
-	fread (buf, strlen ("KSOUND"), 1, file);
-	if (strcmp(buf, "KSND") == 0) {
-		if (buf[4] == 0) {
-			success = true;
-			switch (buf[5]) {
-				case 3: LoadSoundV03 (file, codename); break;
-				default: success = false; break;
-			}
-		}
-	}
-	if (!success) {
-		printf ("Invalid file. Does not start with a valid magic value");
-	}
-    fclose (file);
-
-    // {
-    //     char buf[8] = {};
-    //     fread (buf, strlen ("KSOUND"), 1, file);
-    //     assert (StringsAreTheSame(buf, "KSOUND") && strlen (buf) == strlen ("KSOUND"));
-    // }
-    // int channel_count = fgetc (file);
-    // assert (channel_count > 0);
-    // int digitarr[16];
-    // for (int i = 0; i < channel_count; ++i) {
-    //     int sound_count = fgetc (file);
-    //     assert (sound_count > 0);
-    //     int digits = 0;
-    //     for (int div = sound_count; div > 0; div /= 10) ++digits;
-    //     digitarr[i] = digits;
-    //     for (int j = 0; j < sound_count; ++j) {
-    //         if (j > 0) {
-    //             fprintf (phil, ",.next=%s%1d%*d};", codename, i, digits, j);
-    //         }
-    //         fprintf (header, "extern const sound_t %s%1d%*d;\n", codename, i, digits, j);
-    //         SoundPlay_args soundargs;
-    //         fread (&soundargs, sizeof (soundargs), 1, file);
-    //         sound_t sound = SoundGenerate (soundargs);
-    //         fprintf(phil, "const sound_t %s%1d%*d={.instrument=%s,.volume=%f,.fadein=%u,.fadeout=%u,.duration=%u", codename, i, digits, j, instrument_names[sound.instrument], sound.volume, sound.fadein, sound.fadeout, sound.duration);
-    //         switch (sound.instrument) {
-    //             case instrument_sine:
-    //                 fprintf (phil, ",.sine={.frequency_begin=%u,.frequency_end=%u}", sound.sine.frequency_begin, sound.sine.frequency_end);
-    //                 break;
-    //             case instrument_triangle:
-    //                 fprintf (phil, ",.triangle={.period_begin=%u,.period_end=%u}", sound.triangle.period_begin, sound.triangle.period_end);
-    //                 break;
-    //             case instrument_square:
-    //                 fprintf (phil, ",.square={.period_begin=%u,.period_end=%u,.pulse_width_begin=%u,.pulse_width_end=%u}", sound.square.period_begin, sound.square.period_end, sound.square.pulse_width_begin, sound.square.pulse_width_end);
-    //                 break;
-    //             case instrument_noise:
-    //                 fprintf (phil, ",.noise={.hold_time_begin=%u,.hold_time_end=%u}", sound.noise.hold_time_begin, sound.noise.hold_time_end);
-    //                 break;
-    //             case instrument_saw:
-    //                 fprintf (phil, ",.saw={.period_begin=%u,.period_end=%u}", sound.saw.period_begin, sound.saw.period_end);
-    //                 break;
-    //             case instrument_silence:
-    //             case instrument_none:
-    //             case instrument_preparing:
-    //                 break;
-    //         }
-    //     }
-    //     fprintf (phil, "};\n");
-    // }
-    // fprintf (header, "extern const sound_group_t %s_group;", codename);
-    // fprintf (phil, "const sound_group_t %s_group={.count=%d,.sounds={", codename, channel_count);
-    // for (int i = 0; i < channel_count; ++i)
-    //     fprintf (phil, "&%s%1d%*d,", codename, i, digitarr[i], 0);
-    // fprintf (phil, "}};\n");
-
-    // fclose (file);
-}
-
-
-
-
-
-
-// sound_t* LoadWAV (const char *filename) {
-// 	FILE *file;
-
-//     [[gnu::packed]] struct {
-//         char magic_riff[4];
-//         int32_t filesize;
-//         char magic_wavefmt_[8];
-//         int32_t format_length;		// 16
-//         int16_t format_type;		// 1 = PCM
-//         int16_t num_channels;		// 1
-//         int32_t sample_rate;		// 44100
-//         int32_t bytes_per_second;	// sample_rate * num_channels * bits_per_sample / 8
-//         int16_t block_align;		// num_channels * bits_per_sample / 8
-//         int16_t bits_per_sample;	// 16
-//         char magic_data[4];
-//         int32_t data_size;
-//     } wav_header;
-
-// 	file = fopen(filename, "rb");
-// 	assert (file);
-
-//     fread (&wav_header, sizeof (wav_header), 1, file);
-
-// 	assert (!(wav_header.magic_riff[0] != 'R' || wav_header.magic_riff[1] != 'I' || wav_header.magic_riff[2] != 'F' || wav_header.magic_riff[3] != 'F'
-//     || wav_header.magic_wavefmt_[0] != 'W' || wav_header.magic_wavefmt_[1] != 'A' || wav_header.magic_wavefmt_[2] != 'V' || wav_header.magic_wavefmt_[3] != 'E'
-//     || wav_header.magic_wavefmt_[4] != 'f' || wav_header.magic_wavefmt_[5] != 'm' || wav_header.magic_wavefmt_[6] != 't' || wav_header.magic_wavefmt_[7] != ' '
-//     || wav_header.format_type != 1 || wav_header.num_channels <= 0 /*|| wav_header.sample_rate != 44100*/ || wav_header.bits_per_sample != 16
-//     || wav_header.magic_data[0] != 'd' || wav_header.magic_data[1] != 'a' || wav_header.magic_data[2] != 't' || wav_header.magic_data[3] != 'a'));
-
-//     int16_t *samples = malloc (wav_header.data_size);
-// 	assert (samples);
-
-// 	assert (fread(samples, 1, wav_header.data_size, file) == wav_header.data_size);
-
-//     if (wav_header.num_channels != 1) {
-//         printf ("File: %s has more than one channel (%d). Mixing all channels into one\n", filename, wav_header.num_channels);
-//         int32_t mix = 0;
-//         for (int i = 0; i < wav_header.data_size / 2 / wav_header.num_channels; ++i) {
-//             mix = 0;
-//             for (int j = 0; j < wav_header.num_channels; ++j) {
-//                 mix += (uint32_t)samples[i * wav_header.num_channels + j] + INT16_MIN;
-//             }
-//             mix /= wav_header.num_channels;
-//             mix -= INT16_MIN;
-//             samples[i] = (int16_t)mix;
-//         } 
-//     }
-
-// 	int sample_count = wav_header.data_size / (wav_header.bits_per_sample / 8) / wav_header.num_channels;
-//     sound_t *sound;
-
-//     printf ("%s sample rate: %d\n", filename, wav_header.sample_rate);
-//     if (wav_header.sample_rate != 22050) {
-//         printf ("Resampling!\n");
-//         float ratio = 22050.f / wav_header.sample_rate;
-//         uint32_t resample_count = sample_count * ratio + .5f;
-//         sound = malloc (sizeof(sound_t) + resample_count);
-//         assert (sound);
-//         sound->count = resample_count;
-//         for (int i = 0; i < resample_count; ++i) {
-//             float index = i * (1 / ratio);
-//             float frac = index - (int)index;
-//             float sample = samples[(int)index] * (1 - frac) + samples[(int)index + 1] * frac;
-//             sound->samples[i] = (uint8_t)((sample + INT16_MAX) / UINT16_MAX * UINT8_MAX);
-//         }
-//     }
-//     else {
-//         sound = malloc (sizeof (sound_t) +  sample_count);
-//         assert (sound);
-//         sound->count = sample_count;
-
-//         for (int s = 0; s < sample_count; ++s) {
-//             int32_t sam;
-//             sam = samples[s];
-//             sam += INT16_MIN;
-//             sam /= UINT16_MAX / UINT8_MAX;
-//             assert (sam < 256);
-//             sound->samples[s] = sam;
-//         }
-//     }
-
-// 	free (samples);
-
-// 	return sound;
-// }
 
 // Returns an allocated char array of the entire file contents.
 // YOU MUST DEALLOCATE THE POINTER!
@@ -843,4 +791,62 @@ char *ReadEntireFile (char *filename, int *return_file_length) {
     buffer[file_length] = 0;
     if (return_file_length) *return_file_length = file_length;
     return buffer;
+}
+
+bool LoadCursor (const char *const folder, const char *const codename) {
+    printf ("Loading cursor [%s]\n", codename);
+    auto result = folder_ChangeDirectory(folder);
+    if (result.is_error) return false;
+    DEFER (folder_ChangeDirectory (".."););
+
+    struct {
+        int x, y;
+    } cursor = {};
+    
+
+    int len = 0;
+    auto props = ReadEntireFile("properties.txt", &len);
+    if (props == NULL) {
+        printf ("Cursor properties file not found\n");
+        return false;
+    }
+    DEFER (free (props););
+
+    {
+        FILE *file_sprite = fopen ("sprite.bmp", "rb");
+        if (file_sprite == NULL) {
+            printf ("sprite.bmp file not found\n");
+            return false;
+        }
+        fclose (file_sprite);
+    }
+
+    auto sprite = sprite_LoadBMP("sprite.bmp");
+    if (sprite.w == 0 || sprite.h == 0) {
+        printf ("Sprite file invalid\n");
+        return false;
+    }
+
+    const char *p = props;
+    while (p < props + len) {
+        char key;
+        int value;
+        if (sscanf (p, "%c %d", &key, &value) != 2) break;
+        switch (key) {
+            case 'x': cursor.x = value; break;
+            case 'y': cursor.y = value; break;
+            default: printf ("Invalid key [%c]\n", key); return false;
+        }
+        while (*p != '\n' && p < props + len) ++p;
+        ++p;
+    }
+
+    fprintf (header, "extern const cursor_t %s;\n", codename);
+    fprintf (phil, "const cursor_t %s = {.offset = {.x = %d, .y = %d}, .sprite = &(sprite_t){.w = %d, .h = %d, .p = {", codename, cursor.x, cursor.y, sprite.w, sprite.h);
+    for (int i = 0; i < sprite.w * sprite.h; ++i) {
+        fprintf (phil, "%d,", sprite.p[i]);
+    }
+    fprintf (phil, "}}};\n");
+
+    return true;
 }

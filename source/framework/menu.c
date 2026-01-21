@@ -14,7 +14,7 @@
 
 #include "menu.h"
 
-extern const sprite_t framework_menu_cursor;
+extern const cursor_t framework_cursor;
 extern const sprite_t framework_menu_folder_open;
 extern const sprite_t framework_menu_back;
 
@@ -51,6 +51,7 @@ static submenu_t submenu_delete_confirmation = {
 
 void submenu_Init (submenu_t *self) {
 	assert (self);
+	if (!self->retain_selection) self->selected = 0;
 	switch (self->type) {
 		case menu_type_explorer: {
 			explorer_Init (&menu_explorer, self->explorer.base_directory_func());
@@ -83,6 +84,8 @@ void menu_Init (menu_t *self, submenu_t *initial_submenu) {
 	initial_submenu->parent = NULL;
 	submenu_Init (initial_submenu);
 	menu_CalculateDimensions(self);
+	if (self->transparent_background_darkess && self->selection_color == 0) self->selection_color = 255;
+	if (self->selection_color == 0) self->selection_color = 1;
 }
 
 vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length) {
@@ -258,6 +261,7 @@ static void SwitchMenu (menu_t *self, submenu_t *new_menu) {
 
 static void SelectItem (menu_t *self, int item_index) {
 	__label__ goto_select_item_list;
+	if (self->onConfirm) self->onConfirm ();
     auto submenu = self->submenu;
     if (item_index < 0) return;
     switch (submenu->type) {
@@ -308,6 +312,7 @@ static void SelectItem (menu_t *self, int item_index) {
 
 void MenuBack (menu_t *self) {
 	auto submenu = self->submenu;
+	if (self->onConfirm) self->onConfirm ();
     if (submenu->type == menu_type_explorer && menu_explorer.depth > 0) {
         char *source_child = menu_explorer.current_directory_string;
         char *c = source_child + strlen(source_child) - 2;
@@ -520,6 +525,14 @@ void menu_Render (menu_t *self, int depth) {
         default: break;
     }
 
+    if (self->transparent_background_darkess) {
+        const int16_t l = self->dimensions.x - 2;
+        const int16_t r = l + self->dimensions.w-1 + 3;
+        const int16_t b = self->dimensions.y;
+        const int16_t t = b + self->dimensions.h-1;
+        Render_DarkenRectangle (.l = l, .r = r, .b = b, .t = t, .depth = depth, .levels = self->transparent_background_darkess);
+    }
+
 	int explorer_start = 0;
 	int explorer_end = 0;
 
@@ -527,11 +540,33 @@ void menu_Render (menu_t *self, int depth) {
 	int x = self->dimensions.x;
 
 	switch (submenu->type) {
+		case menu_type_internal: {
+			goto goto_draw_box_list;
+		} break;
+		case menu_type_name_creator: break;
+		case menu_type_explorer:
+		case menu_type_list: {
+		goto_draw_box_list:
+			render_shape_t rectangle = {
+				.type = render_shape_rectangle,
+				.rectangle = {
+					.w = self->dimensions.w-1 + XMARGIN * 2,
+					.h = framework_font.line_height,
+					.x = self->dimensions.x - XMARGIN,
+					.color_edge = self->selection_color,
+				}
+			};
+			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * framework_font.line_height - rectangle.rectangle.h;
+			Render_Shape (.shape = rectangle, .depth = depth, .ignore_camera = true);
+		} break;
+	}
+
+	switch (submenu->type) {
 		case menu_type_list: {
 		goto_render_list:
 			auto item = submenu->list.items;
 			repeat (submenu->list.item_count) {
-				Render_Text (.x = x, .y = y, .string = item->name, .depth = depth, .flags.ignore_camera = true);
+				Render_Text (.x = x, .y = y, .string = item->name, .depth = depth, .ignore_camera = true);
 				switch (item->type) {
 					case menu_list_item_type_function:
 					case menu_list_item_type_submenu:
@@ -539,16 +574,16 @@ void menu_Render (menu_t *self, int depth) {
 					case menu_list_item_type_slider: {
 						int b = y - framework_font.line_height/2 - 3;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
-						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_edge = 1, .x = l, .w = SLIDER_WIDTH, .y = b, .h = 3}}, .depth = depth, .flags.ignore_camera = true);
+						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_edge = self->selection_color, .x = l, .w = SLIDER_WIDTH, .y = b, .h = 3}}, .depth = depth, .ignore_camera = true);
 						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / (float)item->slider.max);
-						if (item->slider.value_0_to_255 > 0) Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 255, .x0 = l+1, .x1 = l+1+w, .y0 = b+1, .y1 = b+1}}, .depth = depth, .flags.ignore_camera = true);
+						if (item->slider.value_0_to_255 > 0) Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 255, .x0 = l+1, .x1 = l+1+w, .y0 = b+1, .y1 = b+1}}, .depth = depth, .ignore_camera = true);
 					} break;
 					case menu_list_item_type_toggle: {
 						int b = y - framework_font.line_height;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						uint8_t fill_color = 0;
 						if (*item->toggle.var) fill_color = 255;
-						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .color_edge = 1, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .flags.ignore_camera = true);
+						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .color_edge = self->selection_color, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .ignore_camera = true);
 					} break;
 				}
 				y -= framework_font.line_height;
@@ -569,21 +604,21 @@ void menu_Render (menu_t *self, int depth) {
 					explorer_start = explorer_end - 17;
 				}
 			}
-			Render_Text (.x = x, .y = y + 20, .string = submenu->explorer.show_name_instead_of_directory ? submenu->name : menu_explorer.current_directory_string, .depth = depth, .flags.ignore_camera = true);
+			Render_Text (.x = x, .y = y + 20, .string = submenu->explorer.show_name_instead_of_directory ? submenu->name : menu_explorer.current_directory_string, .depth = depth, .ignore_camera = true);
 			for (int i = explorer_start; i < explorer_end; ++i) {
 				if (i == submenu->selected)
-					Render_Text (.x = x-10, .y = y, .string = ">", .depth = depth, .flags.ignore_camera = true);
-				Render_Text (.x = x, .y = y, .string = menu_explorer.filenames[i], .depth = depth, .flags.ignore_camera = true);
+					Render_Text (.x = x-10, .y = y, .string = ">", .depth = depth, .ignore_camera = true);
+				Render_Text (.x = x, .y = y, .string = menu_explorer.filenames[i], .depth = depth, .ignore_camera = true);
 				y -= framework_font.line_height;
 			}
-			Render_Sprite (.sprite = &framework_menu_folder_open, .x = RESOLUTION_WIDTH - framework_menu_folder_open.w, .y = RESOLUTION_HEIGHT - framework_menu_folder_open.h, .depth = depth, .flags.ignore_camera = true);
+			Render_Sprite (.sprite = &framework_menu_folder_open, .x = RESOLUTION_WIDTH - framework_menu_folder_open.w, .y = RESOLUTION_HEIGHT - framework_menu_folder_open.h, .depth = depth, .ignore_camera = true);
 		} break;
 
 		case menu_type_name_creator: {
 			const auto fc = &submenu->name_creator;
 			y = RESOLUTION_HEIGHT / 2;
 			int texty = y + framework_font.baseline;
-			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = y - 1, .w = self->dimensions.w, .h = 1, .color_edge = 1}}, .depth = depth);
+			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = y - 1, .w = self->dimensions.w, .h = 1, .color_edge = self->selection_color}}, .depth = depth);
 			auto cursorx = menu_ItemDimensions_Length(fc->text_buffer, fc->cursor).x + x;
 			vec2i_t cursorsize;
 			if (fc->cursor == strlen (fc->text_buffer)) {
@@ -594,42 +629,18 @@ void menu_Render (menu_t *self, int depth) {
 				cursorsize = menu_ItemDimensions_Length(&fc->text_buffer[fc->cursor], 1);
 			}
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = y, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62}}, .depth = depth);
-			Render_Text (.x = x, .y = y + framework_font.line_height, .string = fc->text_buffer, .depth = depth, .flags.ignore_camera = true);
+			Render_Text (.x = x, .y = y + framework_font.line_height, .string = fc->text_buffer, .depth = depth, .ignore_camera = true);
 		} break;
 		case menu_type_internal: {
-			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y, .string = "Really delete this file?", .depth = depth, .flags.ignore_camera = true);
-			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - framework_font.line_height, .string = delete_confirmation_filename, .depth = depth, .flags.ignore_camera = true);
+			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y, .string = "Really delete this file?", .depth = depth, .ignore_camera = true);
+			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - framework_font.line_height, .string = delete_confirmation_filename, .depth = depth, .ignore_camera = true);
 			goto goto_render_list;
 		} break;
 	}
 
-	switch (submenu->type) {
-		case menu_type_internal: {
-			goto goto_draw_box_list;
-		} break;
-		case menu_type_name_creator: break;
-		case menu_type_explorer:
-		case menu_type_list: {
-		goto_draw_box_list:
-			render_shape_t rectangle = {
-				.type = render_shape_rectangle,
-				.rectangle = {
-					.w = self->dimensions.w-1 + XMARGIN * 2,
-					.h = framework_font.line_height,
-					.x = self->dimensions.x - XMARGIN,
-					.color_edge = 1
-				}
-			};
-			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * framework_font.line_height - rectangle.rectangle.h;
-			Render_Shape (.shape = rectangle, .depth = depth - 1, .flags.ignore_camera = true);
-		} break;
-	}
+	if (submenu->parent != NULL) Render_Sprite (.sprite = &framework_menu_back, .y = RESOLUTION_HEIGHT - framework_menu_back.h, .depth = depth, .ignore_camera = true);
 
-	// Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = self->dimensions.x, .w = self->dimensions.w, .y = self->dimensions.y, .h = self->dimensions.h, .color_edge = 1}}, .depth = depth);
-
-	if (submenu->parent != NULL) Render_Sprite (.sprite = &framework_menu_back, .y = RESOLUTION_HEIGHT - framework_menu_back.h, .depth = depth, .flags.ignore_camera = true);
-
-	Render_Cursor (&framework_menu_cursor, mouse.x, mouse.y, 3, framework_menu_cursor.h-1);
+    Render_CursorAtRawMousePos (&framework_cursor);
 }
 
 static void menu_Delete_Yes () {

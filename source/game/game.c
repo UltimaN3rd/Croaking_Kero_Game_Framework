@@ -14,11 +14,11 @@
 
 #include "game.h"
 
-void game_Init ();
+void game_Init (const void *const ignore);
 void game_Update () {}
-void game_menu_Init ();
+void game_menu_Init (const void *const ignore);
 void game_menu_Update ();
-void gameplay_Init ();
+void gameplay_Init (const void *const ignore);
 void gameplay_Update ();
 
 const update_state_functions_t state_functions[update_state_count] = {
@@ -31,24 +31,27 @@ extern update_data_t update_data;
 extern const cereal_t cereal_options[];
 extern const size_t cereal_options_size;
 
-void game_Init () {
+char config_filename[560];
+char game_save_file[600];
+
+void game_Init (const void *const ignore) {
 	{
 		char buf[1024];
 		snprintf (buf, sizeof (buf), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
 		folder_CreateDirectoryRecursive(buf);
 	}
-	snprintf (update_data.config_filename, sizeof (update_data.config_filename), "%s/%s", os_public.directories.config, GAME_FOLDER_CONFIG);
-	folder_CreateDirectoryRecursive(update_data.config_filename);
-	snprintf (update_data.config_filename, sizeof (update_data.config_filename), "%s/%s/config", os_public.directories.config, GAME_FOLDER_CONFIG);
-	cereal_ReadFromFile(cereal_options, cereal_options_size, update_data.config_filename);
+	snprintf (config_filename, sizeof (config_filename), "%s/%s", os_public.directories.config, GAME_FOLDER_CONFIG);
+	folder_CreateDirectoryRecursive(config_filename);
+	snprintf (config_filename, sizeof (config_filename), "%s/%s/config", os_public.directories.config, GAME_FOLDER_CONFIG);
+	cereal_ReadFromFile(cereal_options, cereal_options_size, config_filename);
 	SoundMusicSetVolume (submenu_vars.music_volume / 255.f);
 	SoundFXSetVolume (submenu_vars.fx_volume / 255.f);
 	os_Fullscreen(submenu_vars.fullscreen);
 
-	snprintf (update_data.game_save_filename, sizeof(update_data.game_save_filename), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
-	folder_CreateDirectoryRecursive(update_data.game_save_filename);
-	snprintf (update_data.game_save_filename, sizeof(update_data.game_save_filename), "%s/%s/high_score", os_public.directories.savegame, GAME_FOLDER_SAVES);
-	cereal_ReadFromFile(cereal_savedata, cereal_savedata_size, update_data.game_save_filename);
+	snprintf (game_save_file, sizeof(game_save_file), "%s/%s", os_public.directories.savegame, GAME_FOLDER_SAVES);
+	folder_CreateDirectoryRecursive(game_save_file);
+	snprintf (game_save_file, sizeof(game_save_file), "%s/%s/high_score", os_public.directories.savegame, GAME_FOLDER_SAVES);
+	cereal_ReadFromFile(cereal_savedata, cereal_savedata_size, game_save_file);
 
 	update_data.debug.show_framerate = &submenu_vars.debug.show_framerate;
 	update_data.debug.show_rendertime = &submenu_vars.debug.show_rendertime;
@@ -104,8 +107,10 @@ const size_t cereal_options_size = sizeof (cereal_options) / sizeof (*cereal_opt
 
 #include "DEFER.h"
 extern update_data_t update_data;
-void menu_Options_OnExit () {
-	cereal_WriteToFile(cereal_options, cereal_options_size, update_data.config_filename);
+
+
+void SaveSettings () {
+	cereal_WriteToFile(cereal_options, cereal_options_size, config_filename);
 }
 
 void menu_Options_Debug_OpenFolder () {
@@ -126,7 +131,7 @@ submenu_t submenus_options[] = {
 		.color = 212,
 		.type = menu_type_list,
 		.retain_selection = true,
-		.on_exit_func = menu_Options_OnExit,
+		.on_exit_func = SaveSettings,
 		.list = {
 			.item_count = 4,
 			.items = {
@@ -178,3 +183,13 @@ const cereal_t cereal_savedata[] = {
 };
 
 const size_t cereal_savedata_size = sizeof(cereal_savedata) / sizeof(*cereal_savedata);
+
+void game_ToggleFullscreen () {
+	os_Fullscreen (!os_public.window.is_fullscreen);
+	submenu_vars.fullscreen = os_public.window.is_fullscreen;
+	SaveSettings ();
+}
+
+void SaveGame () {
+	if (!cereal_WriteToFile(cereal_savedata, cereal_savedata_size, game_save_file)) LOG ("Failed to save game");
+}

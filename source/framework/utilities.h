@@ -30,8 +30,10 @@
 #define QUARTERPI (M_PI / 4.0)
 #define ROOT2 1.4142135623730950488016887242096980785696718753769480731766797379907324784621070388503875343276415727
 #include <string.h>
+#include <assert.h>
 
 #include "turns_math.h"
+#include "DEFER.h"
 
 #ifndef NDEBUG
 #define UNREACHABLE(...) do { LOG (__VA_ARGS__); abort (); } while (false)
@@ -40,6 +42,14 @@
 #endif
 
 #define SWAP(a, b) do {auto t = (a); (a) = (b); (b) = t;} while(0)
+
+#ifndef _Countof
+    #if __has_include(<stdcountof.h>)
+        #include <stdcountof.h>
+    #else
+        #define _Countof(__a__) (sizeof (__a__) / sizeof (*__a__))
+    #endif
+#endif
 
 typedef struct {
 	float x, y;
@@ -79,6 +89,16 @@ typedef union {
     struct { int32_t width, height; };
     int32_t array[2];
 } vec2i_t;
+
+typedef struct { int16_t x, y; } vec2i16_t;
+typedef struct { int8_t x, y; } vec2i8_t;
+typedef struct { uint8_t x, y; } vec2u8_t;
+
+static inline float vec2i16_Distance (vec2i16_t a, vec2i16_t b) {
+    int16_t dx = b.x - a.x;
+    int16_t dy = b.y - a.y;
+    return sqrtf (dx * dx + dy * dy);
+}
 
 // Checks the number of characters of the smaller of the two strings
 bool StringsAreTheSame (const char *a, const char *b);
@@ -197,3 +217,50 @@ static inline int StringCompareCaseInsensitive (const char *a, const char *b) {
 #define ROUNDF(flt) (((flt) > 0) ? ((flt)+.5f) : ((flt)-.5f))
 
 void BresenhamLine (int x1, int y1, int x2, int y2, void (*PixelFunction) (int x, int y));
+
+#if WIN32
+#include <io.h>
+static inline bool FileExists (const char *const filename) { return _access(filename, 0) == 0; }
+#else
+#include <unistd.h>
+static inline bool FileExists (const char *const filename) { return access (filename, F_OK) == 0; }
+#endif
+
+static inline char *ReadEntireFileAllocateBuffer (const char *filename) {
+	FILE *file = fopen (filename, "rb");
+	if (!file) { LOG ("Failed to read file [%s]", filename); return NULL; }
+	DEFER (fclose (file));
+	long start_pos = ftell (file);
+	fseek (file, 0, SEEK_END);
+	long end_pos = ftell (file);
+	fseek (file, start_pos, SEEK_SET);
+	long size = end_pos - start_pos;
+	char *buf = malloc (size);
+	assert (buf); if (buf == NULL) { LOG ("[%s] Failed to allocate %ld bytes", filename, size); return NULL; }
+    bool success = false;
+	DEFER (if (!success) free (buf););
+	auto result = fread (buf, 1, size, file);
+    assert (result == size);
+    if (result != size) { LOG ("Reading file [%s] only read %lu/%ld bytes", filename, result, size); return NULL; }
+    success = true;
+    return buf;
+}
+
+#define IS_POINTER(__var_or_type__) (__builtin_types_compatible_p(typeof (__var_or_type__), void*) || __builtin_types_compatible_p(typeof (__var_or_type__), void const*) || __builtin_types_compatible_p(typeof (__var_or_type__), void volatile*) || __builtin_types_compatible_p(typeof (__var_or_type__), void const volatile*))
+
+#define foreach(__element_name__, __array__) for (auto __element_name__ = &__array__[0]; __element_name__ < 1[&__array__]; ++__element_name__)
+
+static inline uint32_t RandFast () {
+    static uint32_t r = 1;
+	r ^= r << 13;
+	r ^= r >> 17;
+	r ^= r << 5;
+	return r;
+}
+
+static inline float RandFastf () { return (float)RandFast() / UINT32_MAX; }
+
+static inline int32_t RandFast_Range (int32_t from, int32_t to) {
+    if (from > to) SWAP (from, to);
+    return (int32_t)(RandFastf() * (to - from) + from);
+}

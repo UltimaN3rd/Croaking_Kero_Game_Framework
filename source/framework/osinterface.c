@@ -2106,15 +2106,13 @@ void os_DrawScreen () {
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
 	glUniform2f (os_private.gl.locations.vertex.scale, (float)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (float)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
-	if (os_LogGLErrors ()) LOG ("Had GL errors");
+	// if (os_LogGLErrors ()) LOG ("Had GL errors");
 	// glActiveTexture(GL_TEXTURE0);
 	// glBindTexture (GL_TEXTURE_2D, os_private.gl.texture);
 	if (os_LogGLErrors ()) LOG ("Had GL errors");
+	// BUG: When I ALT+F4, this line sometimes segfaults
 	glTexImage2D (GL_TEXTURE_2D, 0, GL_RED, os_private.frame_buffer.width, os_private.frame_buffer.height, 0, GL_RED, GL_UNSIGNED_BYTE, os_private.frame_buffer.pixels);
 	if (os_LogGLErrors ()) LOG ("Had GL errors");
-	// glBindVertexArray (os_private.gl.vao);
-	// if (os_LogGLErrors ()) LOG ("Had GL errors");
-	// glDrawArrays (GL_TRIANGLE_STRIP, 0, 4);
 	glBegin (GL_TRIANGLE_STRIP);
 	glTexCoord2f (0,0); glVertex2f(-1,-1);
 	glTexCoord2f (0,1); glVertex2f(-1, 1);

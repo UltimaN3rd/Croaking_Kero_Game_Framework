@@ -31,3 +31,7 @@
     #error "C23 unreachable() does not seem to be supported by your compiler."
 #endif
 #endif
+
+#ifndef _Countof
+#define _Countof(__a__) (sizeof(__a__) / sizeof(*__a__))
+#endif

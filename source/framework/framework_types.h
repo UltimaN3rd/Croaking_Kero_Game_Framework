@@ -19,6 +19,7 @@
 #include <float.h>
 #include <inttypes.h>
 #include <assert.h>
+#include "c23defs.h"
 
 #define MAX(__a__, __b__) ({auto __a1__ = (__a__); auto __b1__ = (__b__); __a1__ > __b1__ ? __a1__ : __b1__;})
 #define MIN(__a__, __b__) ({auto __a1__ = (__a__); auto __b1__ = (__b__); __a1__ < __b1__ ? __a1__ : __b1__;})
@@ -31,14 +32,9 @@ typedef enum { MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE, MOUSE_X1, MOUSE_X2 } mouse
 #define MOUSE_BUTTON_COUNT (MOUSE_X2+1)
 
 typedef struct {
-	void (*Initialize) ();
+	void (*Initialize) (const void *const data);
 	void (*Update) ();
 } update_state_functions_t;
-
-typedef struct {
-	int x, y;
-	uint8_t buttons;
-} mouse_t;
 
 typedef union {
 	int32_t i32;
@@ -81,7 +77,7 @@ typedef struct {
     int8_t descent[BITMAP_FONT_NUM_VISIBLE_CHARS];
 } font_t;
 
-#include "samples.h"
+typedef enum { sound_waveform_none, sound_waveform_sine, sound_waveform_triangle, sound_waveform_saw, sound_waveform_pulse, sound_waveform_noise, sound_waveform_silence, sound_waveform_preparing } sound_waveform_e;
 
 typedef struct {
     float peak;
@@ -91,15 +87,21 @@ typedef struct {
     uint16_t release;
 } ADSR_t;
 
+typedef struct {
+    uint16_t frequency_range;
+    uint16_t vibrations_per_hundred_seconds;
+} vibrato_t;
+
 typedef struct sound_t {
-    uint32_t t;
     uint32_t duration;
     const struct sound_t *next;
-    float d;
-    int16_t frequency_begin, frequency_end;
-    uint8_t ADSR_state;
+    uint16_t frequency;
     ADSR_t ADSR;
-    const sound_sample_t *sample;
+	vibrato_t vibrato;
+	int16_t sweep; // 0 means frequency stays the same. Otherwise, this is an offset to which frequency will lerp through the duration of the sound
+	int8_t square_duty_cycle; // 0 produces a contant signal (no sound). 1 to 127 represent ~1%-50% duty cycle. The top 50% is left out since it's equivalent (usually) to the bottom 50% in reverse. Only has an effect when waveform == sound_waveform_pulse
+	int8_t square_duty_cycle_sweep; // Delta from starting duty cycle across full duration of sound
+    sound_waveform_e waveform;
 } sound_t;
 
 typedef struct {
@@ -111,3 +113,10 @@ typedef struct {
     uint8_t count;
     counted_by(count) const sound_t *sounds[];
 } sound_music_t;
+
+typedef struct {
+    struct {
+        int16_t x, y;
+    } offset;
+    const sprite_t *sprite;
+} cursor_t;
