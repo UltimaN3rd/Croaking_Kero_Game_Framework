@@ -83,10 +83,9 @@ void *Update(void*) {
 	us_per_frame = 1000000 / 120; // Update rate = 120Hz
 	time_last = os_uTime ();
 
-	zen_timer_t frame_timer;
+	Update_ChangeState(0);
 
-	update_state_e current_state = -1;
-	update_data.new_state = 0;
+	zen_timer_t frame_timer;
 
 	// uint32_t keyboard_event_count = 0;
 	// uint32_t mouse_event_count = 0;
@@ -261,6 +260,41 @@ update_data.frame.mouse.scroll = 0;
 			asm volatile("" ::: "memory");
 		}
 
+		update_data.frame = unedited_frameinput; // Restore input state in case game modified it
+
+		if (state_change.happened) {
+			state_change.happened = false;
+			folder_ReturnToBaseDirectory ();
+
+			memset (update_data.frame.keyboard, 0, sizeof (update_data.frame.keyboard));
+			update_data.frame.mouse = (typeof(update_data.frame.mouse)){.x = update_data.frame.mouse.x, .y = update_data.frame.mouse.y};
+
+			for (int16_t i = update_data.objects.count-1; i >= 0; --i) {
+				const auto obj = &((update_object_t*)update_data.objects.mem)[i];
+				if (!obj->survive_state_change)
+					Update_ObjectDelete (i);
+			}
+
+			Update_ObjectClearTopUnusedMemory ();
+
+			#ifndef UPDATE_PARTICLES_DONT_CLEAR_ON_STATE_CHANGE
+			update_data.gameplay.particles.count = 0;
+			#endif
+
+			// update_state_e previous_state = current_state;
+			current_state = state_change.new_state;
+			state_functions[current_state].Initialize (&state_change.data);
+
+			if (state_change.FuncRunAfterStateChange) state_change.FuncRunAfterStateChange ();
+			if (state_change.FuncRunAfterStateChange) state_change.FuncRunAfterStateChange = NULL;
+		}
+		else {
+			Update_ObjectClearTopUnusedMemory ();
+		}
+
+		if (object_created_or_destroyed_this_frame)
+			Update_ObjectSort (0);
+
 		int64_t frame_time = zen_End (&frame_timer);
 
 		// Sleep until next frame
@@ -412,22 +446,48 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 	}
 }
 
-void Update_ChangeState (update_state_e new_state) {
+void Update_ChangeStatePrepare_ (update_state_e new_state, const void *const data_to_copy_max_1kb, const size_t data_size) {
 	assert (new_state >= 0 && new_state < update_state_count); if (new_state < 0 || new_state >= update_state_count) { LOG ("Update new state %d out of bounds", new_state); new_state = 0; }
-	update_data.new_state = new_state;
+
+	state_change = (typeof(state_change)) {
+		.new_state = new_state,
+		.FuncRunAfterStateChange = state_change.FuncRunAfterStateChange,
+	};
+	memcpy (state_change.data, data_to_copy_max_1kb, data_size);
 }
 
-void FloatyTextCreate (int x, int y, int vy, int time, const char *const str) {
-	assert (update_data.floaty_text.count <= FLOATY_TEXT_MAX);
-	if (update_data.floaty_text.count == FLOATY_TEXT_MAX) FloatyTextDelete (0);
-	assert (update_data.floaty_text.count < FLOATY_TEXT_MAX);
+void Update_ChangeStateNow_ () {
+	state_change.happened = true;
+}
 
-	unsigned int i = update_data.floaty_text.count++;
-	update_data.floaty_text.text[i].x = x;
-	update_data.floaty_text.text[i].y = (int32split_t){.high = y};
-	update_data.floaty_text.text[i].vy = vy;
-	update_data.floaty_text.text[i].time = time;
-	snprintf (update_data.floaty_text.text[i].string, sizeof(update_data.floaty_text.text[i].string), str);
+void Update_RunAfterStateChange (void (*func)()) {
+	state_change.FuncRunAfterStateChange = func;
+}
+
+static void Update_ObjectClearTopUnusedMemory () {
+	char *addr = &update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE - update_data.objects.top_used];
+	while (addr - update_data.objects.mem < UPDATE_OBJECT_MEMORY_SIZE && !((update_object_header_t*)addr)->used) {
+		assert (addr + ((update_object_header_t*)addr)->size <= &update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE]);
+		addr += ((update_object_header_t*)addr)->size;
+	}
+	const auto new_top = UPDATE_OBJECT_MEMORY_SIZE - (addr - update_data.objects.mem);
+	update_data.objects.top_used = new_top;
+}
+
+static void Update_ObjectDelete (uint16_t index) {
+	assert (index < update_data.objects.count);
+	assert (update_data.objects.count > 0);
+	--update_data.objects.count;
+	
+	const auto obj = &((update_object_t*)update_data.objects.mem)[index];
+	update_object_header_t *header = (update_object_header_t*)(update_data.objects.mem + obj->memory_offset - sizeof (update_object_header_t));
+	header->used = false;
+
+	for (uint16_t i = index; i < update_data.objects.count; ++i) {
+		((update_object_t*)update_data.objects.mem)[i] = ((update_object_t*)update_data.objects.mem)[i+1];
+	}
+
+	object_created_or_destroyed_this_frame = true;
 }
 
 // Sort starting from index, continuing up. If 0 or 1, sort all objects.
@@ -474,9 +534,23 @@ uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, c
 	return id;
 }
 
-void FloatyTextDraw () {
-	for (int i = 0; i < update_data.floaty_text.count; ++i) {
-		auto t = update_data.floaty_text.text[i];
-		Render_Text (.x = t.x, .y = t.y.high, .string = t.string);
+void Update_ClearInputAll () {
+	update_data.frame = (typeof(update_data.frame)){};
+}
+
+void Update_ClearInputMouse () {
+	update_data.frame.mouse = (typeof(update_data.frame.mouse)){};
+}
+
+void Update_ClearInputMouseButtons () {
+	memset (update_data.frame.mouse.buttons, 0, sizeof (update_data.frame.mouse.buttons));
+}
+
+void Update_ClearInputKeyboard () {
+	memset (update_data.frame.keyboard, 0, sizeof (update_data.frame.keyboard));
+	update_data.frame.typing = (typeof(update_data.frame.typing)){};
 	}
+
+typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState () {
+	return unedited_frameinput;
 }

@@ -45,7 +45,6 @@ typedef struct update_data_s { // update_data_t
 			int time[PARTICLES_MAX];
 		} particles;
 	} gameplay;
-	update_state_e new_state;
 	#define KEYBOARD_EVENT_MAX 256
 	struct {
 		uint32_t count;
@@ -101,6 +100,11 @@ typedef struct update_data_s { // update_data_t
 	} objects;
 } update_data_t;
 
+void Update_ClearInputAll ();
+void Update_ClearInputMouse ();
+void Update_ClearInputMouseButtons ();
+void Update_ClearInputKeyboard ();
+
 typedef struct {
 	bool gravity;
 	int time;
@@ -119,12 +123,39 @@ typedef struct {
 #define CreateParticlesFromSprite(sprite, x, y, direction, velocity, ...) CreateParticlesFromSprite_ (sprite, x, y, direction, velocity, (CreateParticlesFromSprite_arguments){__VA_ARGS__})
 void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float direction, int32_t velocity, CreateParticlesFromSprite_arguments arguments);
 
-void Update_ChangeState (update_state_e new_state);
+#define UPDATE_CHANGE_STATE_DATA_SIZE_MAX 1024
 
-#define FloatyTextPrintf(x, y, vy, time, str, ...) do {\
-	char s[32];\
-	snprintf (s, 32, str, __VA_ARGS__);\
-	FloatyTextCreate (x, y, vy, time, s);\
+// Careful calling this! The second argument must either be missing, or some data to be instantly copied to a 1KB buffer.
+// If you're passing an address to some other data, that address must remain valid until the end of the frame when it will be dereferenced!
+#define Update_ChangeState(new_state__, ...) \
+	do { \
+		__VA_OPT__(static_assert (sizeof (__VA_ARGS__) <= UPDATE_CHANGE_STATE_DATA_SIZE_MAX);) \
+		Update_ChangeStatePrepare_ (new_state__, 0 __VA_OPT__(+ &__VA_ARGS__), 0 __VA_OPT__(+ sizeof (__VA_ARGS__))); \
+		Update_ChangeStateNow_ (); \
+	} while (0)
+
+// If you use this, you must later call Update_ChangeStateNow_(); to actually do the state change
+#define Update_ChangeStatePrepare(new_state__, ...) \
+	do { \
+		__VA_OPT__(static_assert (sizeof (__VA_ARGS__) <= UPDATE_CHANGE_STATE_DATA_SIZE_MAX);) \
+		Update_ChangeStatePrepare_ (new_state__, 0 __VA_OPT__(+ &__VA_ARGS__), 0 __VA_OPT__(+ sizeof (__VA_ARGS__))); \
 } while (0)
-void FloatyTextCreate (int x, int y, int vy, int time, const char *const str);
-void FloatyTextDelete (unsigned int i);
+void Update_ChangeStatePrepare_ (update_state_e new_state, const void *const data_to_copy_max_1kb, const size_t data_size);
+void Update_ChangeStateNow_ ();
+void Update_RunAfterStateChange (void (*func)());
+
+typedef bool (*Update_Object_Func_t) (const void *self);
+
+uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change);
+
+// 4th argument is your object, which can be initialized as (object_t){a, b, c}
+#define Update_ObjectCreate(update_and_render_func__, layer__, survive_state_change__, ...) \
+	({ \
+		static_assert (__VA_OPT__(true), "The object must be the final argument"); \
+		static_assert (_Generic (typeof(update_and_render_func__(NULL)), bool: true, default: false), "Return value of update & render function must be bool"); \
+		static_assert (!IS_POINTER (typeof(__VA_ARGS__)), "Do not pass a pointer - pass the actual object data by value. You may need to wrap it in a struct."); \
+		static_assert (layer__ >= -128 && layer__ <= 127, "Layer must be between -128 and 127"); \
+		Update_ObjectCreate_ (&(__VA_ARGS__), sizeof (typeof(__VA_ARGS__)), (Update_Object_Func_t)(update_and_render_func__), layer__, survive_state_change__); \
+	})
+
+typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState ();
