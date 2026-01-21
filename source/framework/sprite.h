@@ -21,9 +21,9 @@
 
 void sprite_Blit(const sprite_t *source, sprite_t *destination, int x, int y);
 
-void sprite_BlitRotated90(const sprite_t *source, sprite_t *destination, int x, int y);
-void sprite_BlitRotated180(const sprite_t *source, sprite_t *destination, int x, int y);
-void sprite_BlitRotated270(const sprite_t *source, sprite_t *destination, int x, int y);
+void sprite_BlitRotated90(const sprite_t *source, sprite_t *destination, int x, int y, int originx, int originy);
+void sprite_BlitRotated180(const sprite_t *source, sprite_t *destination, int x, int y, int originx, int originy);
+void sprite_BlitRotated270(const sprite_t *source, sprite_t *destination, int x, int y, int originx, int originy);
 
 void sprite_BlitFlippedHorizontally(const sprite_t *source, sprite_t *destination, int x, int y);
 void sprite_BlitFlippedVertically(const sprite_t *source, sprite_t *destination, int x, int y);
@@ -33,10 +33,11 @@ void sprite_SampleRotatedFlipped(const sprite_t *source, sprite_t *destination, 
 
 
 void sprite_BlitColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
+void sprite_BlitSubstituteColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color_from, uint8_t color_to);
 
-void sprite_BlitRotated90Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
-void sprite_BlitRotated180Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
-void sprite_BlitRotated270Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
+void sprite_BlitRotated90Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color, int originx, int originy);
+void sprite_BlitRotated180Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color, int originx, int originy);
+void sprite_BlitRotated270Color(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color, int originx, int originy);
 
 void sprite_BlitFlippedHorizontallyColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
 void sprite_BlitFlippedVerticallyColor(const sprite_t *source, sprite_t *destination, int x, int y, uint8_t color);
