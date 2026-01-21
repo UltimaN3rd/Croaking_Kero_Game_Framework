@@ -60,6 +60,14 @@ typedef struct __attribute__((__packed__)) {
 			int x, y;
 			uint8_t color;
 		} dot;
+		struct __attribute__((__packed__)) {
+			int16_t x0, y0, x1, y1, x2, y2;
+			struct __attribute__((__packed__)) {
+				bool center_horizontally:1;
+				bool center_vertically:1;
+			} flags;
+			uint8_t color_edge, color_fill;
+		} triangle;
 	};
 } render_shape_t;
 

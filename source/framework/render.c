@@ -749,6 +749,233 @@ void *Render (void*) {
 							if (d.x < 0 || d.x > frame->w-1 || d.y < 0 || d.y > frame->h-1) break;
 							frame->p[d.x + d.y * frame->w] = d.color;
 						} break;
+
+						case render_shape_triangle: { // Incomplete. Only does edges, and does them kinda ugly
+							auto t = s.triangle;
+							struct {int x, y;} ps[3] = {{t.x0,t.y0}, {t.x1,t.y1}, {t.x2,t.y2}};
+							// Sort points by height
+							if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
+							if (ps[1].y > ps[0].y) SWAP (ps[0], ps[1]);
+							if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
+
+							typeof(*ps) tri1[3], tri2[3];
+							bool do_tri1 = true, do_tri2 = true;
+
+							if (ps[0].y == ps[1].y) { // Flat top triangle
+								if (ps[0].y == ps[2].y) { // Single horizontal line
+									s.type = render_shape_line;
+									s.line.x0 = MIN (ps[0].x, MIN (ps[1].x, ps[2].x));
+									s.line.x1 = MAX (ps[0].x, MAX (ps[1].x, ps[2].x));
+									s.line.y0 = s.line.y1 = ps[0].y;
+									s.line.color = t.color_edge;
+									goto goto_render_line;
+								}
+								else {
+									tri2[0] = ps[0];
+									tri2[1] = ps[1];
+									assert (tri2[0].y == tri2[1].y);
+									if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
+									tri2[2] = ps[2];
+									do_tri1 = false;
+								}
+							}
+							else if (ps[1].y == ps[2].y) { // Flat bottom triangle
+								tri1[0] = ps[0];
+								tri1[1] = ps[1];
+								tri1[2] = ps[2];
+								assert (tri1[1].y == tri1[2].y);
+								if (tri1[1].x > tri1[2].x) SWAP (tri1[0], tri1[1]);
+								do_tri2 = false;
+							}
+							else { // Split the general triangle into a flat-bottom and flat-top
+								tri1[0] = ps[0];
+								assert (ps[0].y != ps[1].y); assert (ps[1].y != ps[2].y);
+								if (ps[1].y > ps[2].y) {
+									tri1[1] = ps[1];
+									tri1[2].y = tri1[1].y;
+									float dy = ps[2].y - ps[0].y;
+									float slope = (ps[2].x - ps[0].x) / dy;
+									float distance = (ps[1].y - ps[0].y) / dy;
+									tri1[2].x = distance * (ps[2].x - ps[0].x) + ps[0].x;
+
+									tri2[0] = tri1[1];
+									tri2[1] = tri1[2];
+									tri2[2] = ps[2];
+								}
+								else {
+									tri1[1] = ps[2];
+									tri1[2].y = tri1[1].y;
+									float dy = ps[1].y - ps[0].y;
+									float slope = (ps[1].x - ps[0].x) / dy;
+									float distance = (ps[2].y - ps[0].y) / dy;
+									tri1[2].x = distance * (ps[1].x - ps[0].x) + ps[0].x;
+
+									tri2[0] = tri1[1];
+									tri2[1] = tri1[2];
+									tri2[2] = ps[1];
+								}
+							}
+
+							int y = tri1[0].y;
+							if (do_tri1) { // Flat bottom triangle
+								if (tri1[1].x > tri1[2].x) SWAP (tri1[1], tri1[2]);
+								// Guaranteed that tri1[0].y is greater than tri1[1].y & tri1[2].y
+								int bottom = tri1[1].y;
+
+								struct {
+									int x, dx, ax, sx, d;
+								} l, r;
+
+								l.x = tri1[0].x;
+								l.dx = tri1[1].x - l.x;
+								l.ax = abs (l.dx) * 2;
+								l.sx = SIGN (l.dx);
+
+								r.x = l.x;
+								r.dx = tri1[2].x - r.x;
+								r.ax = abs (r.dx) * 2;
+								r.sx = SIGN (r.dx);
+
+								int dy = tri1[1].y - tri1[0].y;
+								int ay = abs (dy) * 2;
+
+								int ly = y;
+								if (l.ax > ay) {
+									l.d = ay - (l.ax / 2);
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (l.x == tri1[1].x) break;
+										if (l.d >= 0) {
+											--ly;
+											l.d -= l.ax;
+										}
+										l.x += l.sx;
+										l.d += ay;
+									}
+								}
+								else {
+									l.d = l.ax - ay / 2;
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (ly == tri1[1].y) break;
+										if (l.d >= 0) {
+											l.x += l.sx;
+											l.d -= ay;
+										}
+										--ly;
+										l.d += l.ax;
+									}
+								}
+
+								int ry = y;
+								if (r.ax > ay) {
+									r.d = ay - (r.ax / 2);
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (r.x == tri1[2].x) break;
+										if (r.d >= 0) {
+											--ry;
+											r.d -= r.ax;
+										}
+										r.x += r.sx;
+										r.d += ay;
+									}
+								}
+								else {
+									r.d = r.ax - ay / 2;
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (ry == tri1[1].y) break;
+										if (r.d >= 0) {
+											r.x += r.sx;
+											r.d -= ay;
+										}
+										--ry;
+										r.d += r.ax;
+									}
+								}
+							}
+
+							if (do_tri2) { // Flat top triangle
+								if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
+								// Guaranteed that tri2[2].y is less than tri2[0].y & tri2[1].y
+								int bottom = tri2[2].y;
+								y = tri2[0].y;
+
+								struct {
+									int x, dx, ax, sx, d;
+								} l, r;
+
+								l.x = tri2[0].x;
+								l.dx = tri2[2].x - l.x;
+								l.ax = abs (l.dx) * 2;
+								l.sx = SIGN (l.dx);
+
+								r.x = tri2[1].x;
+								r.dx = tri2[2].x - r.x;
+								r.ax = abs (r.dx) * 2;
+								r.sx = SIGN (r.dx);
+
+								int dy = tri2[2].y - tri2[0].y;
+								int ay = abs (dy) * 2;
+
+								int ly = y;
+								if (l.ax > ay) {
+									l.d = ay - (l.ax / 2);
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (l.x == tri2[2].x) break;
+										if (l.d >= 0) {
+											--ly;
+											l.d -= l.ax;
+										}
+										l.x += l.sx;
+										l.d += ay;
+									}
+								}
+								else {
+									l.d = l.ax - ay / 2;
+									for (;;) {
+										frame->p[l.x + ly * frame->w] = t.color_edge;
+										if (ly == tri2[2].y) break;
+										if (l.d >= 0) {
+											l.x += l.sx;
+											l.d -= ay;
+										}
+										--ly;
+										l.d += l.ax;
+									}
+								}
+
+								int ry = y;
+								if (r.ax > ay) {
+									r.d = ay - (r.ax / 2);
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (r.x == tri2[2].x) break;
+										if (r.d >= 0) {
+											--ry;
+											r.d -= r.ax;
+										}
+										r.x += r.sx;
+										r.d += ay;
+									}
+								}
+								else {
+									r.d = r.ax - ay / 2;
+									for (;;) {
+										frame->p[r.x + ry * frame->w] = t.color_edge;
+										if (ry == tri2[2].y) break;
+										if (r.d >= 0) {
+											r.x += r.sx;
+											r.d -= ay;
+										}
+										--ry;
+										r.d += r.ax;
+									}
+								}
+							}
+						}
 					}
 				} break;
 
