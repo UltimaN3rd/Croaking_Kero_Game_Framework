@@ -268,10 +268,6 @@ void UpdateDead () {
     }
 }
 
-void SaveGame () {
-	if (!cereal_WriteToFile(cereal_savedata, cereal_savedata_size, update_data.game_save_filename)) LOG ("Failed to save game");
-}
-
 void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
