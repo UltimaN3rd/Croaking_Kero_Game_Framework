@@ -88,6 +88,16 @@ typedef union {
     int32_t array[2];
 } vec2i_t;
 
+typedef struct { int16_t x, y; } vec2i16_t;
+typedef struct { int8_t x, y; } vec2i8_t;
+typedef struct { uint8_t x, y; } vec2u8_t;
+
+static inline float vec2i16_Distance (vec2i16_t a, vec2i16_t b) {
+    int16_t dx = b.x - a.x;
+    int16_t dy = b.y - a.y;
+    return sqrtf (dx * dx + dy * dy);
+}
+
 // Checks the number of characters of the smaller of the two strings
 bool StringsAreTheSame (const char *a, const char *b);
 
