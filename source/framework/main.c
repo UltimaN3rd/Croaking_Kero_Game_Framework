@@ -18,6 +18,8 @@
 
 void *Update(void*);
 
+void game_ToggleFullscreen ();
+
 update_data_t update_data = {};
 render_data_t render_data = {};
 pthread_t thread_render = 0, thread_update = 0, thread_sound = 0;
@@ -132,7 +134,7 @@ int main (int argc, char **argv) {
 				switch (event.key) {
 					case os_KEY_ENTER: {
 						if (os_public.keyboard[os_KEY_LALT] || os_public.keyboard[os_KEY_RALT]) {
-							os_Fullscreen (!os_public.window.is_fullscreen);
+							game_ToggleFullscreen ();
 							goto skip_sending_key_event;
 						}
 					} break;

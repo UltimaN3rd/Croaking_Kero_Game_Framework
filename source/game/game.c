@@ -178,3 +178,13 @@ const cereal_t cereal_savedata[] = {
 };
 
 const size_t cereal_savedata_size = sizeof(cereal_savedata) / sizeof(*cereal_savedata);
+
+void game_ToggleFullscreen () {
+	os_Fullscreen (!os_public.window.is_fullscreen);
+	submenu_vars.fullscreen = os_public.window.is_fullscreen;
+	SaveSettings ();
+}
+
+void SaveGame () {
+	if (!cereal_WriteToFile(cereal_savedata, cereal_savedata_size, game_save_file)) LOG ("Failed to save game");
+}
