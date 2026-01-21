@@ -31,8 +31,8 @@ extern pthread_mutex_t update_render_swap_state_mutex;
 extern render_data_t render_data;
 extern bool quit;
 
-void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length);
-void font_Write (const font_t *font, sprite_t *destination, int left, int top, char *text);
+void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index);
+void font_Write (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index);
 
 void Render_Cursor (const cursor_t *cursor, int x, int y) {
 	render_state_being_edited->cursor = (typeof (render_state_being_edited->cursor)) {
@@ -59,13 +59,14 @@ void Render_ScreenShake (int x, int y) {
 }
 
 void Render_Sprite_ (Render_Sprite_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (arguments.sprite == NULL) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
 	arguments.rotation -= (int)arguments.rotation;
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_sprite,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
+		.ignore_camera = arguments.ignore_camera,
 		.sprite = {
 			.position = {.x = arguments.x, .y = arguments.y},
 			.flags = arguments.sprite_flags,
@@ -78,13 +79,14 @@ void Render_Sprite_ (Render_Sprite_arguments arguments) {
 }
 
 void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
+	if (arguments.sprite == NULL) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
 	arguments.rotation -= (int)arguments.rotation;
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_sprite_silhouette,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
+		.ignore_camera = arguments.ignore_camera,
 		.sprite_silhouette = {
 			.color = color,
 			.sprite = {
@@ -100,7 +102,8 @@ void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments)
 }
 
 void Render_Shape_ (Render_Shape_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
 	if (arguments.shape.type == render_shape_ellipse && arguments.shape.ellipse.rx == arguments.shape.ellipse.ry) {
 		const render_shape_t circ = {
 			.type = render_shape_circle,
@@ -117,7 +120,7 @@ void Render_Shape_ (Render_Shape_arguments arguments) {
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_shape,
 		.depth = arguments.depth,
-		.flags = arguments.flags,
+		.ignore_camera = arguments.ignore_camera,
 		.shape = arguments.shape
 	};
 }
@@ -143,8 +146,8 @@ void Render_Text_ (Render_Text_arguments arguments) {
 	}
 
 	if (arguments.center_horizontally_on_screen) {
-		auto w = font_StringDimensions(&framework_font, render_state_being_edited->elements[count].text.string).w;
-		render_state_being_edited->elements[count].text.x = (RESOLUTION_WIDTH - w) / 2;
+		arguments.x = (RESOLUTION_WIDTH - dimensions.w) / 2;
+		arguments.ignore_camera = true;
 	}
 	if (arguments.center_vertically_on_screen) {
 		arguments.y = (RESOLUTION_HEIGHT + dimensions.h) / 2;
@@ -190,9 +193,9 @@ void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera) {
 	}
 	if (x < 0 || x > RESOLUTION_WIDTH-1 || y < 0 || y > RESOLUTION_HEIGHT-1) return;
 	int i = render_state_being_edited->particles.count++;
-	render_state_being_edited->particles.position[i].x = x;
-	render_state_being_edited->particles.position[i].y = y;
-	render_state_being_edited->particles.pixel[i] = pixel;
+	render_state_being_edited->particles.array[i].position.x = x;
+	render_state_being_edited->particles.array[i].position.y = y;
+	render_state_being_edited->particles.array[i].pixel = pixel;
 }
 
 void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args) {
@@ -252,6 +255,9 @@ void Render_FinishEditingState () {
 void Render_ShowRenderTime (bool show) { render_state_being_edited->debug.show_rendertime = show; }
 void Render_ShowFPS (bool show) { render_state_being_edited->debug.show_framerate = show; }
 
+static sprite_t *frame;
+static bool frame_select = 0;
+
 void *Render (void*) {
 	LOG ("Render thread started");
 	render_data.thread_initialized = true;
@@ -271,8 +277,6 @@ void *Render (void*) {
 	useconds_per_frame = 1000000 / screen_refresh;
 	// LOG ("Microseconds per frame: %"PRId64"", useconds_per_frame);
 
-	sprite_t *frame;
-	bool frame_select = 0;
 	frame = (render_data.frame[frame_select]);
 
 	int64_t sleep_time;
@@ -513,7 +517,7 @@ void *Render (void*) {
 			switch (element->type) {
 				case render_element_sprite: {
 					auto s = element->sprite;
-					if (!element->flags.ignore_camera) {
+					if (!element->ignore_camera) {
 						s.position.x -= camera.x;
 						s.position.y -= camera.y;
 					}
@@ -528,20 +532,18 @@ void *Render (void*) {
 						sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
 					}
 					else {
-						s.position.x -= s.originx;
-						s.position.y -= s.originy;
 						switch (flip) {
 							case flip_none: {
 								switch (s.flags.rotation_by_quarters) {
-									case 0: sprite_Blit (s.sprite, frame, s.position.x, s.position.y); break;
-									case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x, s.position.y); break;
-									case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y); break;
-									case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y); break;
+									case 0: sprite_Blit (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+									case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy); break;
+									case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+									case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
 								}
 							} break;
-							case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y); break;
-							case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x, s.position.y); break;
-							case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x, s.position.y); break;
+							case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+							case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+							case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
 						}
 					}
 				} break;
@@ -549,7 +551,7 @@ void *Render (void*) {
 				case render_element_sprite_silhouette: {
 					auto color = element->sprite_silhouette.color;
 					auto s = element->sprite_silhouette.sprite;
-					if (!element->flags.ignore_camera) {
+					if (!element->ignore_camera) {
 						s.position.x -= camera.x;
 						s.position.y -= camera.y;
 					}
@@ -564,20 +566,18 @@ void *Render (void*) {
 						sprite_SampleRotatedFlippedColor(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically, color);
 					}
 					else {
-						s.position.x -= s.originx;
-						s.position.y -= s.originy;
 						switch (flip) {
 							case flip_none: {
 								switch (s.flags.rotation_by_quarters) {
-									case 0: sprite_BlitColor (s.sprite, frame, s.position.x, s.position.y, color); break;
-									case 1: sprite_BlitRotated90Color (s.sprite, frame, s.position.x, s.position.y, color); break;
-									case 2: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color); break;
-									case 3: sprite_BlitRotated270Color (s.sprite, frame, s.position.x, s.position.y, color); break;
+									case 0: sprite_BlitColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+									case 1: sprite_BlitRotated90Color (s.sprite, frame, s.position.x,s.position.y, color, s.originx, s.originy); break;
+									case 2: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+									case 3: sprite_BlitRotated270Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
 								}
 							} break;
-							case flip_both: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color); break;
-							case flip_hori: sprite_BlitFlippedHorizontallyColor (s.sprite, frame, s.position.x, s.position.y, color); break;
-							case flip_vert: sprite_BlitFlippedVerticallyColor (s.sprite, frame, s.position.x, s.position.y, color); break;
+							case flip_both: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+							case flip_hori: sprite_BlitFlippedHorizontallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+							case flip_vert: sprite_BlitFlippedVerticallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
 						}
 					}
 				} break;
@@ -585,9 +585,11 @@ void *Render (void*) {
 				case render_element_shape: {
 					auto s = element->shape;
 					switch (s.type) {
+						__label__ goto_render_line;
+
 						case render_shape_rectangle: {
 							auto r = s.rectangle;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								r.x -= camera.x;
 								r.y -= camera.y;
 							}
@@ -646,7 +648,7 @@ void *Render (void*) {
 
 						case render_shape_circle: {
 							auto c = s.circle;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								c.x -= camera.x;
 								c.y -= camera.y;
 							}
@@ -665,8 +667,9 @@ void *Render (void*) {
 						} break;
 
 						case render_shape_line: {
+						goto_render_line:
 							auto l = s.line;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								l.x0 -= camera.x;
 								l.x1 -= camera.x;
 								l.y0 -= camera.y;
@@ -762,7 +765,7 @@ void *Render (void*) {
 
 						case render_shape_dot: {
 							auto d = s.dot;
-							if (!element->flags.ignore_camera) {
+							if (!element->ignore_camera) {
 								d.x -= camera.x;
 								d.y -= camera.y;
 							}
@@ -1001,12 +1004,12 @@ void *Render (void*) {
 
 				case render_element_text: {
 					auto text = element->text;
-					if (!element->flags.ignore_camera) {
+					if (!element->ignore_camera) {
 						text.x -= camera.x;
 						text.y -= camera.y;
 					}
-					font_Write_Length (&framework_font, frame, text.x, text.y, text.string, text.length);
-} break;
+					font_Write_Length (&framework_font, frame, text.x, text.y, text.string, text.length, render_state->state_count);
+				} break;
 
 				case render_element_darkness_rectangle: {
 					const auto r = element->darkness_rectangle;
@@ -1024,11 +1027,11 @@ void *Render (void*) {
 		// Pixel particles
 		// ************************************
 		for (int i = 0; i < render_state->particles.count; ++i) {
-			int x = render_state->particles.position[i].x;
-			int y = render_state->particles.position[i].y;
+			int x = render_state->particles.array[i].position.x;
+			int y = render_state->particles.array[i].position.y;
 			assert (x >= 0 && x < frame->w && y >= 0 && y < frame->h);
 			// if (x < 0 || x >= frame->w || y < 0 || y >= frame->h) continue;
-			frame->p[x + y * frame->w] = render_state->particles.pixel[i];
+			frame->p[x + y * frame->w] = render_state->particles.array[i].pixel;
 		}
 
 		auto frame_time = zen_End (&frame_timer);
@@ -1036,13 +1039,13 @@ void *Render (void*) {
 		if (render_state->debug.show_rendertime) {
 			char str[32];
 			snprintf (str, sizeof(str), "R%4"PRId64"us", frame_time);
-			font_Write (&framework_font, frame, 1, frame->h-2-framework_font.line_height, str);
+			font_Write (&framework_font, frame, 1, frame->h-2-framework_font.line_height, str, render_state->state_count);
 		}
 
 		if (render_state->debug.show_framerate) {
 			char str[32];
 			snprintf (str,sizeof (str), "FPS%d", fps_this_frame);
-			font_Write (&framework_font, frame, 1, frame->h-2, str);
+			font_Write (&framework_font, frame, 1, frame->h-2, str, render_state->state_count);
 		}
 
 		if (render_state->cursor.sprite != NULL)
@@ -1058,7 +1061,7 @@ void *Render (void*) {
 		render_state->busy = false;
 		asm volatile("" ::: "memory");
 
-		// Swap frame, clear new frame and perform stateless rendering
+		// Swap frame
 		frame_select = !frame_select;
 		frame = (render_data.frame[frame_select]);
 
@@ -1220,7 +1223,6 @@ void font_Write_Length (const font_t *font, sprite_t *destination, int left, int
 		} wave;
 	} state = {};
 
-    int x = left, y = top - font->line_height; // Current x and y, updated as we draw each character
     while (c != '\0') {
         switch (c) {
 			__label__ goto_default;
@@ -1285,9 +1287,9 @@ void font_Write_Length (const font_t *font, sprite_t *destination, int left, int
 
 					case '\\': { // Pass through normal backslash character as text
 						goto goto_default;
-            } break;
+					} break;
 
-            default: {
+					default: {
 					goto_invalid_escape_sequence:
 						LOG ("Unsupported escape code in string [%s] character [%d]", text_start, (int)(text - text_start));
 						assert (false);
@@ -1353,7 +1355,7 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, const 
 				while (c != '\\') {
 					c = *(text++); if (c == '\0') { --text; break; }
 				}
-            } break;
+			} break;
 
             default: {
 			goto_default:

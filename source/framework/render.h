@@ -19,12 +19,12 @@
 #include "sprite.h"
 #include "framework_types.h"
 
-typedef struct {
-	vec2i_t position;
+typedef struct __attribute__((__packed__)) {
+	vec2i16_t position;
+    int16_t originx, originy;
 	const sprite_t *sprite;
 	float rotation;
-    int originx, originy;
-	struct {
+	struct __attribute__((__packed__)) {
 	    bool flip_horizontally : 1;
 	    bool flip_vertically : 1;
         bool center_horizontally : 1;
@@ -44,8 +44,8 @@ typedef struct __attribute__((__packed__)) {
 			} flags;
 			uint8_t color_edge, color_fill;
 		} rectangle;
-		struct {
-			int x, y, r;
+		struct __attribute__((__packed__)) {
+			int16_t x, y, r;
 			uint8_t color_edge, color_fill;
 		} circle;
 		struct __attribute__((__packed__)) {
@@ -53,11 +53,11 @@ typedef struct __attribute__((__packed__)) {
 			uint8_t color_edge, color_fill;
 		} ellipse;
 		struct __attribute__((__packed__)) {
-			int x0, y0, x1, y1;
+			int16_t x0, y0, x1, y1;
 			uint8_t color;
 		} line;
-		struct {
-			int x, y;
+		struct __attribute__((__packed__)) {
+			int16_t x, y;
 			uint8_t color;
 		} dot;
 		struct __attribute__((__packed__)) {
@@ -71,26 +71,31 @@ typedef struct __attribute__((__packed__)) {
 	};
 } render_shape_t;
 
+// Packed SOA to save mem may be better than AOS because pos/pixel are always accessed together
+typedef struct {
+	vec2i16_t position;
+	uint8_t pixel;
+} __attribute__((__packed__)) render_state_particle_t;
+
 typedef struct render_state_s {
 	volatile bool busy;
 	uint64_t state_count;
-	struct {
-		enum {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette} type;
-		int depth;
+	struct __attribute__((__packed__)) {
 		struct {
-enum : uint8_t {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle} type : 3;
+			enum : uint8_t {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle} type : 3;
 			bool ignore_camera : 1;
-		} flags;
+		};
+		int8_t depth;
 		union {
 			render_state_sprite_t sprite;
 			render_shape_t shape;
-			struct {
+			struct __attribute__((__packed__)) {
+				char *string;
 				int16_t x, y, length;
-				char string[64];
 			} text;
-			struct {
-				uint8_t color;
+			struct __attribute__((__packed__)) {
 				render_state_sprite_t sprite;
+				uint8_t color;
 			} sprite_silhouette;
 			struct __attribute__((__packed__)) {
 				int16_t l, b, r, t;
@@ -107,11 +112,9 @@ enum : uint8_t {render_element_sprite, render_element_shape, render_element_text
 	} mem;
 	#define PARTICLES_MAX 4096
 	struct {
-		uint8_t pixel[PARTICLES_MAX];
-		vec2i_t position[PARTICLES_MAX];
-		int count;
+		int16_t count;
+		render_state_particle_t array[PARTICLES_MAX];
 	} particles;
-	mouse_t mouse;
 	struct {
 		int x, y;
 	} camera;
@@ -163,12 +166,12 @@ void Render_FinishEditingState ();
 void Render_Camera (int x, int y);
 
 typedef struct {
-	int depth;
+	int8_t depth;
     int x, y;
 	const sprite_t *sprite;
     float rotation;
     int originx, originy;
-	typeof ((render_state_t){}.elements[0].flags) flags;
+	bool ignore_camera;
 	typeof ((render_state_sprite_t){}.flags) sprite_flags;
 } Render_Sprite_arguments;
 #define Render_Sprite(...) Render_Sprite_((Render_Sprite_arguments){__VA_ARGS__})
@@ -178,21 +181,21 @@ void Render_Sprite_ (Render_Sprite_arguments arguments);
 void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments);
 
 typedef struct {
-    int depth;
-	typeof ((render_state_t){}.elements[0].flags) flags;
+    int8_t depth;
+	bool ignore_camera;
     render_shape_t shape;
 } Render_Shape_arguments;
 #define Render_Shape(...) Render_Shape_((Render_Shape_arguments){__VA_ARGS__})
 void Render_Shape_ (Render_Shape_arguments arguments);
 
 typedef struct {
-    int depth;
-	const typeof ((render_state_t){}.elements[0].flags) flags;
+    int8_t depth;
     int x, y, length;
     const char *string;
+	bool ignore_camera;
 	bool center_horizontally_on_screen;
 	bool center_vertically_on_screen;
-uint8_t translucent_background_darkness : 4; // Max value 7
+	uint8_t translucent_background_darkness : 4; // Max value 7
 } Render_Text_arguments;
 #define Render_Text(...) Render_Text_((Render_Text_arguments){.y = 20, __VA_ARGS__})
 void Render_Text_ (Render_Text_arguments arguments);
@@ -208,11 +211,10 @@ render_state_t *Render_GetCurrentEditableState ();
 void Render_Cursor (const cursor_t *cursor, int x, int y);
 void Render_CursorAtRawMousePos (const cursor_t *cursor);
 
-typedef union {
-    struct {int width, height;};
-    struct {int w, h;};
+typedef struct {
+	int16_t w, h;
 } font_StringDimensions_return_t;
-font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *text);
+font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text);
 
 // Must be called after any call to Render_Camera in order to take effect
 void Render_ScreenShake (int x, int y);
