@@ -28,7 +28,7 @@ struct submenu_t {
     enum { menu_type_list, menu_type_explorer, menu_type_name_creator, menu_type_internal } type;
     union {
         struct {
-            #define MENU_LIST_MAX_ITEMS 12
+            #define MENU_LIST_MAX_ITEMS 18
             int item_count;
             struct {
                 const char *name;
@@ -49,7 +49,7 @@ struct submenu_t {
             } items[MENU_LIST_MAX_ITEMS];
         } list;
         struct {
-            const char* (*const base_directory_func) ();
+            const char*const (*const base_directory_func) ();
             void (*const selection_func) (const char *const directory, const char *const filename);
             bool show_name_instead_of_directory;
             int maximum_depth;
@@ -71,9 +71,12 @@ struct submenu_t {
 
 typedef struct {
     typeof((render_state_t){}.background.type) background;
+    uint8_t transparent_background_darkess : 4; // Max value 7
+    uint8_t selection_color;
     struct { int x, y, w, h, textw, topoffset; } dimensions;
     const char *filename_to_delete;
     submenu_t *submenu;
+    void (*onConfirm) ();
 } menu_t;
 
 typedef struct {
