@@ -1203,12 +1203,27 @@ void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float
 	#pragma pop_macro ("LINE")
 }
 
-void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, char *text, const size_t length) {
+void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index) {
+	const char *const text_start = text;
     char c = *(text++);
     int i;
     int x = left, y = top - font->line_height; // Current x and y, updated as we draw each character
+
+	// Escape codes (all start and end with \:
+	// \cXX\ - Color: set color to XX (in hexadecimal). Use \c0\ to reset color. Color can be 1 or 2 digits in the hex range 0 - FF.
+	// \wABC\ - Sine wave: set wave to A pixels in height, B speed, C steepness (all single digit hex values 0-f). Use \w0\ to disable wave. C can be omitted to default to 3 steepness.
+	struct {
+		uint8_t colorize;
+		struct {
+			uint8_t height : 4, speed : 4, steepness : 4;
+			float offset; // Increased with each character within the wave
+		} wave;
+	} state = {};
+
+    int x = left, y = top - font->line_height; // Current x and y, updated as we draw each character
     while (c != '\0') {
         switch (c) {
+			__label__ goto_default;
             case ' ': x += font->space_width; break;
 
             case '\n': {
@@ -1216,18 +1231,89 @@ void font_Write_Length (const font_t *font, sprite_t *destination, int left, int
                 y -= font->line_height;
             } break;
 
+			case '\\': { // Escape code
+        		c = *(text++);
+
+				constexpr uint8_t hex2int[256] = { // Size 255 so that when accessed by an unsigned char, doesn't go out of range. All invalid values are 0
+					['0']=0, ['1']=1, ['2']=2, ['3']=3, ['4']=4, ['5']=5, ['6']=6, ['7']=7, ['8']=8, ['9']=9, ['a']=10, ['b']=11, ['c']=12, ['d']=13, ['e']=14, ['f']=15, ['A']=10, ['B']=11, ['C']=12, ['D']=13, ['E']=14, ['F']=15
+				};
+
+				switch (c) {
+					__label__ goto_invalid_escape_sequence;
+					case 'C':
+					case 'c': { // Color
+						c = *(text++); if (c == '\0') break;
+						unsigned char hex[2] = {};
+						hex[0] = c;
+						c = *(text++); if (c == '\0') break;
+						hex[1] = c;
+						if (hex[1] == '\\') {
+							hex[1] = hex[0];
+							hex[0] = '0';
+						}
+						else {
+							c = *(text++); if (c == '\0') break;
+						}
+						assert (c == '\\');
+						state.colorize = hex2int[hex[0]] * 16 + hex2int[hex[1]];
+					} break;
+
+					case 'W':
+					case 'w': {
+						c = *(text++); if (c == '\0') break;
+						char a, b, c_;
+						a = c;  c = *(text++); if (c == '\0') break;
+						b = c;
+						if (b == '\\') { // Only 1 digit provided. Intentionally or not, this disables wave.
+							state.wave = (typeof (state.wave)){};
+							break;
+						}
+						c = *(text++); if (c == '\0') break;
+						c_ = c;
+						if (c_ == '\\') c_ = '5'; // Steepness not provided. Go to default
+						else { c = *(text++); if (c == '\0') break; }
+
+						assert (c == '\\');
+
+						if ((hex2int[(int)a] == 0 && a != '0') || (hex2int[(int)b] == 0 && b != '0')) goto goto_invalid_escape_sequence;
+						state.wave = (typeof(state.wave)){
+							.height = hex2int[(int)a],
+							.speed = hex2int[(int)b],
+							.steepness = hex2int[(int)c_],
+						};
+					} break;
+
+					case '\\': { // Pass through normal backslash character as text
+						goto goto_default;
+            } break;
+
             default: {
+					goto_invalid_escape_sequence:
+						LOG ("Unsupported escape code in string [%s] character [%d]", text_start, (int)(text - text_start));
+						assert (false);
+					} break;
+				}
+				if (c == '\0') break;
+			} break;
+
+            default: {
+			goto_default:
                 i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
                 if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
                     __label__ skip_drawing_letter;
 
                     int yy = y - font->descent[i];
+					if (state.wave.height) {
+						yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
+						state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
+					}
                     int right = x + font->bitmaps[i]->w-1;
                     int top = yy + font->bitmaps[i]->h-1;
 
                     if (right < 0 || top < 0 || x > destination->w-1 || yy > destination->h-1) goto skip_drawing_letter;
 
-					sprite_Blit (font->bitmaps[i], destination, x, yy);
+					if (state.colorize) sprite_BlitSubstituteColor (font->bitmaps[i], destination, x, yy, 255, state.colorize);
+					else sprite_Blit (font->bitmaps[i], destination, x, yy);
 
                     skip_drawing_letter:
                     x += font->bitmaps[i]->w;
@@ -1238,11 +1324,11 @@ void font_Write_Length (const font_t *font, sprite_t *destination, int left, int
     }
 }
 
-void font_Write (const font_t *font, sprite_t *destination, int left, int top, char *text) {
-	font_Write_Length(font, destination, left, top, text, strlen (text));
+void font_Write (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index) {
+	font_Write_Length(font, destination, left, top, text, strlen (text), frame_index);
 }
 
-font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *text) {
+font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text) {
     char c = *(text++);
     int i;
     int x = 0, y = font->line_height; // Current x and y, updated as we draw each character
@@ -1251,6 +1337,7 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
     int line_descent = 0;
     while (c != '\0') {
         switch (c) {
+			__label__ goto_default;
             case ' ': x += font->space_width; break;
 
             case '\n': {
@@ -1259,7 +1346,17 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
                 line_descent = 0;
             } break;
 
+			case '\\': { // Escape sequence. Everything other than \\\\ should be ignored
+        		c = *(text++);
+				if (c == '\0') { --text; break; }
+				else if (c == '\\') goto goto_default;
+				while (c != '\\') {
+					c = *(text++); if (c == '\0') { --text; break; }
+				}
+            } break;
+
             default: {
+			goto_default:
                 i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
                 if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
                     string_is_visible = true;
@@ -1275,7 +1372,7 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, char *
     y += line_descent;
 
     if (!string_is_visible) {
-        return (font_StringDimensions_return_t){.width = 0, .height = 0};
+        return (font_StringDimensions_return_t){.w = 0, .h = 0};
     }
     return (font_StringDimensions_return_t){.w = width, .h = y};
 }
