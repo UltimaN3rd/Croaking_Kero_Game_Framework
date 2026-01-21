@@ -108,23 +108,37 @@ void Render_Shape_ (Render_Shape_arguments arguments) {
 }
 
 void Render_Text_ (Render_Text_arguments arguments) {
-	auto count = render_state_being_edited->element_count++;
-	if (count >= RENDER_MAX_ELEMENTS) return;
-	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
-		.type = render_element_text,
-		.depth = arguments.depth,
-		.flags = arguments.flags,
-		.text = {.x = arguments.x, .y = arguments.y, .length = arguments.length}
-	};
-	strncpy (render_state_being_edited->elements[count].text.string, arguments.string, sizeof(render_state_being_edited->elements[count].text.string)-1);
-	render_state_being_edited->elements[count].text.string[sizeof(render_state_being_edited->elements[count].text.string)-1] = 0;
-	if (arguments.length == 0) render_state_being_edited->elements[count].text.length = strlen (render_state_being_edited->elements[count].text.string);
+	if (arguments.string == NULL) return;
+	if (arguments.length == 0) arguments.length = strlen (arguments.string);
+	if (arguments.length == 0) return; // Empty string
+
+	if (arguments.string[arguments.length-1] != 0) ++arguments.length; // If not null terminated, add space for it
+
+	font_StringDimensions_return_t dimensions;
+	if (arguments.translucent_background_darkness || arguments.center_horizontally_on_screen || arguments.center_vertically_on_screen) {
+		dimensions = font_StringDimensions(&framework_font, arguments.string);
+	}
+
 	if (arguments.center_horizontally_on_screen) {
 		auto w = font_StringDimensions(&framework_font, render_state_being_edited->elements[count].text.string).w;
 		render_state_being_edited->elements[count].text.x = (RESOLUTION_WIDTH - w) / 2;
 	}
 	if (arguments.center_vertically_on_screen) {
-		auto h = font_StringDimensions(&framework_font, render_state_being_edited->elements[count].text.string).h;
+		arguments.y = (RESOLUTION_HEIGHT + dimensions.h) / 2;
+		arguments.ignore_camera = true;
+	}
+
+	if (arguments.translucent_background_darkness) {
+		const int16_t l = arguments.x-1;
+		const int16_t r = l + dimensions.w+1;
+		const int16_t t = arguments.y-2;
+		const int16_t b = t - dimensions.h+1;
+		Render_DarkenRectangle(.l = l, .b = b, .r = r, .t = t, .levels = arguments.translucent_background_darkness, .depth = arguments.depth);
+	}
+
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+
+	const auto count = render_state_being_edited->elements[count].text.string).h;
 		render_state_being_edited->elements[count].text.y = (RESOLUTION_HEIGHT - h) / 2;
 	}
 }
@@ -144,6 +158,26 @@ void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera) {
 	render_state_being_edited->particles.position[i].x = x;
 	render_state_being_edited->particles.position[i].y = y;
 	render_state_being_edited->particles.pixel[i] = pixel;
+}
+
+void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args) {
+	if (args.r < args.l || args.t < args.b || args.l > RESOLUTION_WIDTH-1 || args.b > RESOLUTION_HEIGHT-1 || args.r < 0 || args.t < 0 || args.levels == 0) return;
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	const auto count = render_state_being_edited->element_count++;
+
+	if (args.levels > 7) args.levels = 7;
+
+	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
+		.type = render_element_darkness_rectangle,
+		.depth = args.depth,
+		.darkness_rectangle = {
+			.l = args.l,
+			.b = args.b,
+			.r = args.r,
+			.t = args.t,
+			.levels = args.levels
+		},
+	};
 }
 
 render_state_t *Render_GetCurrentEditableState () {
@@ -700,6 +734,15 @@ void *Render (void*) {
 						text.y -= camera.y;
 					}
 					font_Write_Length (&framework_font, frame, text.x, text.y, text.string, text.length);
+} break;
+
+				case render_element_darkness_rectangle: {
+					const auto r = element->darkness_rectangle;
+					for (int16_t y = r.b; y <= r.t; ++y) {
+						for (int16_t x = r.l; x <= r.r; ++x) {
+							frame->p[x + frame->w * y] >>= r.levels;
+						}
+					}
 				} break;
 			}
 			++element;

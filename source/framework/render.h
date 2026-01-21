@@ -66,6 +66,7 @@ typedef struct render_state_s {
 		enum {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette} type;
 		int depth;
 		struct {
+enum : uint8_t {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle} type : 3;
 			bool ignore_camera : 1;
 		} flags;
 		union {
@@ -79,6 +80,10 @@ typedef struct render_state_s {
 				uint8_t color;
 				render_state_sprite_t sprite;
 			} sprite_silhouette;
+			struct __attribute__((__packed__)) {
+				int16_t l, b, r, t;
+				uint8_t levels : 3; // Maximum value of 7
+			} darkness_rectangle;
 		};
 		#define RENDER_MAX_ELEMENTS 4096
 	} elements[RENDER_MAX_ELEMENTS];
@@ -170,6 +175,7 @@ typedef struct {
     const char *string;
 	bool center_horizontally_on_screen;
 	bool center_vertically_on_screen;
+uint8_t translucent_background_darkness : 4; // Max value 7
 } Render_Text_arguments;
 #define Render_Text(...) Render_Text_((Render_Text_arguments){.y = 20, __VA_ARGS__})
 void Render_Text_ (Render_Text_arguments arguments);
@@ -196,3 +202,13 @@ void Render_ScreenShake (int x, int y);
 
 void Render_ShowRenderTime (bool show);
 void Render_ShowFPS (bool show);
+
+typedef struct {
+	int16_t l, b, r, t;
+	int8_t depth;
+	uint8_t levels; // Capped at 7
+} Render_DarkenRectangle_arguments_t;
+#define Render_DarkenRectangle(...) Render_DarkenRectangle_ ((Render_DarkenRectangle_arguments_t){.l = 0, .b = 0, .r = RESOLUTION_WIDTH-1, .t = RESOLUTION_HEIGHT-1, .levels = 1, .depth = 0, __VA_ARGS__})
+void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args);
+
+void Render_Screenshot (sprite_t *destination);
