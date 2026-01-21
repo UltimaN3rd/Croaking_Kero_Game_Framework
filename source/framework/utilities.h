@@ -41,6 +41,14 @@
 
 #define SWAP(a, b) do {auto t = (a); (a) = (b); (b) = t;} while(0)
 
+#ifndef _Countof
+    #if __has_include(<stdcountof.h>)
+        #include <stdcountof.h>
+    #else
+        #define _Countof(__a__) (sizeof (__a__) / sizeof (*__a__))
+    #endif
+#endif
+
 typedef struct {
 	float x, y;
 } vec2f_t;
