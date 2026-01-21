@@ -20,9 +20,6 @@ extern render_data_t render_data;
 
 static uint64_t random_state;
 
-void FloatyTextUpdate ();
-void FloatyTextDraw ();
-
 #ifndef PARTICLES_BOUNDARY_LEFT
 #define PARTICLES_BOUNDARY_LEFT 0
 #endif
@@ -37,7 +34,7 @@ void FloatyTextDraw ();
 #endif
 
 static void TypeThisFrame (os_key_e key) {
-	char c = update_data.frame.keyboard_state[os_KEY_SHIFT] & (KEY_PRESSED | KEY_HELD) ? os_key_shifted(key) : key;
+	char c = update_data.frame.keyboard[os_KEY_SHIFT] & (KEY_PRESSED | KEY_HELD) ? os_key_shifted(key) : key;
 
 	if (c < ' ' || c > '~') return;
 	assert (update_data.frame.typing.count < sizeof (update_data.frame.typing.chars)-1); if (update_data.frame.typing.count >= sizeof (update_data.frame.typing.chars)-1) { LOG ("Exceeded max typing chars in 1 frame"); return;}
@@ -109,18 +106,18 @@ void *Update(void*) {
 
 	LOG ("Update thread entering main loop");
 
-	while(!quit) { 
+	while(!quit) {
 		memcpy (keyboard_previous, keyboard, sizeof (keyboard));
 		memcpy (&mouse_previous, &mouse, sizeof (mouse));
 		memcpy (keyboard, os_public.keyboard, sizeof (keyboard));
 		memcpy (&mouse, &os_public.mouse, sizeof (mouse));
 		update_data.frame.typing = (typeof(update_data.frame.typing)){};
-update_data.frame.mouse.scroll = 0;
+		update_data.frame.mouse.scroll = 0;
 
 		frame_timer = zen_Start ();
 
 		for (int i = 0; i < 256; ++i) {
-			auto pk = &update_data.frame.keyboard_state[i];
+			auto pk = &update_data.frame.keyboard[i];
 			*pk &= ~KEY_REPEATED; // Always clear repeated flag at start of frame
 			if (*pk & KEY_RELEASED) {
 				*pk = KEY_NORMAL;
@@ -164,7 +161,7 @@ update_data.frame.mouse.scroll = 0;
 		{
 			auto event = replay.keyboard_events.events;
 			repeat (keyboard_events_this_frame) {
-				update_data.frame.keyboard_state[event->key] |= (event->pressed ? KEY_PRESSED : KEY_RELEASED);
+				update_data.frame.keyboard[event->key] |= (event->pressed ? KEY_PRESSED : KEY_RELEASED);
 				if (event->pressed == KEY_PRESSED) {
 					TypeThisFrame (event->key);
 				}
@@ -225,7 +222,6 @@ update_data.frame.mouse.scroll = 0;
 		object_created_or_destroyed_this_frame = false;
 
 		{	// Create a render state based on current game state
-			// update_data.render_state = UpdateSelectRenderState (update_data);
 			asm volatile("" ::: "memory");
 			Render_SelectStateToEdit ();
 			asm volatile("" ::: "memory");
@@ -243,14 +239,11 @@ update_data.frame.mouse.scroll = 0;
 			for (int i = 0; i < update_data.gameplay.particles.count; ++i) {
 				Render_Particle (update_data.gameplay.particles.position[i].x.high, update_data.gameplay.particles.position[i].y.high, update_data.gameplay.particles.pixel[i], false);
 			}
-			FloatyTextUpdate();
-			FloatyTextDraw();
-
 
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				char temp[64];
 					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .flags = {.ignore_camera = true});
+					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .ignore_camera = true);
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
 			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
@@ -549,7 +542,7 @@ void Update_ClearInputMouseButtons () {
 void Update_ClearInputKeyboard () {
 	memset (update_data.frame.keyboard, 0, sizeof (update_data.frame.keyboard));
 	update_data.frame.typing = (typeof(update_data.frame.typing)){};
-	}
+}
 
 typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState () {
 	return unedited_frameinput;

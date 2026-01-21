@@ -23,7 +23,7 @@ typedef struct update_data_s { // update_data_t
 	#define KEY_RELEASED 0b100
 	#define KEY_REPEATED 0b1000
 	struct {
-		uint8_t keyboard_state[256];
+		uint8_t keyboard[256];
 		struct {
 			uint8_t count;
 			char chars[33];
@@ -72,23 +72,7 @@ typedef struct update_data_s { // update_data_t
 			};
 		} events[MOUSE_EVENT_MAX];
 	} mouse_events;
-	char game_save_filename[560];
-	char config_filename[560];
-	bool new_game;
 	char debug_frame_time_string[64];
-	struct {
-		#ifndef FLOATY_TEXT_MAX
-		#define FLOATY_TEXT_MAX 8
-		#endif
-		unsigned int count;
-		struct {
-			int x;
-			int32split_t y;
-			int vy;
-			int time;
-			char string[64];
-		} text[FLOATY_TEXT_MAX];
-	} floaty_text;
 	struct {
 		bool *show_simtime, *show_rendertime, *show_framerate;
 	} debug;
@@ -139,7 +123,7 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 	do { \
 		__VA_OPT__(static_assert (sizeof (__VA_ARGS__) <= UPDATE_CHANGE_STATE_DATA_SIZE_MAX);) \
 		Update_ChangeStatePrepare_ (new_state__, 0 __VA_OPT__(+ &__VA_ARGS__), 0 __VA_OPT__(+ sizeof (__VA_ARGS__))); \
-} while (0)
+	} while (0)
 void Update_ChangeStatePrepare_ (update_state_e new_state, const void *const data_to_copy_max_1kb, const size_t data_size);
 void Update_ChangeStateNow_ ();
 void Update_RunAfterStateChange (void (*func)());

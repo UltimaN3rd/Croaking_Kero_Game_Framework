@@ -19,6 +19,7 @@
 #include <float.h>
 #include <inttypes.h>
 #include <assert.h>
+#include "c23defs.h"
 
 #define MAX(__a__, __b__) ({auto __a1__ = (__a__); auto __b1__ = (__b__); __a1__ > __b1__ ? __a1__ : __b1__;})
 #define MIN(__a__, __b__) ({auto __a1__ = (__a__); auto __b1__ = (__b__); __a1__ < __b1__ ? __a1__ : __b1__;})

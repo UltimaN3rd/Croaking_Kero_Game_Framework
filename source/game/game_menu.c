@@ -48,7 +48,7 @@ void menu_Function_Quit () {
 }
 
 void game_menu_Init () {
-	// auto keyboard = update_data.frame.keyboard_state;
+	// auto keyboard = update_data.frame.keyboard;
 
 	menu_Init (&menu, &submenus[0]);
 	// SoundPlayMusic (&resources_music_ost1);
@@ -57,7 +57,7 @@ void game_menu_Init () {
 // static uint64_t random_state = 57490372;
 
 void game_menu_Update () {
-	auto keyboard = update_data.frame.keyboard_state;
+	auto keyboard = update_data.frame.keyboard;
 	auto mouse = update_data.frame.mouse;
 	auto typing = update_data.frame.typing;
 	static vec2i_t last_mouse_position = {};
