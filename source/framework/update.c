@@ -15,11 +15,8 @@
 #include "framework.h"
 
 extern bool quit;
-extern mouse_t mouse;
 extern update_data_t update_data;
 extern render_data_t render_data;
-
-static_assert(true); // Solves clang getting confused about pragma push/pop. Related to preamble optimization
 
 static uint64_t random_state;
 
@@ -91,20 +88,7 @@ void *Update(void*) {
 		memcpy (keyboard, os_public.keyboard, sizeof (keyboard));
 		memcpy (&mouse, &os_public.mouse, sizeof (mouse));
 		update_data.frame.typing = (typeof(update_data.frame.typing)){};
-
-		if (current_state != update_data.new_state) {
-			folder_ReturnToBaseDirectory ();
-			// os_ShowCursor ();
-			// sound_MusicPause ();
-
-			memset (update_data.frame.keyboard_state, 0, sizeof (update_data.frame.keyboard_state));
-			memset (update_data.frame.mouse_state, 0, sizeof (update_data.frame.mouse_state));
-			update_data.frame.mouse = (mouse_t){.x = update_data.source_mouse->x, .y = update_data.source_mouse->y};
-
-			// update_state_e previous_state = current_state;
-			current_state = update_data.new_state;
-			state_functions[current_state].Initialize ();
-		}
+update_data.frame.mouse.scroll = 0;
 
 		frame_timer = zen_Start ();
 
@@ -162,7 +146,7 @@ void *Update(void*) {
 		}
 
 		for (int i = 0; i < MOUSE_BUTTON_COUNT; ++i) {
-			auto pk = &update_data.frame.mouse_state[i];
+			auto pk = &update_data.frame.mouse.buttons[i];
 			auto k = *pk;
 			if (k & KEY_RELEASED) *pk = KEY_NORMAL;
 			else if (k & KEY_PRESSED) *pk = KEY_HELD;
@@ -194,11 +178,14 @@ void *Update(void*) {
 			repeat (mouse_events_this_frame) {
 				switch (event->type) {
 					case mouse_event_button: {
-						update_data.frame.mouse_state[event->button.button] |= (event->button.pressed ? KEY_PRESSED : KEY_RELEASED);
+						update_data.frame.mouse.buttons[event->button.button] |= (event->button.pressed ? KEY_PRESSED : KEY_RELEASED);
 					} break;
 					case mouse_event_movement: {
 						update_data.frame.mouse.x = event->movement.x;
 						update_data.frame.mouse.y = event->movement.y;
+					} break;
+					case mouse_event_scroll: {
+						update_data.frame.mouse.scroll = event->scroll.up ? 1 : -1;
 					} break;
 				}
 				++event;

@@ -35,11 +35,6 @@ typedef struct {
 	void (*Update) ();
 } update_state_functions_t;
 
-typedef struct {
-	int x, y;
-	uint8_t buttons;
-} mouse_t;
-
 typedef union {
 	int32_t i32;
 	struct {

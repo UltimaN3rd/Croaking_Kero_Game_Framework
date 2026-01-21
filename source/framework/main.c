@@ -24,7 +24,6 @@ update_data_t update_data = {};
 render_data_t render_data = {};
 pthread_t thread_render = 0, thread_update = 0, thread_sound = 0;
 bool quit = false;
-mouse_t mouse = {};
 pthread_mutex_t update_render_swap_state_mutex = (pthread_mutex_t){};
 
 sprite_t render_data_frame_0 = {.p = {[RESOLUTION_WIDTH*RESOLUTION_HEIGHT-1] = 0}}, render_data_frame_1 = {.p = {[RESOLUTION_WIDTH*RESOLUTION_HEIGHT-1] = 0}};
@@ -85,7 +84,6 @@ void OutputScreenshot ();
 
 int main (int argc, char **argv) {
 	update_data.keyboard_events.count = 0;
-	update_data.source_mouse = &mouse;
 
 	render_data.frame[0] = &render_data_frame_0;
 	render_data.frame[1] = &render_data_frame_1;
@@ -173,22 +171,15 @@ skip_sending_key_event:
 
 			case os_EVENT_MOUSE_MOVE: {
 				auto ret = os_WindowPositionToScaledFrameBufferPosition (event.new_position.x, event.new_position.y);
-				mouse.x = ret.x;
-				mouse.y = ret.y;
 
 				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
 				update_data.mouse_events.events[i].type = mouse_event_movement;
-				update_data.mouse_events.events[i].movement.x = mouse.x;
-				update_data.mouse_events.events[i].movement.y = mouse.y;
+				update_data.mouse_events.events[i].movement.x = ret.x;
+				update_data.mouse_events.events[i].movement.y = ret.y;
 				++update_data.mouse_events.count;
 			} break;
 
 			case os_EVENT_MOUSE_BUTTON_PRESS: {
-				if (event.button.button == os_MOUSE_LEFT) {
-					// os_WindowPositionToScaledFrameBufferPosition (event.button.p.x, event.button.p.y, &mouse.x, &mouse.y);
-					mouse.buttons |= os_MOUSE_LEFT;
-				}
-
 				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
 				update_data.mouse_events.events[i].type = mouse_event_button;
 				update_data.mouse_events.events[i].button.button = ConvertMouseButton (event.button.button);
@@ -197,17 +188,21 @@ skip_sending_key_event:
 			} break;
 
 			case os_EVENT_MOUSE_BUTTON_RELEASE: {
-				if (event.button.button == os_MOUSE_LEFT) {
-					// os_WindowPositionToScaledFrameBufferPosition (event.button.p.x, event.button.p.y, &mouse.x, &mouse.y);
-					mouse.buttons &= ~os_MOUSE_LEFT;
-				}
-				
 				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
 				update_data.mouse_events.events[i].type = mouse_event_button;
 				update_data.mouse_events.events[i].button.button = ConvertMouseButton (event.button.button);
 				update_data.mouse_events.events[i].button.pressed = false;
 				++update_data.mouse_events.count;
-			}
+			} break;
+
+			case os_EVENT_MOUSE_SCROLL: {
+				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
+				update_data.mouse_events.events[i] = (typeof(update_data.mouse_events.events[i])){
+					.type = mouse_event_scroll,
+					.scroll.up = event.scrolled_up,
+				};
+				++update_data.mouse_events.count;
+			} break;
 
 			default: break;
 		}

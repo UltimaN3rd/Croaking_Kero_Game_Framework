@@ -17,7 +17,6 @@
 #include "framework.h"
 
 typedef struct update_data_s { // update_data_t
-	mouse_t *source_mouse;
 	#define KEY_NORMAL 0
 	#define KEY_PRESSED 0b1
 	#define KEY_HELD 0b10
@@ -29,8 +28,11 @@ typedef struct update_data_s { // update_data_t
 			uint8_t count;
 			char chars[33];
 		} typing;
-		uint8_t mouse_state[MOUSE_BUTTON_COUNT];
-		mouse_t mouse;
+		struct {
+			int x, y;
+			int8_t scroll;
+			uint8_t buttons[MOUSE_BUTTON_COUNT];
+		} mouse;
 	} frame;
 	char text_to_print[64];
 	struct {
@@ -56,7 +58,7 @@ typedef struct update_data_s { // update_data_t
 	struct {
 		uint32_t count;
 		struct {
-			enum { mouse_event_button, mouse_event_movement } type;
+			enum { mouse_event_button, mouse_event_movement, mouse_event_scroll } type;
 			union {
 				struct {
 					mouse_button_e button;
@@ -65,6 +67,9 @@ typedef struct update_data_s { // update_data_t
 				struct {
 					int16_t x, y;
 				} movement;
+				struct {
+					bool up;
+				} scroll;
 			};
 		} events[MOUSE_EVENT_MAX];
 	} mouse_events;
