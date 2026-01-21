@@ -31,7 +31,7 @@ typedef enum { MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE, MOUSE_X1, MOUSE_X2 } mouse
 #define MOUSE_BUTTON_COUNT (MOUSE_X2+1)
 
 typedef struct {
-	void (*Initialize) ();
+	void (*Initialize) (const void *const data);
 	void (*Update) ();
 } update_state_functions_t;
 

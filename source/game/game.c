@@ -14,11 +14,11 @@
 
 #include "game.h"
 
-void game_Init ();
+void game_Init (const void *const ignore);
 void game_Update () {}
-void game_menu_Init ();
+void game_menu_Init (const void *const ignore);
 void game_menu_Update ();
-void gameplay_Init ();
+void gameplay_Init (const void *const ignore);
 void gameplay_Update ();
 
 const update_state_functions_t state_functions[update_state_count] = {
