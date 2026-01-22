@@ -16,6 +16,30 @@
 
 #include "framework.h"
 
+typedef enum {update_input_event_keyboard, update_input_event_mouse_button, update_input_event_mouse_movement, update_input_event_mouse_scroll} update_input_event_type_e;
+typedef struct __attribute__((__packed__)) {
+	update_input_event_type_e tag : 8; // Specified 8 bits just so no bits are assumed
+	union {
+		struct __attribute__((__packed__)) {
+			os_key_e key : 7;
+			bool pressed : 1;
+		} keyboard;
+		struct __attribute__((__packed__)) {
+			mouse_button_e button : 7;
+			bool pressed : 1;
+		} mouse_button;
+		struct __attribute__((__packed__)) {
+			// Cast the next 2 events are int16_t x, y. This is because other event types are only 2 bytes, but this event type would swell the size of all events to 5 bytes
+		} movement;
+		struct __attribute__((__packed__)) {
+			bool up : 1;
+		} scroll;
+	} _;
+} update_input_event_t;
+
+// For multi-events like scroll, how many extra event slots can they take up)
+#define UPDATE_INPUT_EVENT_MAX_EXTRA_EVENTS 2
+
 typedef struct update_data_s { // update_data_t
 	#define KEY_NORMAL 0
 	#define KEY_PRESSED 0b1
@@ -23,7 +47,8 @@ typedef struct update_data_s { // update_data_t
 	#define KEY_RELEASED 0b100
 	#define KEY_REPEATED 0b1000
 	struct {
-		uint8_t keyboard[256];
+		#define UPDATE_KEYBOARD_KEY_COUNT 128
+		uint8_t keyboard[UPDATE_KEYBOARD_KEY_COUNT];
 		struct {
 			uint8_t count;
 			char chars[33];
@@ -45,33 +70,11 @@ typedef struct update_data_s { // update_data_t
 			int time[PARTICLES_MAX];
 		} particles;
 	} gameplay;
-	#define KEYBOARD_EVENT_MAX 256
+	#define UPDATE_EVENTS_MAX 256
 	struct {
 		uint32_t count;
-		struct {
-			os_key_e key;
-			bool pressed;
-		} events [KEYBOARD_EVENT_MAX];
-	} keyboard_events;
-	#define MOUSE_EVENT_MAX 256
-	struct {
-		uint32_t count;
-		struct {
-			enum { mouse_event_button, mouse_event_movement, mouse_event_scroll } type;
-			union {
-				struct {
-					mouse_button_e button;
-					bool pressed;
-				} button;
-				struct {
-					int16_t x, y;
-				} movement;
-				struct {
-					bool up;
-				} scroll;
-			};
-		} events[MOUSE_EVENT_MAX];
-	} mouse_events;
+		update_input_event_t _[UPDATE_EVENTS_MAX];
+	} events;
 	char debug_frame_time_string[64];
 	struct {
 		bool *show_simtime, *show_rendertime, *show_framerate;

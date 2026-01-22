@@ -28,7 +28,7 @@
 #define repeat_(count, counter) for (int repeat_var_##counter = (count); repeat_var_##counter > 0; repeat_var_##counter--)
 #define repeat(count) repeat_(count, __COUNTER__)
 
-typedef enum { MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE, MOUSE_X1, MOUSE_X2 } mouse_button_e;
+typedef enum : uint8_t { MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE, MOUSE_X1, MOUSE_X2 } mouse_button_e;
 #define MOUSE_BUTTON_COUNT (MOUSE_X2+1)
 
 typedef struct {

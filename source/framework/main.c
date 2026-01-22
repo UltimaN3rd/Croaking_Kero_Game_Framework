@@ -18,8 +18,6 @@
 
 void *Update(void*);
 
-void game_ToggleFullscreen ();
-
 update_data_t update_data = {};
 render_data_t render_data = {};
 pthread_t thread_render = 0, thread_update = 0, thread_sound = 0;
@@ -83,7 +81,7 @@ void OutputScreenshot ();
 #endif
 
 int main (int argc, char **argv) {
-	update_data.keyboard_events.count = 0;
+	update_data.events.count = 0;
 
 	render_data.frame[0] = &render_data_frame_0;
 	render_data.frame[1] = &render_data_frame_1;
@@ -124,7 +122,7 @@ int main (int argc, char **argv) {
 
 			case os_EVENT_QUIT: {
 				quit = true;
-				exit (event.exit_code);
+				LOG ("Exit event [%d]", event.exit_code);
 			} break;
 
 			case os_EVENT_KEY_PRESS: {
@@ -154,54 +152,78 @@ int main (int argc, char **argv) {
 					default: break;
 				}
 
-				int index = update_data.keyboard_events.count % KEYBOARD_EVENT_MAX;
-				update_data.keyboard_events.events[index].key = event.key;
-				update_data.keyboard_events.events[index].pressed = true;
-				++update_data.keyboard_events.count;
+				uint8_t i = update_data.events.count % UPDATE_EVENTS_MAX;
+				update_data.events._[i] = (update_input_event_t){
+					.tag = update_input_event_keyboard,
+					._.keyboard = {
+						.key = event.key,
+						.pressed = true,
+					},
+				};
+				++update_data.events.count;
 
 skip_sending_key_event:
 			} break;
 
 			case os_EVENT_KEY_RELEASE: {
-				int index = update_data.keyboard_events.count % KEYBOARD_EVENT_MAX;
-				update_data.keyboard_events.events[index].key = event.key;
-				update_data.keyboard_events.events[index].pressed = false;
-				++update_data.keyboard_events.count;
+				uint8_t i = update_data.events.count % UPDATE_EVENTS_MAX;
+				update_data.events._[i] = (update_input_event_t){
+					.tag = update_input_event_keyboard,
+					._.keyboard = {
+						.key = event.key,
+						.pressed = false,
+					},
+				};
+				++update_data.events.count;
 			} break;
 
 			case os_EVENT_MOUSE_MOVE: {
 				auto ret = os_WindowPositionToScaledFrameBufferPosition (event.new_position.x, event.new_position.y);
 
-				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
-				update_data.mouse_events.events[i].type = mouse_event_movement;
-				update_data.mouse_events.events[i].movement.x = ret.x;
-				update_data.mouse_events.events[i].movement.y = ret.y;
-				++update_data.mouse_events.count;
+				uint8_t i = update_data.events.count % UPDATE_EVENTS_MAX;
+				uint8_t ix = (update_data.events.count+1) % UPDATE_EVENTS_MAX;
+				uint8_t iy = (update_data.events.count+2) % UPDATE_EVENTS_MAX;
+				update_data.events._[i] = (update_input_event_t){
+					.tag = update_input_event_mouse_movement,
+				};
+				update_data.events._[ix] = *(update_input_event_t*)&ret.x;
+				update_data.events._[iy] = *(update_input_event_t*)&ret.y;
+				update_data.events.count += 3;
 			} break;
 
 			case os_EVENT_MOUSE_BUTTON_PRESS: {
-				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
-				update_data.mouse_events.events[i].type = mouse_event_button;
-				update_data.mouse_events.events[i].button.button = ConvertMouseButton (event.button.button);
-				update_data.mouse_events.events[i].button.pressed = true;
-				++update_data.mouse_events.count;
+				int i = update_data.events.count % UPDATE_EVENTS_MAX;
+				update_data.events._[i] = (update_input_event_t){
+					.tag = update_input_event_mouse_button,
+					._.mouse_button = {
+						.button = ConvertMouseButton (event.button.button),
+						.pressed = true,
+					},
+				};
+				++update_data.events.count;
 			} break;
 
 			case os_EVENT_MOUSE_BUTTON_RELEASE: {
-				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
-				update_data.mouse_events.events[i].type = mouse_event_button;
-				update_data.mouse_events.events[i].button.button = ConvertMouseButton (event.button.button);
-				update_data.mouse_events.events[i].button.pressed = false;
-				++update_data.mouse_events.count;
+				int i = update_data.events.count % UPDATE_EVENTS_MAX;
+				update_data.events._[i] = (update_input_event_t){
+					.tag = update_input_event_mouse_button,
+					._.mouse_button = {
+						.button = ConvertMouseButton (event.button.button),
+						.pressed = false,
+					},
+				};
+				++update_data.events.count;
 			} break;
 
 			case os_EVENT_MOUSE_SCROLL: {
-				int i = update_data.mouse_events.count % MOUSE_EVENT_MAX;
-				update_data.mouse_events.events[i] = (typeof(update_data.mouse_events.events[i])){
-					.type = mouse_event_scroll,
-					.scroll.up = event.scrolled_up,
+				int i = update_data.events.count % UPDATE_EVENTS_MAX;
+				update_data.events._[i] = (update_input_event_t){
+					.tag = update_input_event_mouse_scroll,
+					._.scroll = {
+						.up = event.scrolled_up,
+					},
 				};
-				++update_data.mouse_events.count;
+				++update_data.events.count;
 			} break;
 
 			default: break;

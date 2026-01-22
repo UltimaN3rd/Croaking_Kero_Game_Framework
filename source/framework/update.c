@@ -84,39 +84,20 @@ void *Update(void*) {
 
 	zen_timer_t frame_timer;
 
-	// uint32_t keyboard_event_count = 0;
-	// uint32_t mouse_event_count = 0;
-
-	struct {
-		FILE *file;
-		int frame;
-		enum { replay_mode_recording, replay_mode_playback, replay_mode_ended } mode;
-		typeof (update_data.keyboard_events) keyboard_events;
-		typeof (update_data.mouse_events) mouse_events;
-	} replay = {.mode = replay_mode_ended};
-	assert (KEYBOARD_EVENT_MAX == 256);
-	assert (MOUSE_EVENT_MAX == 256);
-
-	// These are for basic input while using the replay system. The game gets input from the replay, but I can control the replay using these
-	typeof (os_public.keyboard) keyboard = {}, keyboard_previous = {};
-	typeof (os_public.mouse) mouse = {}, mouse_previous = {};
+	typeof (update_data.events) events;
 	#define KEYBOARD_REPEAT_INITIAL_DELAY 30
 	#define KEYBOARD_REPEAT_DELAY 10
-	uint8_t keyboard_repeat_time[256] = {};
+	uint8_t keyboard_repeat_time[UPDATE_KEYBOARD_KEY_COUNT] = {};
 
 	LOG ("Update thread entering main loop");
 
 	while(!quit) {
-		memcpy (keyboard_previous, keyboard, sizeof (keyboard));
-		memcpy (&mouse_previous, &mouse, sizeof (mouse));
-		memcpy (keyboard, os_public.keyboard, sizeof (keyboard));
-		memcpy (&mouse, &os_public.mouse, sizeof (mouse));
 		update_data.frame.typing = (typeof(update_data.frame.typing)){};
 		update_data.frame.mouse.scroll = 0;
 
 		frame_timer = zen_Start ();
 
-		for (int i = 0; i < 256; ++i) {
+		for (int i = 0; i < UPDATE_KEYBOARD_KEY_COUNT; ++i) {
 			auto pk = &update_data.frame.keyboard[i];
 			*pk &= ~KEY_REPEATED; // Always clear repeated flag at start of frame
 			if (*pk & KEY_RELEASED) {
@@ -137,38 +118,6 @@ void *Update(void*) {
 			}
 		}
 
-		int keyboard_events_this_frame;
-		typeof (update_data.keyboard_events) keyboard_events_cache;
-		keyboard_events_cache = update_data.keyboard_events;
-		int keyboard_events_this_frame_unrestricted = keyboard_events_cache.count - replay.keyboard_events.count;
-		keyboard_events_this_frame = MIN (KEYBOARD_EVENT_MAX, keyboard_events_this_frame_unrestricted);
-		if (keyboard_events_this_frame_unrestricted > KEYBOARD_EVENT_MAX)
-			LOG ("Looks like we dropped %d keyboard events!", keyboard_events_this_frame_unrestricted - KEYBOARD_EVENT_MAX);
-		if (keyboard_events_this_frame != 0) {
-			int index = replay.keyboard_events.count % KEYBOARD_EVENT_MAX;
-			int ending_index = (index + keyboard_events_this_frame-1) % KEYBOARD_EVENT_MAX;
-			int events1 = keyboard_events_this_frame;
-			int events2 = 0;
-			if (ending_index < index) {
-				events1 = KEYBOARD_EVENT_MAX - index;
-				events2 = keyboard_events_this_frame - events1;
-			}
-			memcpy (&replay.keyboard_events.events[0], &keyboard_events_cache.events[index], events1 * sizeof (replay.keyboard_events.events[0]));
-			memcpy (&replay.keyboard_events.events[events1], &keyboard_events_cache.events[0], events2 * sizeof (replay.keyboard_events.events[0]));
-			replay.keyboard_events.count = keyboard_events_cache.count;
-		}
-
-		{
-			auto event = replay.keyboard_events.events;
-			repeat (keyboard_events_this_frame) {
-				update_data.frame.keyboard[event->key] |= (event->pressed ? KEY_PRESSED : KEY_RELEASED);
-				if (event->pressed == KEY_PRESSED) {
-					TypeThisFrame (event->key);
-				}
-				++event;
-			}
-		}
-
 		for (int i = 0; i < MOUSE_BUTTON_COUNT; ++i) {
 			auto pk = &update_data.frame.mouse.buttons[i];
 			auto k = *pk;
@@ -176,43 +125,82 @@ void *Update(void*) {
 			else if (k & KEY_PRESSED) *pk = KEY_HELD;
 		}
 
-		int mouse_events_this_frame;
-		typeof (update_data.mouse_events) mouse_events_cache;
-		mouse_events_cache = update_data.mouse_events;
-		int mouse_events_this_frame_unrestricted = mouse_events_cache.count - replay.mouse_events.count;
-		mouse_events_this_frame = MIN (MOUSE_EVENT_MAX, mouse_events_this_frame_unrestricted);
-		if (mouse_events_this_frame_unrestricted > MOUSE_EVENT_MAX)
-			LOG ("Looks like we dropped %d mouse events!", mouse_events_this_frame_unrestricted - (MOUSE_EVENT_MAX));
-		if (mouse_events_this_frame != 0) {
-			int index = replay.mouse_events.count % MOUSE_EVENT_MAX;
-			int ending_index = (index + mouse_events_this_frame-1) % MOUSE_EVENT_MAX;
-			int events1 = mouse_events_this_frame;
+		// Cache the latest events, handle cases where the buffer has overrun
+		uint8_t events_this_frame;
+		auto events_cache = update_data.events;
+		if (events_cache.count - events.count > UPDATE_EVENTS_MAX) {
+			LOG ("Dropped [%d] input events!", (events_cache.count - events.count) - UPDATE_EVENTS_MAX);
+			events.count = events_cache.count - 256; // Drop all events which have already been overwritten
+			// One of the last 2 events to be overwritten could have been multi-events (like scroll), meaning the next 2 events could be corrupted. Need to skip possibly corrupted events and if either of them look like multi-events, need to skip those bytes too until we get 3 events which are not multi-events to prove they're not corrupted.
+			bool had_multi_event = false;
+			do {
+				if (events_cache.count - events.count < UPDATE_INPUT_EVENT_MAX_EXTRA_EVENTS) { // Not enough events to ensure that we're not reading corrupted events.
+					events.count = events_cache.count; // Drop all events. This guarantees the next event will be uncorrupted because count is increased by N for N-sized events.
+					break;
+				}
+				had_multi_event = false;
+				for (int i = 0; i < UPDATE_INPUT_EVENT_MAX_EXTRA_EVENTS && !had_multi_event; ++i) {
+					switch (events_cache._[(events.count + i) % UPDATE_EVENTS_MAX].tag) {
+						case update_input_event_mouse_movement: {
+							had_multi_event = true;
+							events.count += i+1; // Start again after this possibly corrupted multi-event
+						} break;
+						case update_input_event_keyboard: case update_input_event_mouse_button: case update_input_event_mouse_scroll: break;
+					}
+				}
+			} while (had_multi_event);
+		}
+		assert (events_cache.count - events.count < UPDATE_EVENTS_MAX);
+		events_this_frame = events_cache.count - events.count;
+
+		// Copy events from cache to events array, starting at position 0 for linear traversal
+		if (events_this_frame != 0) {
+			int index = events.count % UPDATE_EVENTS_MAX;
+			int ending_index = (index + events_this_frame-1) % UPDATE_EVENTS_MAX;
+			int events1 = events_this_frame;
 			int events2 = 0;
 			if (ending_index < index) {
-				events1 = MOUSE_EVENT_MAX - index;
-				events2 = mouse_events_this_frame - events1;
+				events1 = UPDATE_EVENTS_MAX - index;
+				events2 = events_this_frame - events1;
 			}
-			memcpy (&replay.mouse_events.events[0], &mouse_events_cache.events[index], events1 * sizeof (replay.mouse_events.events[0]));
-			memcpy (&replay.mouse_events.events[events1], &mouse_events_cache.events[0], events2 * sizeof (replay.mouse_events.events[0]));
-			replay.mouse_events.count = mouse_events_cache.count;
+			memcpy (&events._[0], &events_cache._[index], events1 * sizeof (events._[0]));
+			memcpy (&events._[events1], &events_cache._[0], events2 * sizeof (events._[0]));
+			events.count = events_cache.count;
 		}
 
+		// Actually process the events!
 		{
-			auto event = replay.mouse_events.events;
-			repeat (mouse_events_this_frame) {
-				switch (event->type) {
-					case mouse_event_button: {
-						update_data.frame.mouse.buttons[event->button.button] |= (event->button.pressed ? KEY_PRESSED : KEY_RELEASED);
+			const update_input_event_t *e = events._;
+			const auto end = &events._[events_this_frame];
+			while (e < end) {
+				switch (e->tag) {
+					case update_input_event_keyboard: {
+						const auto k = e->_.keyboard;
+						update_data.frame.keyboard[k.key] |= (k.pressed ? KEY_PRESSED : KEY_RELEASED);
+						if (k.pressed == KEY_PRESSED) {
+							TypeThisFrame (k.key);
+						}
 					} break;
-					case mouse_event_movement: {
-						update_data.frame.mouse.x = event->movement.x;
-						update_data.frame.mouse.y = event->movement.y;
+
+					case update_input_event_mouse_button: {
+						const auto b = e->_.mouse_button;
+						update_data.frame.mouse.buttons[b.button] |= (b.pressed ? KEY_PRESSED : KEY_RELEASED);
 					} break;
-					case mouse_event_scroll: {
-						update_data.frame.mouse.scroll = event->scroll.up ? 1 : -1;
+
+					case update_input_event_mouse_movement: {
+						assert (e <= end - 3);
+						const int16_t x = *(int16_t*)(e+1);
+						const int16_t y = *(int16_t*)(e+2);
+						update_data.frame.mouse.x = x;
+						update_data.frame.mouse.y = y;
+						e+= 2;
+					} break;
+
+					case update_input_event_mouse_scroll: {
+						update_data.frame.mouse.scroll = e->_.scroll.up ? 1 : -1;
 					} break;
 				}
-				++event;
+				++e;
 			}
 		}
 	
