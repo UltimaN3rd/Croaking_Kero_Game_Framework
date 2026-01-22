@@ -241,7 +241,7 @@ static inline char *ReadEntireFileAllocateBuffer (const char *filename) {
 	DEFER (if (!success) free (buf););
 	auto result = fread (buf, 1, size, file);
     assert (result == size);
-    if (result != size) { LOG ("Reading file [%s] only read %lu/%ld bytes", filename, result, size); return NULL; }
+    if (result != size) { LOG ("Reading file [%s] only read %zu/%ld bytes", filename, result, size); return NULL; }
     success = true;
     return buf;
 }
