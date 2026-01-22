@@ -33,5 +33,9 @@
 #endif
 
 #ifndef _Countof
-#define _Countof(__a__) (sizeof(__a__) / sizeof(*__a__))
+    #if __has_include(<stdcountof.h>)
+        #include <stdcountof.h>
+    #else
+        #define _Countof(__a__) (sizeof (__a__) / sizeof (*__a__))
+    #endif
 #endif

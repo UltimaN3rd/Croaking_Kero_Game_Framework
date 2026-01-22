@@ -43,14 +43,6 @@
 
 #define SWAP(a, b) do {auto t = (a); (a) = (b); (b) = t;} while(0)
 
-#ifndef _Countof
-    #if __has_include(<stdcountof.h>)
-        #include <stdcountof.h>
-    #else
-        #define _Countof(__a__) (sizeof (__a__) / sizeof (*__a__))
-    #endif
-#endif
-
 typedef struct {
 	float x, y;
 } vec2f_t;
@@ -241,7 +233,7 @@ static inline char *ReadEntireFileAllocateBuffer (const char *filename) {
 	DEFER (if (!success) free (buf););
 	auto result = fread (buf, 1, size, file);
     assert (result == size);
-    if (result != size) { LOG ("Reading file [%s] only read %zu/%ld bytes", filename, result, size); return NULL; }
+    if (result != size) { LOG ("Reading file [%s] only read %lu/%ld bytes", filename, result, size); return NULL; }
     success = true;
     return buf;
 }
