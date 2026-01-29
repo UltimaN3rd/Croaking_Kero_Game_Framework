@@ -17,6 +17,7 @@
 #include <pthread.h>
 
 void *Update(void*);
+void game_ToggleFullscreen ();
 
 update_data_t update_data = {};
 render_data_t render_data = {};
@@ -24,7 +25,7 @@ pthread_t thread_render = 0, thread_update = 0, thread_sound = 0;
 bool quit = false;
 pthread_mutex_t update_render_swap_state_mutex = (pthread_mutex_t){};
 
-sprite_t render_data_frame_0 = {.p = {[RESOLUTION_WIDTH*RESOLUTION_HEIGHT-1] = 0}}, render_data_frame_1 = {.p = {[RESOLUTION_WIDTH*RESOLUTION_HEIGHT-1] = 0}};
+sprite_t render_data_frame_0 = {.p = (uint8_t[RESOLUTION_WIDTH*RESOLUTION_HEIGHT]){}}, render_data_frame_1 = {.p = (uint8_t[RESOLUTION_WIDTH*RESOLUTION_HEIGHT]){}};
 
 #ifndef NDEBUG
 typedef struct __attribute((__packed__)) {
@@ -89,7 +90,9 @@ int main (int argc, char **argv) {
 	render_data.frame[0]->h = render_data.frame[1]->h = RESOLUTION_HEIGHT;
 
 	if (!os_Init (GAME_TITLE)) { LOG ("os_Init failed."); abort (); }
+	#ifndef NDEBUG
 	os_SetBackgroundColor (0x40, 0x3a, 0x4d);
+	#endif
 	log_Time ();
 	LOG (" Program started");
 	os_SetWindowFrameBuffer (render_data.frame[0]->p, render_data.frame[0]->w, render_data.frame[0]->h);

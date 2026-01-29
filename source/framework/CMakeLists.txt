@@ -23,22 +23,16 @@ if(NOT APPLE)
 endif()
 
 add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTERFACE_FRAME_BUFFER_SCALED OSINTERFACE_COLOR_INDEX_MODE EXPLORER_PRINT_ERRORS FOLDERS_PRINT_ERRORS)
-    
-add_library(cereal OBJECT cereal.c)
-add_library(explorer OBJECT explorer.c)
-add_library(folders OBJECT folders.c)
-add_library(log OBJECT log.c)
-add_library(menu OBJECT menu.c)
-add_library(utilities OBJECT utilities.c)
-add_library(render OBJECT render.c)
-add_library(samples OBJECT samples.c)
-add_library(sprite OBJECT sprite.c)
-add_library(update OBJECT update.c)
+
 add_library(osinterface OBJECT osinterface.c)
 add_library(sound OBJECT sound.c)
 add_library(OpenGL2_1 OBJECT OpenGL2_1.c)
 
-add_library(framework STATIC $<TARGET_OBJECTS:cereal> $<TARGET_OBJECTS:explorer> $<TARGET_OBJECTS:folders> $<TARGET_OBJECTS:log> $<TARGET_OBJECTS:menu> $<TARGET_OBJECTS:utilities> $<TARGET_OBJECTS:render> $<TARGET_OBJECTS:samples> $<TARGET_OBJECTS:sprite> $<TARGET_OBJECTS:update> $<TARGET_OBJECTS:osinterface> $<TARGET_OBJECTS:sound> $<TARGET_OBJECTS:OpenGL2_1>)
+add_library(framework 
+    framework.c
+    $<TARGET_OBJECTS:osinterface>
+    $<TARGET_OBJECTS:sound>
+    $<TARGET_OBJECTS:OpenGL2_1>)
 
 target_link_options(framework PRIVATE -Wl,--whole-archive)
 
@@ -54,4 +48,5 @@ elseif(APPLE)
     target_link_libraries(OpenGL2_1 "-framework Cocoa -framework CoreVideo -framework OpenGL")
     set_source_files_properties(sound.c PROPERTIES LANGUAGE OBJC)
     target_link_libraries(sound "-framework AudioUnit")
+    set_source_files_properties(framework.c PROPERTIES LANGUAGE C) # This line probably unnecessary - remember to remove next time working on Mac
 endif(WIN32)

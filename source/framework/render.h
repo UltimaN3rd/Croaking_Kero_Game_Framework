@@ -33,6 +33,11 @@ typedef struct __attribute__((__packed__)) {
     } flags;
 } render_state_sprite_t;
 
+typedef struct {
+	int16_t x, y;
+	float u, v;
+} textured_poly_vertex_t;
+
 typedef struct __attribute__((__packed__)) {
 	enum : uint8_t { render_shape_rectangle, render_shape_circle, render_shape_line, render_shape_dot, render_shape_triangle, render_shape_ellipse } type;
 	union __attribute__((__packed__)) {
@@ -77,33 +82,41 @@ typedef struct {
 	uint8_t pixel;
 } __attribute__((__packed__)) render_state_particle_t;
 
+typedef struct __attribute__((__packed__)) {
+	struct {
+		enum : uint8_t {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle, render_element_textured_poly} type : 3;
+		bool ignore_camera : 1;
+	};
+	int8_t depth;
+	union {
+		render_state_sprite_t sprite;
+		render_shape_t shape;
+		struct __attribute__((__packed__)) {
+			char *string;
+			int16_t x, y, length;
+		} text;
+		struct __attribute__((__packed__)) {
+			render_state_sprite_t sprite;
+			uint8_t color;
+		} sprite_silhouette;
+		struct __attribute__((__packed__)) {
+			int16_t l, b, r, t;
+			uint8_t levels : 3; // Maximum value of 7
+		} darkness_rectangle;
+		struct __attribute__((__packed__)) {
+			textured_poly_vertex_t *vertices;
+			const sprite_t *texture;
+			int16_t x, y;
+			uint8_t vertex_count;
+		} textured_poly;
+	};
+	#define RENDER_MAX_ELEMENTS 4096
+} render_state_element_t;
+
 typedef struct render_state_s {
 	volatile bool busy;
 	uint64_t state_count;
-	struct __attribute__((__packed__)) {
-		struct {
-			enum : uint8_t {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle} type : 3;
-			bool ignore_camera : 1;
-		};
-		int8_t depth;
-		union {
-			render_state_sprite_t sprite;
-			render_shape_t shape;
-			struct __attribute__((__packed__)) {
-				char *string;
-				int16_t x, y, length;
-			} text;
-			struct __attribute__((__packed__)) {
-				render_state_sprite_t sprite;
-				uint8_t color;
-			} sprite_silhouette;
-			struct __attribute__((__packed__)) {
-				int16_t l, b, r, t;
-				uint8_t levels : 3; // Maximum value of 7
-			} darkness_rectangle;
-		};
-		#define RENDER_MAX_ELEMENTS 4096
-	} elements[RENDER_MAX_ELEMENTS];
+	render_state_element_t elements[RENDER_MAX_ELEMENTS];
 	int32_t element_count;
 	#define RENDER_STATE_MEM_AMOUNT UINT16_MAX
 	struct {
@@ -188,10 +201,24 @@ typedef struct {
 #define Render_Shape(...) Render_Shape_((Render_Shape_arguments){__VA_ARGS__})
 void Render_Shape_ (Render_Shape_arguments arguments);
 
+typedef struct __attribute__((__packed__)) {
+	enum {render_text_payload_sprite} tag;
+	union {
+		struct __attribute__((__packed__)) {
+			const sprite_t *_;
+			int16_t x, y;
+		} sprite;
+	} _;
+} render_text_payload_t;
+
 typedef struct {
     int8_t depth;
     int x, y, length;
     const char *string;
+	struct __attribute__((__packed__)) {
+		int16_t count;
+		const render_text_payload_t *_;
+	} payload;
 	bool ignore_camera;
 	bool center_horizontally_on_screen;
 	bool center_vertically_on_screen;
@@ -214,7 +241,7 @@ void Render_CursorAtRawMousePos (const cursor_t *cursor);
 typedef struct {
 	int16_t w, h;
 } font_StringDimensions_return_t;
-font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text);
+font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text, const render_text_payload_t *payload_ptr);
 
 // Must be called after any call to Render_Camera in order to take effect
 void Render_ScreenShake (int x, int y);
@@ -231,3 +258,17 @@ typedef struct {
 void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args);
 
 void Render_Screenshot (sprite_t *destination);
+
+typedef struct {
+	int8_t depth;
+	const sprite_t *texture;
+	int16_t x, y;
+	uint8_t vertex_count;
+	textured_poly_vertex_t *vertices;
+} Render_TexturedPoly_arguments_t;
+// Call convention: Render_TexturedPoly(.texture = &whatever, .vertex_count = n, .vertices = (textured_poly_vertex_t[]){{your}, {x, y, u, v}, {verts}, {here}}, .otherarguments)
+// Vertices MUST be in counter-clockwise order!!!
+#define Render_TexturedPoly(...) Render_TexturedPoly_ ((Render_TexturedPoly_arguments_t){__VA_ARGS__})
+void Render_TexturedPoly_ (Render_TexturedPoly_arguments_t args);
+
+int16_t Render_TextGetPayloadCountFromString (const char *text);

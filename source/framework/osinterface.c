@@ -595,6 +595,8 @@ os_char1024_t os_SaveFileDialog (const char *title, const char *save_button_text
 	return str;
 }
 
+void os_OpenURL (const char *url) { os_OpenFileBrowser (url); }
+
 void os_OpenFileBrowser (const char *directory) {
 	char command[1040];
 	assert (strlen (directory) < 1024);
@@ -1160,6 +1162,8 @@ os_char1024_t os_SaveFileDialog (const char *title, const char *save_button_text
 	buf.str[len-1] = 0;
 	return buf;
 }
+
+void os_OpenURL (const char *url) { os_OpenFileBrowser (url); }
 
 void os_OpenFileBrowser (const char *directory) {
 	char command[1040];
@@ -1918,6 +1922,8 @@ os_char1024_t os_SaveFileDialog (const char *title, const char *save_button_text
 	[win release];
 	return (os_char1024_t){};
 }
+
+void os_OpenURL (const char *url) { os_OpenFileBrowser (url); }
 
 void os_OpenFileBrowser (const char *directory) {
 	char command[1040];

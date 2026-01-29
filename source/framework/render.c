@@ -20,19 +20,11 @@
 
 #include <pthread.h>
 
-void DrawCircle(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color);
-void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color);
-void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color);
-void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color);
-
-
 render_state_t *render_state_being_edited = NULL;
 extern pthread_mutex_t update_render_swap_state_mutex;
 extern render_data_t render_data;
 extern bool quit;
-
-void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index);
-void font_Write (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index);
+typeof(render_data.render_states[0].camera) camera;
 
 void Render_Cursor (const cursor_t *cursor, int x, int y) {
 	render_state_being_edited->cursor = (typeof (render_state_being_edited->cursor)) {
@@ -134,6 +126,7 @@ static uint16_t Render_AllocInState (uint16_t bytes) {
 }
 
 void Render_Text_ (Render_Text_arguments arguments) {
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
 	if (arguments.string == NULL) return;
 	if (arguments.length == 0) arguments.length = strlen (arguments.string);
 	if (arguments.length == 0) return; // Empty string
@@ -142,7 +135,7 @@ void Render_Text_ (Render_Text_arguments arguments) {
 
 	font_StringDimensions_return_t dimensions;
 	if (arguments.translucent_background_darkness || arguments.center_horizontally_on_screen || arguments.center_vertically_on_screen) {
-		dimensions = font_StringDimensions(&framework_font, arguments.string);
+		dimensions = font_StringDimensions(&resources_framework_font, arguments.string, NULL);
 	}
 
 	if (arguments.center_horizontally_on_screen) {
@@ -164,12 +157,15 @@ void Render_Text_ (Render_Text_arguments arguments) {
 
 	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
 
+	size_t alloc_payload = arguments.payload.count * sizeof(*arguments.payload._);
+	size_t alloc_size = arguments.length + alloc_payload;
+	auto mem = Render_AllocInState(alloc_size);
+	if (mem == RENDER_STATE_MEM_AMOUNT) // Out of memory, cannot render this string
+	return;
+	
 	const auto count = render_state_being_edited->element_count++;
 
-	auto mem = Render_AllocInState(arguments.length);
-	if (mem == RENDER_STATE_MEM_AMOUNT) // Out of memory, cannot render this string
-		return;
-	auto str = &render_state_being_edited->mem.bytes[mem];
+	auto str = &render_state_being_edited->mem.bytes[mem+alloc_payload];
 
 	render_state_being_edited->elements[count] = (typeof((render_state_t){}.elements[0])){
 		.type = render_element_text,
@@ -179,6 +175,10 @@ void Render_Text_ (Render_Text_arguments arguments) {
 	};
 	strcpy (str, arguments.string); // Already checked length above
 	str[arguments.length-1] = 0;
+	for (int i = 0; i < arguments.payload.count; ++i) {
+		// Copy the payload in reverse order
+		memcpy (str - sizeof(*arguments.payload._) * (i+1), &arguments.payload._[i], sizeof(*arguments.payload._));
+	}
 }
 
 void Render_Background_ (Render_Background_arguments background) {
@@ -216,6 +216,33 @@ void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args) {
 			.levels = args.levels
 		},
 	};
+}
+
+void Render_TexturedPoly_ (Render_TexturedPoly_arguments_t args) {
+	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
+	if (args.vertex_count < 3) return;
+	if (args.vertices == NULL) return;
+	
+	auto mem = Render_AllocInState(args.vertex_count * sizeof (*args.vertices));
+	if (mem == RENDER_STATE_MEM_AMOUNT) // Out of memory, cannot render this poly
+	return;
+	
+	const auto count = render_state_being_edited->element_count++;
+	const auto verts = (typeof(render_state_being_edited->elements[0].textured_poly.vertices))&render_state_being_edited->mem.bytes[mem];
+
+	render_state_being_edited->elements[count] = (typeof(*render_state_being_edited->elements)) {
+		.type = render_element_textured_poly,
+		.textured_poly = {
+			.x = args.x,
+			.y = args.y,
+			.texture = args.texture,
+			.vertex_count = args.vertex_count,
+			.vertices = verts,
+		},
+		.depth = args.depth,
+	};
+
+	memcpy (verts, args.vertices, args.vertex_count * sizeof (*args.vertices));
 }
 
 render_state_t *Render_GetCurrentEditableState () {
@@ -258,6 +285,1010 @@ void Render_ShowFPS (bool show) { render_state_being_edited->debug.show_framerat
 static sprite_t *frame;
 static bool frame_select = 0;
 
+static inline void DrawBackground (render_state_t *render_state) {
+	switch (render_state->background.type) {
+		case background_type_none: break;
+
+		case background_type_blank: {
+			uint8_t *p = frame->p;
+			int c = frame->w * frame->h;
+			uint8_t b = render_state->background.blank.color;
+			repeat (c) *p++ = b;
+		} break;
+
+		case background_type_stripes: {
+			uint8_t colors[2] = {render_state->background.stripes.color, render_state->background.stripes.color/2};
+			bool color_index = 0;
+			uint8_t color = colors[color_index];
+			uint8_t *p = frame->p;
+			float angle = render_state->background.stripes.angle;
+			angle -= (int)angle;
+			angle = fabs (angle);
+			if (angle == 0 || angle == 0.5f) {// Flat horizontal line
+				int width = frame->w;
+				// int height = frame->h;
+				int h = 0;
+				int w = render_state->background.stripes.width;
+				// int y = 0;
+				for (int y = 0; y < frame->h; ++y) {
+					repeat (width) *p++ = color;
+					if (++h == w) {
+						color_index = !color_index;
+						color = colors[color_index];
+						h = 0;
+					}
+				}
+			}
+			else if (angle == 0.25f || angle == 0.75f) { // flat vertical line
+				int width = frame->w;
+				// int height = frame->h;
+				int stripe_width = render_state->background.stripes.width;
+				// int y = 0;
+				for (int y = 0; y < frame->h; ++y) {
+					int x = 0;
+					int w = stripe_width;
+					while (x < width) {
+						if (x + w > width) w = width - x;
+						repeat (w) {
+							*p++ = color;
+							++x;
+						}
+						color_index = !color_index;
+						color = colors[color_index];
+					}
+				}
+			}
+			else {
+				// This is fricked
+				float slope = tanf (render_state->background.stripes.angle * TWOPI);
+				float x_per_y = 1.f / slope;
+				// float slopex = 0;
+				int width = frame->w;
+				// int height = frame->h;
+				int stripe_width = render_state->background.stripes.width;
+				// int y = 0;
+				for (int y = 0; y < frame->h; ++y) {
+					int x = y * x_per_y;
+					int xpy = ROUNDF(x_per_y);
+					if (xpy == 0) xpy = 1;
+					color_index = (x / xpy) % 2;
+					int w = stripe_width - (x % stripe_width);
+					x = 0;
+					while (x < width) {
+						if (x + w > width) w = width - x;
+						repeat (w) {
+							*p++ = color;
+							++x;
+						}
+						color_index = !color_index;
+						color = colors[color_index];
+						w = stripe_width;
+					}
+				}
+			}
+		} break;
+
+		case background_type_checkers: {
+			int height = frame->h;
+			int width = frame->w;
+			uint8_t *p = frame->p;
+			int checker_width = render_state->background.checkers.width;
+			int checker_height = render_state->background.checkers.height;
+			assert (checker_height);
+			uint8_t colors[2] = {render_state->background.checkers.color, render_state->background.checkers.color/2};
+			bool color_index = 0;
+			uint8_t color = colors[color_index];
+			int y = 0;
+			int offsetx = render_state->background.checkers.x;
+			color_index = (offsetx / checker_width) % 2;
+			offsetx %= checker_width;
+			int offsety = render_state->background.checkers.y;
+			color_index = (color_index + (offsety / checker_height)) % 2;
+			offsety %= checker_height;
+			int h = checker_height - offsety;
+			while (y < height) {
+				if (y + h > height) h = height - y;
+				repeat (h) {
+					int x = 0;
+					int w = checker_width - offsetx;
+					while (x < width) {
+						color = colors[color_index];
+						if (x + w > width) w = width - x;
+						repeat (w) {
+							*p++ = color;
+							++x;
+						}
+						color_index = !color_index;
+						color = colors[color_index];
+						w = checker_width;
+						if (x + w > width) w = width - x;
+						repeat (w) {
+							*p++ = color;
+							++x;
+						}
+						color_index = !color_index;
+						w = checker_width;
+					}
+					++y;
+				}
+				color_index = !color_index;
+				h = checker_height;
+			}
+		} break;
+
+		case background_type_sprite: {
+			sprite_Blit (render_state->background.sprite, frame, 0, 0);
+		} break;
+	}
+}
+
+static inline void DrawSprite (render_state_element_t element) {
+	auto s = element.sprite;
+	if (!element.ignore_camera) {
+		s.position.x -= camera.x;
+		s.position.y -= camera.y;
+	}
+	enum {flip_none = 0b00, flip_hori = 0b01, flip_vert = 0b10, flip_both = 0b11} flip = (s.flags.flip_vertically << 1) | s.flags.flip_horizontally;
+	if ( flip != flip_none && s.flags.rotation_by_quarters != 0 ) {
+		LOG ("Sprites cannot be both flipped and rotated!");
+		assert (false);
+		s.flags.rotation_by_quarters = 0;
+		// s.rotation = 0;
+	}
+	if (s.rotation != 0) {
+		sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
+	}
+	else {
+		switch (flip) {
+			case flip_none: {
+				switch (s.flags.rotation_by_quarters) {
+					case 0: sprite_Blit (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+					case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy); break;
+					case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+					case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+				}
+			} break;
+			case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+			case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+			case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+		}
+	}
+}
+
+static inline void DrawSpriteSilhouette (render_state_element_t element) {
+	auto color = element.sprite_silhouette.color;
+	auto s = element.sprite_silhouette.sprite;
+	if (!element.ignore_camera) {
+		s.position.x -= camera.x;
+		s.position.y -= camera.y;
+	}
+	enum {flip_none = 0b00, flip_hori = 0b01, flip_vert = 0b10, flip_both = 0b11} flip = (s.flags.flip_vertically << 1) | s.flags.flip_horizontally;
+	if ( flip != flip_none && s.flags.rotation_by_quarters != 0 ) {
+		LOG ("Sprites cannot be both flipped and rotated!");
+		assert (false);
+		s.flags.rotation_by_quarters = 0;
+		// s.rotation = 0;
+	}
+	if (s.rotation != 0) {
+		sprite_SampleRotatedFlippedColor(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically, color);
+	}
+	else {
+		switch (flip) {
+			case flip_none: {
+				switch (s.flags.rotation_by_quarters) {
+					case 0: sprite_BlitColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+					case 1: sprite_BlitRotated90Color (s.sprite, frame, s.position.x,s.position.y, color, s.originx, s.originy); break;
+					case 2: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+					case 3: sprite_BlitRotated270Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+				}
+			} break;
+			case flip_both: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
+			case flip_hori: sprite_BlitFlippedHorizontallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+			case flip_vert: sprite_BlitFlippedVerticallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
+		}
+	}
+}
+
+static inline void DrawRectangle (render_state_element_t element) {
+	auto r = element.shape.rectangle;
+	if (!element.ignore_camera) {
+		r.x -= camera.x;
+		r.y -= camera.y;
+	}
+	int rb = r.y;
+	int rt = rb + r.h-1;
+	int rl = r.x;
+	int rr = rl + r.w-1;
+
+	if (rb > rt) SWAP (rb, rt);
+	if (rl > rr) SWAP (rl, rr);
+
+	if (r.flags.center_horizontally) {
+		int half_width = r.w/2;
+		rl -= half_width;
+		rr -= half_width;
+	}
+
+	if (r.flags.center_vertically) {
+		int half_height = r.h/2;
+		rb -= half_height;
+		rt -= half_height;
+	}
+
+	int bottom = MAX (rb, 0);
+	int top = MIN (rt, frame->h-1);
+	int left = MAX (rl, 0);
+	int right = MIN (rr, frame->w-1);
+	
+	int ibottom = (bottom == rb) ? bottom+1 : bottom;
+	int itop = (top == rt) ? top-1 : top;
+	int ileft = (left == rl) ? left+1 : left;
+	int iright = (right == rr) ? right-1 : right;
+
+	if (top < bottom || right < left) return;
+
+	if (bottom == rb && r.color_edge != 0)
+		for (int x = left; x <= right; ++x)
+			frame->p[x + bottom * frame->w] = r.color_edge;
+
+	for (int y = ibottom; y <= itop; ++y) {
+		if (left == rl && r.color_edge != 0)
+			frame->p[left + y * frame->w] = r.color_edge;
+		if (r.color_fill != 0) {
+			for (int x = ileft; x <= iright; ++x) {
+				frame->p[x + y * frame->w] = r.color_fill;
+			}
+		}
+		if (right == rr && r.color_edge != 0)
+			frame->p[right + y * frame->w] = r.color_edge;
+	}
+
+	if (top == rt && r.color_edge != 0)
+		for (int x = left; x <= right; ++x)
+			frame->p[x + top * frame->w] = r.color_edge;
+}
+
+static inline void DrawCircle(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color) {
+	float d;
+	int x, y;
+	d = 3.f - (2.f*radius);
+	x = 0;
+	y = radius;
+	#pragma push_macro ("PXY")
+	#undef PXY
+	#define PXY(a, b) do { auto xx = (a); auto yy = (b); if (xx >= 0 && xx < destination->w && yy >= 0 && yy < destination->h) destination->p[xx + yy*destination->w] = color; } while (0)
+	while(x <= y) {
+		PXY ((center_x+x), (center_y+y));
+		PXY ((center_x-x), (center_y+y));
+		PXY ((center_x+x), (center_y-y));
+		PXY ((center_x-x), (center_y-y));
+		PXY ((center_x+y), (center_y+x));
+		PXY ((center_x-y), (center_y+x));
+		PXY ((center_x+y), (center_y-x));
+		PXY ((center_x-y), (center_y-x));
+		if(d < 0) { d += 4*x     +  6; ++x; }
+		else      { d += 4*(x-y) + 10; ++x; --y; }
+	}
+	#pragma pop_macro ("PXY")
+}
+
+static inline void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color) {
+	float d;
+	int x, y;
+	d = 3.f - (2.f*radius);
+	x = 0;
+	y = radius;
+	while(x <= y) {
+		for(int i = MAX(0, (center_x-x)); i <= MIN(destination->w-1, (center_x+x)); ++i) {
+			if (center_y+y >= 0 && center_y+y < destination->h)
+				destination->p[i + (center_y+y)*destination->w] = color;
+			if (center_y-y >= 0 && center_y-y < destination->h)
+				destination->p[i + (center_y-y)*destination->w] = color;
+		}
+		for(int i = MAX(0, (center_x-y)); i <= MIN(destination->w-1, (center_x+y)); ++i) {
+			if (center_y+x >= 0 && center_y+x < destination->h)
+				destination->p[i + (center_y+x)*destination->w] = color;
+			if (center_y-x >= 0 && center_y-x < destination->h)
+				destination->p[i + (center_y-x)*destination->w] = color;
+		}
+		if(d < 0) { d += 4*x     +  6; ++x; }
+		else      { d += 4*(x-y) + 10; ++x; --y; }
+	}
+}
+
+static inline void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
+	int16_t l = center_x - radiusx,
+			r = center_x + radiusx,
+			b_ = center_y - radiusy,
+			t = center_y + radiusy;
+	int32_t a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	int32_t dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	int32_t err = dx+dy+b1*a*a, e2; /* error of 1.step */
+
+	if (l > r) SWAP (l, r);
+	if (b_ > t) SWAP (b_, t);
+	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
+	a *= 8*a; b1 = 8*b*b;
+
+	#pragma push_macro ("PXY")
+	#undef PXY
+	#define PXY(x__, y__) do { auto xx = (x__); auto yy = (y__); if (xx >= 0 && xx < destination->w && yy >= 0 && yy < destination->h) destination->p[xx + yy*destination->w] = color; } while (0) 
+	do {
+		PXY(r, b_); /*   I. Quadrant */
+		PXY(l, b_); /*  II. Quadrant */
+		PXY(l, t); /* III. Quadrant */
+		PXY(r, t); /*  IV. Quadrant */
+		e2 = 2*err;
+		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
+		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
+	} while (l <= r);
+
+	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
+		break;
+		PXY(l-1, b_); /* -> finish tip of ellipse */
+		PXY(r+1, b_++); 
+		PXY(l-1, t);
+		PXY(r+1, t--); 
+	}
+	#pragma pop_macro ("PXY")
+}
+
+static inline void DrawLineHorizontal (sprite_t *destination, int16_t l, int16_t r, int16_t y, uint8_t color) {
+	if (y < 0 || color == 0 || y > destination->h-1) return;
+	if (l > r) SWAP (l, r);
+	if (l > destination->w-1 || r < 0) return;
+	if (l < 0) l = 0;
+	if (r > destination->w-1) r = destination->w-1;
+	memset (&destination->p[l + y * destination->w], color, r - l + 1);
+}
+
+static inline void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
+	int16_t l = center_x - radiusx,
+			r = center_x + radiusx,
+			b_ = center_y - radiusy,
+			t = center_y + radiusy;
+	int a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	long err = dx+dy+b1*a*a, e2; /* error of 1.step */
+
+	if (l > r) { l = r; r += a; } /* if called with swapped points */
+	if (b_ > t) b_ = t; /* .. exchange them */
+	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
+	a *= 8*a; b1 = 8*b*b;
+
+	#pragma push_macro ("LINE")
+	#undef LINE
+	#define LINE(l__, r__, y__) DrawLineHorizontal (destination, l__, r__, y__, color)
+	do {
+		LINE(l, r, b_); /*   I. Quadrant */
+		LINE(l, r, t); /* III. Quadrant */
+		e2 = 2*err;
+		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
+		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
+	} while (l <= r);
+
+	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
+		LINE(l-1, r+1, b_); /* -> finish tip of ellipse */
+		LINE(l-1, r+1, t);
+	}
+	#pragma pop_macro ("LINE")
+}
+
+static inline void DrawLine (render_state_element_t element) {
+	auto l = element.shape.line;
+	if (!element.ignore_camera) {
+		l.x0 -= camera.x;
+		l.x1 -= camera.x;
+		l.y0 -= camera.y;
+		l.y1 -= camera.y;
+	}
+
+	if (l.color == 0) return;
+
+	if (l.x1 < l.x0) {
+		SWAP(l.x0, l.x1);
+		SWAP(l.y0, l.y1);
+	}
+
+	int bottom = l.y0;
+	int top = l.y1;
+	if (bottom > top) SWAP (bottom, top);
+
+	if (l.x0 > frame->w-1 || l.x1 < 0 || bottom > frame->h-1 || top < 0) return; // line is completely outside the screen
+
+	if (l.x0 < 0) {
+		float width = l.x1 - l.x0;
+		int height = l.y1 - l.y0;
+		float distance = -l.x0 / width;
+		l.y0 += height * distance;
+		l.x0 = 0;
+	}
+
+	if (l.x1 > frame->w-1) {
+		float width = l.x1 - l.x0;
+		int height = l.y1 - l.y0;
+		float distance = (frame->w-1 - l.x1) / width;
+		l.y1 -= height * distance;
+		l.x1 = frame->w-1;
+	}
+
+	if (l.y0 > l.y1) { SWAP (l.x0, l.x1); SWAP (l.y0, l.y1); }
+
+	if (l.y0 < 0) {
+		float width = l.x1 - l.x0;
+		float height = l.y1 - l.y0;
+		float distance = (float)-l.y0 / height;
+		l.x0 += width * distance;
+		l.y0 = 0;
+	}
+
+	if (l.y1 > frame->h-1) {
+		float width = l.x1 - l.x0;
+		float height = l.y1 - l.y0;
+		float distance = (float)(frame->h-1 - l.y1) / height;
+		l.x1 += width * distance;
+		l.y1 = frame->h-1;
+	}
+
+	int dx = l.x1 - l.x0;
+	int dy = l.y1 - l.y0;
+
+	int ax = abs (dx) * 2;
+	int sx = SIGN (dx);
+	int ay = abs (dy) * 2;
+	int sy = SIGN (dy);
+
+	int x = l.x0;
+	int y = l.y0;
+	
+	int d;
+	if (ax > ay) {
+		d = ay - (ax / 2);
+		for (;;) {
+			frame->p[x + y * frame->w] = l.color;
+			if (x == l.x1) break;
+			if (d >= 0) {
+				y += sy;
+				d -= ax;
+			}
+			x += sx;
+			d += ay;
+		}
+	}
+	else {
+		d = ax - ay / 2;
+		for (;;) {
+			frame->p[x + y * frame->w] = l.color;
+			if (y == l.y1) break;
+			if (d >= 0) {
+				x += sx;
+				d -= ay;
+			}
+			y += sy;
+			d += ax;
+		}
+	}
+}
+
+static inline void DrawTriangle (render_state_element_t element) {
+	// Incomplete. Only does edges, and does them kinda ugly
+	auto t = element.shape.triangle;
+	struct {int x, y;} ps[3] = {{t.x0,t.y0}, {t.x1,t.y1}, {t.x2,t.y2}};
+	// Sort points by height
+	if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
+	if (ps[1].y > ps[0].y) SWAP (ps[0], ps[1]);
+	if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
+
+	typeof(*ps) tri1[3], tri2[3];
+	bool do_tri1 = true, do_tri2 = true;
+
+	if (ps[0].y == ps[1].y) { // Flat top triangle
+		if (ps[0].y == ps[2].y) { // Single horizontal line
+			element.shape.type = render_shape_line;
+			element.shape.line.x0 = MIN (ps[0].x, MIN (ps[1].x, ps[2].x));
+			element.shape.line.x1 = MAX (ps[0].x, MAX (ps[1].x, ps[2].x));
+			element.shape.line.y0 = element.shape.line.y1 = ps[0].y;
+			element.shape.line.color = t.color_edge;
+			DrawLine (element);
+			return;
+		}
+		else {
+			tri2[0] = ps[0];
+			tri2[1] = ps[1];
+			assert (tri2[0].y == tri2[1].y);
+			if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
+			tri2[2] = ps[2];
+			do_tri1 = false;
+		}
+	}
+	else if (ps[1].y == ps[2].y) { // Flat bottom triangle
+		tri1[0] = ps[0];
+		tri1[1] = ps[1];
+		tri1[2] = ps[2];
+		assert (tri1[1].y == tri1[2].y);
+		if (tri1[1].x > tri1[2].x) SWAP (tri1[0], tri1[1]);
+		do_tri2 = false;
+	}
+	else { // Split the general triangle into a flat-bottom and flat-top
+		tri1[0] = ps[0];
+		assert (ps[0].y != ps[1].y); assert (ps[1].y != ps[2].y);
+		if (ps[1].y > ps[2].y) {
+			tri1[1] = ps[1];
+			tri1[2].y = tri1[1].y;
+			float dy = ps[2].y - ps[0].y;
+			float slope = (ps[2].x - ps[0].x) / dy;
+			float distance = (ps[1].y - ps[0].y) / dy;
+			tri1[2].x = distance * (ps[2].x - ps[0].x) + ps[0].x;
+
+			tri2[0] = tri1[1];
+			tri2[1] = tri1[2];
+			tri2[2] = ps[2];
+		}
+		else {
+			tri1[1] = ps[2];
+			tri1[2].y = tri1[1].y;
+			float dy = ps[1].y - ps[0].y;
+			float slope = (ps[1].x - ps[0].x) / dy;
+			float distance = (ps[2].y - ps[0].y) / dy;
+			tri1[2].x = distance * (ps[1].x - ps[0].x) + ps[0].x;
+
+			tri2[0] = tri1[1];
+			tri2[1] = tri1[2];
+			tri2[2] = ps[1];
+		}
+	}
+
+	int y = tri1[0].y;
+	if (do_tri1) { // Flat bottom triangle
+		if (tri1[1].x > tri1[2].x) SWAP (tri1[1], tri1[2]);
+		// Guaranteed that tri1[0].y is greater than tri1[1].y & tri1[2].y
+		int bottom = tri1[1].y;
+
+		struct {
+			int x, dx, ax, sx, d;
+		} l, r;
+
+		l.x = tri1[0].x;
+		l.dx = tri1[1].x - l.x;
+		l.ax = abs (l.dx) * 2;
+		l.sx = SIGN (l.dx);
+
+		r.x = l.x;
+		r.dx = tri1[2].x - r.x;
+		r.ax = abs (r.dx) * 2;
+		r.sx = SIGN (r.dx);
+
+		int dy = tri1[1].y - tri1[0].y;
+		int ay = abs (dy) * 2;
+
+		int ly = y;
+		if (l.ax > ay) {
+			l.d = ay - (l.ax / 2);
+			for (;;) {
+				frame->p[l.x + ly * frame->w] = t.color_edge;
+				if (l.x == tri1[1].x) break;
+				if (l.d >= 0) {
+					--ly;
+					l.d -= l.ax;
+				}
+				l.x += l.sx;
+				l.d += ay;
+			}
+		}
+		else {
+			l.d = l.ax - ay / 2;
+			for (;;) {
+				frame->p[l.x + ly * frame->w] = t.color_edge;
+				if (ly == tri1[1].y) break;
+				if (l.d >= 0) {
+					l.x += l.sx;
+					l.d -= ay;
+				}
+				--ly;
+				l.d += l.ax;
+			}
+		}
+
+		int ry = y;
+		if (r.ax > ay) {
+			r.d = ay - (r.ax / 2);
+			for (;;) {
+				frame->p[r.x + ry * frame->w] = t.color_edge;
+				if (r.x == tri1[2].x) break;
+				if (r.d >= 0) {
+					--ry;
+					r.d -= r.ax;
+				}
+				r.x += r.sx;
+				r.d += ay;
+			}
+		}
+		else {
+			r.d = r.ax - ay / 2;
+			for (;;) {
+				frame->p[r.x + ry * frame->w] = t.color_edge;
+				if (ry == tri1[1].y) break;
+				if (r.d >= 0) {
+					r.x += r.sx;
+					r.d -= ay;
+				}
+				--ry;
+				r.d += r.ax;
+			}
+		}
+	}
+
+	if (do_tri2) { // Flat top triangle
+		if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
+		// Guaranteed that tri2[2].y is less than tri2[0].y & tri2[1].y
+		int bottom = tri2[2].y;
+		y = tri2[0].y;
+
+		struct {
+			int x, dx, ax, sx, d;
+		} l, r;
+
+		l.x = tri2[0].x;
+		l.dx = tri2[2].x - l.x;
+		l.ax = abs (l.dx) * 2;
+		l.sx = SIGN (l.dx);
+
+		r.x = tri2[1].x;
+		r.dx = tri2[2].x - r.x;
+		r.ax = abs (r.dx) * 2;
+		r.sx = SIGN (r.dx);
+
+		int dy = tri2[2].y - tri2[0].y;
+		int ay = abs (dy) * 2;
+
+		int ly = y;
+		if (l.ax > ay) {
+			l.d = ay - (l.ax / 2);
+			for (;;) {
+				frame->p[l.x + ly * frame->w] = t.color_edge;
+				if (l.x == tri2[2].x) break;
+				if (l.d >= 0) {
+					--ly;
+					l.d -= l.ax;
+				}
+				l.x += l.sx;
+				l.d += ay;
+			}
+		}
+		else {
+			l.d = l.ax - ay / 2;
+			for (;;) {
+				frame->p[l.x + ly * frame->w] = t.color_edge;
+				if (ly == tri2[2].y) break;
+				if (l.d >= 0) {
+					l.x += l.sx;
+					l.d -= ay;
+				}
+				--ly;
+				l.d += l.ax;
+			}
+		}
+
+		int ry = y;
+		if (r.ax > ay) {
+			r.d = ay - (r.ax / 2);
+			for (;;) {
+				frame->p[r.x + ry * frame->w] = t.color_edge;
+				if (r.x == tri2[2].x) break;
+				if (r.d >= 0) {
+					--ry;
+					r.d -= r.ax;
+				}
+				r.x += r.sx;
+				r.d += ay;
+			}
+		}
+		else {
+			r.d = r.ax - ay / 2;
+			for (;;) {
+				frame->p[r.x + ry * frame->w] = t.color_edge;
+				if (ry == tri2[2].y) break;
+				if (r.d >= 0) {
+					r.x += r.sx;
+					r.d -= ay;
+				}
+				--ry;
+				r.d += r.ax;
+			}
+		}
+	}
+}
+
+static inline void DrawShape (render_state_element_t element) {
+	auto s = element.shape;
+	switch (s.type) {
+		case render_shape_rectangle: {
+			DrawRectangle (element);
+		} break;
+
+		case render_shape_circle: {
+			auto c = s.circle;
+			if (!element.ignore_camera) {
+				c.x -= camera.x;
+				c.y -= camera.y;
+			}
+			if (c.color_fill != 0) DrawCircleFilled (frame, c.x, c.y, c.r, c.color_fill);
+			if ((c.color_fill == 0 || c.color_edge != c.color_fill) && c.color_edge != 0) DrawCircle (frame, c.x, c.y, c.r, c.color_edge);
+		} break;
+
+		case render_shape_ellipse: {
+			auto e = s.ellipse;
+			if (!element.ignore_camera) {
+				e.x -= camera.x;
+				e.y -= camera.y;
+			}
+			if (e.color_fill != 0) DrawEllipseFilled (frame, e.x, e.y, e.rx, e.ry, e.color_fill);
+			if ((e.color_fill == 0 || e.color_edge != e.color_fill) && e.color_edge != 0) DrawEllipse (frame, e.x, e.y, e.rx, e.ry, e.color_edge);
+		} break;
+
+		case render_shape_line: {
+			DrawLine (element);
+		} break;
+
+		case render_shape_dot: {
+			auto d = s.dot;
+			if (!element.ignore_camera) {
+				d.x -= camera.x;
+				d.y -= camera.y;
+			}
+			if (d.x < 0 || d.x > frame->w-1 || d.y < 0 || d.y > frame->h-1) break;
+			frame->p[d.x + d.y * frame->w] = d.color;
+		} break;
+
+		case render_shape_triangle: {
+			DrawTriangle (element);
+		}
+	}
+}
+
+static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index) {
+	const char *const text_start = text;
+    char c = *(text++);
+    int i;
+    int x = left, y = top - font->line_height; // Current x and y, updated as we draw each character
+
+	// Escape codes (all start and end with \:
+	// \cXX\ - Color: set color to XX (in hexadecimal). Use \c0\ to reset color. Color can be 1 or 2 digits in the hex range 0 - FF.
+	// \wABC\ - Sine wave: set wave to A pixels in height, B speed, C steepness (all single digit hex values 0-f). Use \w0\ to disable wave. C can be omitted to default to 3 steepness.
+	struct {
+		uint8_t colorize;
+		struct {
+			uint8_t height : 4, speed : 4, steepness : 4;
+			float offset; // Increased with each character within the wave
+		} wave;
+	} state = {};
+
+	render_text_payload_t *payload = &((render_text_payload_t*)text_start)[-1];
+
+    while (c != '\0') {
+        switch (c) {
+			__label__ goto_default;
+            case ' ': x += font->space_width; break;
+
+            case '\n': {
+                x = left;
+                y -= font->line_height;
+            } break;
+
+			case '\\': { // Escape code
+        		c = *(text++);
+
+				constexpr uint8_t hex2int[256] = { // Size 255 so that when accessed by an unsigned char, doesn't go out of range. All invalid values are 0
+					['0']=0, ['1']=1, ['2']=2, ['3']=3, ['4']=4, ['5']=5, ['6']=6, ['7']=7, ['8']=8, ['9']=9, ['a']=10, ['b']=11, ['c']=12, ['d']=13, ['e']=14, ['f']=15, ['A']=10, ['B']=11, ['C']=12, ['D']=13, ['E']=14, ['F']=15
+				};
+
+				switch (c) {
+					__label__ goto_invalid_escape_sequence;
+					case 'C':
+					case 'c': { // Color
+						c = *(text++); if (c == '\0') break;
+						unsigned char hex[2] = {};
+						hex[0] = c;
+						c = *(text++); if (c == '\0') break;
+						hex[1] = c;
+						if (hex[1] == '\\') {
+							hex[1] = hex[0];
+							hex[0] = '0';
+						}
+						else {
+							c = *(text++); if (c == '\0') break;
+						}
+						assert (c == '\\');
+						state.colorize = hex2int[hex[0]] * 16 + hex2int[hex[1]];
+					} break;
+
+					case 'W':
+					case 'w': {
+						c = *(text++); if (c == '\0') break;
+						char a, b, c_;
+						a = c;  c = *(text++); if (c == '\0') break;
+						b = c;
+						if (b == '\\') { // Only 1 digit provided. Intentionally or not, this disables wave.
+							state.wave = (typeof (state.wave)){};
+							break;
+						}
+						c = *(text++); if (c == '\0') break;
+						c_ = c;
+						if (c_ == '\\') c_ = '5'; // Steepness not provided. Go to default
+						else { c = *(text++); if (c == '\0') break; }
+
+						assert (c == '\\');
+
+						if ((hex2int[(int)a] == 0 && a != '0') || (hex2int[(int)b] == 0 && b != '0')) goto goto_invalid_escape_sequence;
+						state.wave = (typeof(state.wave)){
+							.height = hex2int[(int)a],
+							.speed = hex2int[(int)b],
+							.steepness = hex2int[(int)c_],
+						};
+					} break;
+
+					case '&': {
+						switch (payload->tag) {
+							case render_text_payload_sprite: {
+								const auto spr = payload->_.sprite;
+
+								int yy = y + spr.y;
+								if (state.wave.height) {
+									yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
+									state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
+								}
+
+								DrawSprite ((render_state_element_t){
+									.type = render_element_sprite,
+									.sprite = {
+										.position = {.x = spr.x + x, .y = yy},
+										.sprite = spr._,
+									},
+								});
+								x += spr._->w + spr.x;
+							} break;
+						}
+						--payload;
+					} break;
+
+					case '\\': { // Pass through normal backslash character as text
+						goto goto_default;
+					} break;
+
+					default: {
+					goto_invalid_escape_sequence:
+						LOG ("Unsupported escape code in string [%s] character [%d]", text_start, (int)(text - text_start));
+						assert (false);
+					} break;
+				}
+				if (c == '\0') break;
+			} break;
+
+            default: {
+			goto_default:
+                i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
+                if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
+                    __label__ skip_drawing_letter;
+
+                    int yy = y - font->descent[i];
+					if (state.wave.height) {
+						yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
+						state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
+					}
+                    int right = x + font->bitmaps[i]->w-1;
+                    int top = yy + font->bitmaps[i]->h-1;
+
+                    if (right < 0 || top < 0 || x > destination->w-1 || yy > destination->h-1) goto skip_drawing_letter;
+
+					if (state.colorize) sprite_BlitSubstituteColor (font->bitmaps[i], destination, x, yy, 255, state.colorize);
+					else sprite_Blit (font->bitmaps[i], destination, x, yy);
+
+                    skip_drawing_letter:
+                    x += font->bitmaps[i]->w;
+                } // If character wasn't in the range, then we ignore it.
+            } break;
+        }
+        c = *(text++);
+    }
+}
+
+static inline void DrawWrite (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index) {
+	DrawWrite_Length(font, destination, left, top, text, strlen (text), frame_index);
+}
+
+static inline void DrawTexturedPoly (render_state_element_t element) {
+	auto p = element.textured_poly;
+	assert (p.vertex_count > 2);
+	if (!element.ignore_camera) {
+		p.x -= camera.x;
+		p.y -= camera.y;
+	}
+	
+	int top = 0;
+	int16_t boty = INT16_MAX;
+	for (int i = 0; i < p.vertex_count; ++i) {
+		p.vertices[i].x += p.x;
+		p.vertices[i].y += p.y;
+		if (p.vertices[i].y > p.vertices[top].y) top = i;
+		if (p.vertices[i].y < boty) boty = p.vertices[i].y;
+	}
+
+	if (top < 0 || boty > frame->h-1) return;
+
+	// Find leftmost top, and rightmost top vertices
+	uint8_t l = top;
+	{
+		uint8_t ll = (l+1) % p.vertex_count;
+		while (p.vertices[ll].y == p.vertices[l].y && p.vertices[ll].x <= p.vertices[l].x && ll != top) {
+			l = ll;
+			ll = (ll+1) % p.vertex_count;
+		}
+	}
+	uint8_t r = top;
+	{
+		uint8_t rr = r-1;
+		if (-rr >= p.vertex_count) rr = p.vertex_count-1;
+		while (p.vertices[rr].y == p.vertices[r].y && p.vertices[rr].x >= p.vertices[r].x && rr != top) {
+			r = rr;
+			if (--rr >= p.vertex_count) rr = p.vertex_count-1;
+		}
+	}
+
+	int16_t y = p.vertices[top].y;
+	while (y >= boty) {
+		float ld = 0, rd = 0;
+		uint8_t lnext = (l+1) % p.vertex_count;
+		if (p.vertices[lnext].y >= p.vertices[l].y) lnext = l;
+		else ld = MAX(0, MIN(1, (float)(y - p.vertices[l].y) / (p.vertices[lnext].y - p.vertices[l].y)));
+		uint8_t rnext = r-1;
+		if (rnext >= p.vertex_count) rnext = p.vertex_count-1;
+		if (p.vertices[rnext].y >= p.vertices[r].y) rnext = r;
+		else rd = MAX(0, MIN(1, (float)(y - p.vertices[r].y) / (p.vertices[rnext].y - p.vertices[r].y)));
+
+		const auto lv0 = p.vertices[l];
+		const auto lv1 = p.vertices[lnext];
+		const auto rv0 = p.vertices[r];
+		const auto rv1 = p.vertices[rnext];
+
+		{
+			bool cont = false;
+			if (lnext != l && y <= lv1.y) { l = lnext; cont = true; }
+			if (rnext != r && y <= rv1.y) { r = rnext; cont = true; }
+			if (cont) continue;
+		}
+
+		const struct {
+			int16_t x;
+			float u, v;
+		}
+		left = {
+			(lv1.x - lv0.x) * ld + lv0.x + .5f,
+			(lv1.u - lv0.u) * ld + lv0.u,
+			(lv1.v - lv0.v) * ld + lv0.v,
+		},
+		right = {
+			(rv1.x - rv0.x) * rd + rv0.x + .5f,
+			(rv1.u - rv0.u) * rd + rv0.u,
+			(rv1.v - rv0.v) * rd + rv0.v,
+		};
+
+		int16_t drawl = MAX(0, left.x);
+		int16_t drawr = MIN(frame->w-1, right.x);
+		for (int16_t x = drawl; x <= drawr; ++x) {
+			int16_t w = right.x - left.x + 1;
+			float d = (float)(x - left.x) / w;
+			float u = MIN(1, MAX(0, (d * (right.u - left.u) + left.u)));
+			float v = MIN(1, MAX(0, (d * (right.v - left.v) + left.v)));
+			int16_t texu = u * (p.texture->w) + 0.5f;
+			int16_t texv = v * (p.texture->h-1) + 0.5f;
+			auto pixel = p.texture->p[texu + texv * p.texture->w];
+			frame->p[x + y * frame->w] = pixel;
+		}
+
+		--y;
+	}
+}
+
 void *Render (void*) {
 	LOG ("Render thread started");
 	render_data.thread_initialized = true;
@@ -280,8 +1311,6 @@ void *Render (void*) {
 	frame = (render_data.frame[frame_select]);
 
 	int64_t sleep_time;
-
-	// zen_timer_t timer = zen_Start ();
 
 	static uint64_t frame_index = 0;
 
@@ -366,140 +1395,7 @@ void *Render (void*) {
 		zen_timer_t frame_timer = zen_Start();
 
 		// Draw background
-		switch (render_state->background.type) {
-			case background_type_none: break;
-
-			case background_type_blank: {
-				uint8_t *p = frame->p;
-				int c = frame->w * frame->h;
-				uint8_t b = render_state->background.blank.color;
-				repeat (c) *p++ = b;
-			} break;
-
-			case background_type_stripes: {
-				uint8_t colors[2] = {render_state->background.stripes.color, render_state->background.stripes.color/2};
-				bool color_index = 0;
-				uint8_t color = colors[color_index];
-				uint8_t *p = frame->p;
-				float angle = render_state->background.stripes.angle;
-				angle -= (int)angle;
-				angle = fabs (angle);
-				if (angle == 0 || angle == 0.5f) {// Flat horizontal line
-					int width = frame->w;
-					// int height = frame->h;
-					int h = 0;
-					int w = render_state->background.stripes.width;
-					// int y = 0;
-					for (int y = 0; y < frame->h; ++y) {
-						repeat (width) *p++ = color;
-						if (++h == w) {
-							color_index = !color_index;
-							color = colors[color_index];
-							h = 0;
-						}
-					}
-				}
-				else if (angle == 0.25f || angle == 0.75f) { // flat vertical line
-					int width = frame->w;
-					// int height = frame->h;
-					int stripe_width = render_state->background.stripes.width;
-					// int y = 0;
-					for (int y = 0; y < frame->h; ++y) {
-						int x = 0;
-						int w = stripe_width;
-						while (x < width) {
-							if (x + w > width) w = width - x;
-							repeat (w) {
-								*p++ = color;
-								++x;
-							}
-							color_index = !color_index;
-							color = colors[color_index];
-						}
-					}
-				}
-				else {
-					// This is fricked
-					float slope = tanf (render_state->background.stripes.angle * TWOPI);
-					float x_per_y = 1.f / slope;
-					// float slopex = 0;
-					int width = frame->w;
-					// int height = frame->h;
-					int stripe_width = render_state->background.stripes.width;
-					// int y = 0;
-					for (int y = 0; y < frame->h; ++y) {
-						int x = y * x_per_y;
-						int xpy = ROUNDF(x_per_y);
-						if (xpy == 0) xpy = 1;
-						color_index = (x / xpy) % 2;
-						int w = stripe_width - (x % stripe_width);
-						x = 0;
-						while (x < width) {
-							if (x + w > width) w = width - x;
-							repeat (w) {
-								*p++ = color;
-								++x;
-							}
-							color_index = !color_index;
-							color = colors[color_index];
-							w = stripe_width;
-						}
-					}
-				}
-			} break;
-
-			case background_type_checkers: {
-				int height = frame->h;
-				int width = frame->w;
-				uint8_t *p = frame->p;
-				int checker_width = render_state->background.checkers.width;
-				int checker_height = render_state->background.checkers.height;
-				assert (checker_height);
-				uint8_t colors[2] = {render_state->background.checkers.color, render_state->background.checkers.color/2};
-				bool color_index = 0;
-				uint8_t color = colors[color_index];
-				int y = 0;
-				int offsetx = render_state->background.checkers.x;
-				color_index = (offsetx / checker_width) % 2;
-				offsetx %= checker_width;
-				int offsety = render_state->background.checkers.y;
-				color_index = (color_index + (offsety / checker_height)) % 2;
-				offsety %= checker_height;
-				int h = checker_height - offsety;
-				while (y < height) {
-					if (y + h > height) h = height - y;
-					repeat (h) {
-						int x = 0;
-						int w = checker_width - offsetx;
-						while (x < width) {
-							color = colors[color_index];
-							if (x + w > width) w = width - x;
-							repeat (w) {
-								*p++ = color;
-								++x;
-							}
-							color_index = !color_index;
-							color = colors[color_index];
-							w = checker_width;
-							if (x + w > width) w = width - x;
-							repeat (w) {
-								*p++ = color;
-								++x;
-							}
-							color_index = !color_index;
-							w = checker_width;
-						}
-						++y;
-					}
-					color_index = !color_index;
-					h = checker_height;
-				}
-			} break;
-
-			case background_type_sprite: {
-				sprite_Blit (render_state->background.sprite, frame, 0, 0);
-			} break;
-		}
+		DrawBackground (render_state);
 
 		auto count = render_state->element_count;
 
@@ -511,495 +1407,20 @@ void *Render (void*) {
 			}
 		}
 
-		auto camera = render_state->camera;
+		camera = render_state->camera;
 		auto element = render_state->elements;
 		repeat (count) {
 			switch (element->type) {
 				case render_element_sprite: {
-					auto s = element->sprite;
-					if (!element->ignore_camera) {
-						s.position.x -= camera.x;
-						s.position.y -= camera.y;
-					}
-					enum {flip_none = 0b00, flip_hori = 0b01, flip_vert = 0b10, flip_both = 0b11} flip = (s.flags.flip_vertically << 1) | s.flags.flip_horizontally;
-					if ( flip != flip_none && s.flags.rotation_by_quarters != 0 ) {
-						LOG ("Sprites cannot be both flipped and rotated!");
-						assert (false);
-						s.flags.rotation_by_quarters = 0;
-						// s.rotation = 0;
-					}
-					if (s.rotation != 0) {
-						sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
-					}
-					else {
-						switch (flip) {
-							case flip_none: {
-								switch (s.flags.rotation_by_quarters) {
-									case 0: sprite_Blit (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
-									case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy); break;
-									case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
-									case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
-								}
-							} break;
-							case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
-							case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
-							case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
-						}
-					}
+					DrawSprite (*element);
 				} break;
 
 				case render_element_sprite_silhouette: {
-					auto color = element->sprite_silhouette.color;
-					auto s = element->sprite_silhouette.sprite;
-					if (!element->ignore_camera) {
-						s.position.x -= camera.x;
-						s.position.y -= camera.y;
-					}
-					enum {flip_none = 0b00, flip_hori = 0b01, flip_vert = 0b10, flip_both = 0b11} flip = (s.flags.flip_vertically << 1) | s.flags.flip_horizontally;
-					if ( flip != flip_none && s.flags.rotation_by_quarters != 0 ) {
-						LOG ("Sprites cannot be both flipped and rotated!");
-						assert (false);
-						s.flags.rotation_by_quarters = 0;
-						// s.rotation = 0;
-					}
-					if (s.rotation != 0) {
-						sprite_SampleRotatedFlippedColor(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically, color);
-					}
-					else {
-						switch (flip) {
-							case flip_none: {
-								switch (s.flags.rotation_by_quarters) {
-									case 0: sprite_BlitColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
-									case 1: sprite_BlitRotated90Color (s.sprite, frame, s.position.x,s.position.y, color, s.originx, s.originy); break;
-									case 2: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
-									case 3: sprite_BlitRotated270Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
-								}
-							} break;
-							case flip_both: sprite_BlitRotated180Color (s.sprite, frame, s.position.x, s.position.y, color, s.originx, s.originy); break;
-							case flip_hori: sprite_BlitFlippedHorizontallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
-							case flip_vert: sprite_BlitFlippedVerticallyColor (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, color); break;
-						}
-					}
+					DrawSpriteSilhouette (*element);
 				} break;
 
 				case render_element_shape: {
-					auto s = element->shape;
-					switch (s.type) {
-						__label__ goto_render_line;
-
-						case render_shape_rectangle: {
-							auto r = s.rectangle;
-							if (!element->ignore_camera) {
-								r.x -= camera.x;
-								r.y -= camera.y;
-							}
-							int rb = r.y;
-							int rt = rb + r.h-1;
-							int rl = r.x;
-							int rr = rl + r.w-1;
-
-							if (rb > rt) SWAP (rb, rt);
-							if (rl > rr) SWAP (rl, rr);
-
-							if (r.flags.center_horizontally) {
-								int half_width = r.w/2;
-								rl -= half_width;
-								rr -= half_width;
-							}
-
-							if (r.flags.center_vertically) {
-								int half_height = r.h/2;
-								rb -= half_height;
-								rt -= half_height;
-							}
-
-							int bottom = MAX (rb, 0);
-							int top = MIN (rt, frame->h-1);
-							int left = MAX (rl, 0);
-							int right = MIN (rr, frame->w-1);
-							
-							int ibottom = (bottom == rb) ? bottom+1 : bottom;
-							int itop = (top == rt) ? top-1 : top;
-							int ileft = (left == rl) ? left+1 : left;
-							int iright = (right == rr) ? right-1 : right;
-
-							if (top < bottom || right < left) break;
-
-							if (bottom == rb && r.color_edge != 0)
-								for (int x = left; x <= right; ++x)
-									frame->p[x + bottom * frame->w] = r.color_edge;
-
-							for (int y = ibottom; y <= itop; ++y) {
-								if (left == rl && r.color_edge != 0)
-									frame->p[left + y * frame->w] = r.color_edge;
-								if (r.color_fill != 0) {
-									for (int x = ileft; x <= iright; ++x) {
-										frame->p[x + y * frame->w] = r.color_fill;
-									}
-								}
-								if (right == rr && r.color_edge != 0)
-									frame->p[right + y * frame->w] = r.color_edge;
-							}
-
-							if (top == rt && r.color_edge != 0)
-								for (int x = left; x <= right; ++x)
-									frame->p[x + top * frame->w] = r.color_edge;
-						} break;
-
-						case render_shape_circle: {
-							auto c = s.circle;
-							if (!element->ignore_camera) {
-								c.x -= camera.x;
-								c.y -= camera.y;
-							}
-							if (c.color_fill != 0) DrawCircleFilled (frame, c.x, c.y, c.r, c.color_fill);
-							if ((c.color_fill == 0 || c.color_edge != c.color_fill) && c.color_edge != 0) DrawCircle (frame, c.x, c.y, c.r, c.color_edge);
-						} break;
-
-						case render_shape_ellipse: {
-							auto e = s.ellipse;
-							if (!element->ignore_camera) {
-								e.x -= camera.x;
-								e.y -= camera.y;
-							}
-							if (e.color_fill != 0) DrawEllipseFilled (frame, e.x, e.y, e.rx, e.ry, e.color_fill);
-							if ((e.color_fill == 0 || e.color_edge != e.color_fill) && e.color_edge != 0) DrawEllipse (frame, e.x, e.y, e.rx, e.ry, e.color_edge);
-						} break;
-
-						case render_shape_line: {
-						goto_render_line:
-							auto l = s.line;
-							if (!element->ignore_camera) {
-								l.x0 -= camera.x;
-								l.x1 -= camera.x;
-								l.y0 -= camera.y;
-								l.y1 -= camera.y;
-							}
-
-							if (l.color == 0) break;
-
-							if (l.x1 < l.x0) {
-								SWAP(l.x0, l.x1);
-								SWAP(l.y0, l.y1);
-							}
-
-							int bottom = l.y0;
-							int top = l.y1;
-							if (bottom > top) SWAP (bottom, top);
-
-							if (l.x0 > frame->w-1 || l.x1 < 0 || bottom > frame->h-1 || top < 0) break; // line is completely outside the screen
-		
-							if (l.x0 < 0) {
-								float width = l.x1 - l.x0;
-								int height = l.y1 - l.y0;
-								float distance = -l.x0 / width;
-								l.y0 += height * distance;
-								l.x0 = 0;
-							}
-
-							if (l.x1 > frame->w-1) {
-								float width = l.x1 - l.x0;
-								int height = l.y1 - l.y0;
-								float distance = (frame->w-1 - l.x1) / width;
-								l.y1 -= height * distance;
-								l.x1 = frame->w-1;
-							}
-
-							if (l.y0 > l.y1) { SWAP (l.x0, l.x1); SWAP (l.y0, l.y1); }
-
-							if (l.y0 < 0) {
-								float width = l.x1 - l.x0;
-								float height = l.y1 - l.y0;
-								float distance = (float)-l.y0 / height;
-								l.x0 += width * distance;
-								l.y0 = 0;
-							}
-
-							if (l.y1 > frame->h-1) {
-								float width = l.x1 - l.x0;
-								float height = l.y1 - l.y0;
-								float distance = (float)(frame->h-1 - l.y1) / height;
-								l.x1 += width * distance;
-								l.y1 = frame->h-1;
-							}
-
-							int dx = l.x1 - l.x0;
-							int dy = l.y1 - l.y0;
-
-							int ax = abs (dx) * 2;
-							int sx = SIGN (dx);
-							int ay = abs (dy) * 2;
-							int sy = SIGN (dy);
-
-							int x = l.x0;
-							int y = l.y0;
-							
-							int d;
-							if (ax > ay) {
-								d = ay - (ax / 2);
-								for (;;) {
-									frame->p[x + y * frame->w] = l.color;
-									if (x == l.x1) break;
-									if (d >= 0) {
-										y += sy;
-										d -= ax;
-									}
-									x += sx;
-									d += ay;
-								}
-							}
-							else {
-								d = ax - ay / 2;
-								for (;;) {
-									frame->p[x + y * frame->w] = l.color;
-									if (y == l.y1) break;
-									if (d >= 0) {
-										x += sx;
-										d -= ay;
-									}
-									y += sy;
-									d += ax;
-								}
-							}
-						} break;
-
-						case render_shape_dot: {
-							auto d = s.dot;
-							if (!element->ignore_camera) {
-								d.x -= camera.x;
-								d.y -= camera.y;
-							}
-							if (d.x < 0 || d.x > frame->w-1 || d.y < 0 || d.y > frame->h-1) break;
-							frame->p[d.x + d.y * frame->w] = d.color;
-						} break;
-
-						case render_shape_triangle: { // Incomplete. Only does edges, and does them kinda ugly
-							auto t = s.triangle;
-							struct {int x, y;} ps[3] = {{t.x0,t.y0}, {t.x1,t.y1}, {t.x2,t.y2}};
-							// Sort points by height
-							if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
-							if (ps[1].y > ps[0].y) SWAP (ps[0], ps[1]);
-							if (ps[2].y > ps[1].y) SWAP (ps[1], ps[2]);
-
-							typeof(*ps) tri1[3], tri2[3];
-							bool do_tri1 = true, do_tri2 = true;
-
-							if (ps[0].y == ps[1].y) { // Flat top triangle
-								if (ps[0].y == ps[2].y) { // Single horizontal line
-									s.type = render_shape_line;
-									s.line.x0 = MIN (ps[0].x, MIN (ps[1].x, ps[2].x));
-									s.line.x1 = MAX (ps[0].x, MAX (ps[1].x, ps[2].x));
-									s.line.y0 = s.line.y1 = ps[0].y;
-									s.line.color = t.color_edge;
-									goto goto_render_line;
-								}
-								else {
-									tri2[0] = ps[0];
-									tri2[1] = ps[1];
-									assert (tri2[0].y == tri2[1].y);
-									if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
-									tri2[2] = ps[2];
-									do_tri1 = false;
-								}
-							}
-							else if (ps[1].y == ps[2].y) { // Flat bottom triangle
-								tri1[0] = ps[0];
-								tri1[1] = ps[1];
-								tri1[2] = ps[2];
-								assert (tri1[1].y == tri1[2].y);
-								if (tri1[1].x > tri1[2].x) SWAP (tri1[0], tri1[1]);
-								do_tri2 = false;
-							}
-							else { // Split the general triangle into a flat-bottom and flat-top
-								tri1[0] = ps[0];
-								assert (ps[0].y != ps[1].y); assert (ps[1].y != ps[2].y);
-								if (ps[1].y > ps[2].y) {
-									tri1[1] = ps[1];
-									tri1[2].y = tri1[1].y;
-									float dy = ps[2].y - ps[0].y;
-									float slope = (ps[2].x - ps[0].x) / dy;
-									float distance = (ps[1].y - ps[0].y) / dy;
-									tri1[2].x = distance * (ps[2].x - ps[0].x) + ps[0].x;
-
-									tri2[0] = tri1[1];
-									tri2[1] = tri1[2];
-									tri2[2] = ps[2];
-								}
-								else {
-									tri1[1] = ps[2];
-									tri1[2].y = tri1[1].y;
-									float dy = ps[1].y - ps[0].y;
-									float slope = (ps[1].x - ps[0].x) / dy;
-									float distance = (ps[2].y - ps[0].y) / dy;
-									tri1[2].x = distance * (ps[1].x - ps[0].x) + ps[0].x;
-
-									tri2[0] = tri1[1];
-									tri2[1] = tri1[2];
-									tri2[2] = ps[1];
-								}
-							}
-
-							int y = tri1[0].y;
-							if (do_tri1) { // Flat bottom triangle
-								if (tri1[1].x > tri1[2].x) SWAP (tri1[1], tri1[2]);
-								// Guaranteed that tri1[0].y is greater than tri1[1].y & tri1[2].y
-								int bottom = tri1[1].y;
-
-								struct {
-									int x, dx, ax, sx, d;
-								} l, r;
-
-								l.x = tri1[0].x;
-								l.dx = tri1[1].x - l.x;
-								l.ax = abs (l.dx) * 2;
-								l.sx = SIGN (l.dx);
-
-								r.x = l.x;
-								r.dx = tri1[2].x - r.x;
-								r.ax = abs (r.dx) * 2;
-								r.sx = SIGN (r.dx);
-
-								int dy = tri1[1].y - tri1[0].y;
-								int ay = abs (dy) * 2;
-
-								int ly = y;
-								if (l.ax > ay) {
-									l.d = ay - (l.ax / 2);
-									for (;;) {
-										frame->p[l.x + ly * frame->w] = t.color_edge;
-										if (l.x == tri1[1].x) break;
-										if (l.d >= 0) {
-											--ly;
-											l.d -= l.ax;
-										}
-										l.x += l.sx;
-										l.d += ay;
-									}
-								}
-								else {
-									l.d = l.ax - ay / 2;
-									for (;;) {
-										frame->p[l.x + ly * frame->w] = t.color_edge;
-										if (ly == tri1[1].y) break;
-										if (l.d >= 0) {
-											l.x += l.sx;
-											l.d -= ay;
-										}
-										--ly;
-										l.d += l.ax;
-									}
-								}
-
-								int ry = y;
-								if (r.ax > ay) {
-									r.d = ay - (r.ax / 2);
-									for (;;) {
-										frame->p[r.x + ry * frame->w] = t.color_edge;
-										if (r.x == tri1[2].x) break;
-										if (r.d >= 0) {
-											--ry;
-											r.d -= r.ax;
-										}
-										r.x += r.sx;
-										r.d += ay;
-									}
-								}
-								else {
-									r.d = r.ax - ay / 2;
-									for (;;) {
-										frame->p[r.x + ry * frame->w] = t.color_edge;
-										if (ry == tri1[1].y) break;
-										if (r.d >= 0) {
-											r.x += r.sx;
-											r.d -= ay;
-										}
-										--ry;
-										r.d += r.ax;
-									}
-								}
-							}
-
-							if (do_tri2) { // Flat top triangle
-								if (tri2[0].x > tri2[1].x) SWAP (tri2[0], tri2[1]);
-								// Guaranteed that tri2[2].y is less than tri2[0].y & tri2[1].y
-								int bottom = tri2[2].y;
-								y = tri2[0].y;
-
-								struct {
-									int x, dx, ax, sx, d;
-								} l, r;
-
-								l.x = tri2[0].x;
-								l.dx = tri2[2].x - l.x;
-								l.ax = abs (l.dx) * 2;
-								l.sx = SIGN (l.dx);
-
-								r.x = tri2[1].x;
-								r.dx = tri2[2].x - r.x;
-								r.ax = abs (r.dx) * 2;
-								r.sx = SIGN (r.dx);
-
-								int dy = tri2[2].y - tri2[0].y;
-								int ay = abs (dy) * 2;
-
-								int ly = y;
-								if (l.ax > ay) {
-									l.d = ay - (l.ax / 2);
-									for (;;) {
-										frame->p[l.x + ly * frame->w] = t.color_edge;
-										if (l.x == tri2[2].x) break;
-										if (l.d >= 0) {
-											--ly;
-											l.d -= l.ax;
-										}
-										l.x += l.sx;
-										l.d += ay;
-									}
-								}
-								else {
-									l.d = l.ax - ay / 2;
-									for (;;) {
-										frame->p[l.x + ly * frame->w] = t.color_edge;
-										if (ly == tri2[2].y) break;
-										if (l.d >= 0) {
-											l.x += l.sx;
-											l.d -= ay;
-										}
-										--ly;
-										l.d += l.ax;
-									}
-								}
-
-								int ry = y;
-								if (r.ax > ay) {
-									r.d = ay - (r.ax / 2);
-									for (;;) {
-										frame->p[r.x + ry * frame->w] = t.color_edge;
-										if (r.x == tri2[2].x) break;
-										if (r.d >= 0) {
-											--ry;
-											r.d -= r.ax;
-										}
-										r.x += r.sx;
-										r.d += ay;
-									}
-								}
-								else {
-									r.d = r.ax - ay / 2;
-									for (;;) {
-										frame->p[r.x + ry * frame->w] = t.color_edge;
-										if (ry == tri2[2].y) break;
-										if (r.d >= 0) {
-											r.x += r.sx;
-											r.d -= ay;
-										}
-										--ry;
-										r.d += r.ax;
-									}
-								}
-							}
-						}
-					}
+					DrawShape (*element);
 				} break;
 
 				case render_element_text: {
@@ -1008,7 +1429,7 @@ void *Render (void*) {
 						text.x -= camera.x;
 						text.y -= camera.y;
 					}
-					font_Write_Length (&framework_font, frame, text.x, text.y, text.string, text.length, render_state->state_count);
+					DrawWrite_Length (&resources_framework_font, frame, text.x, text.y, text.string, text.length, render_state->state_count);
 				} break;
 
 				case render_element_darkness_rectangle: {
@@ -1018,6 +1439,10 @@ void *Render (void*) {
 							frame->p[x + frame->w * y] >>= r.levels;
 						}
 					}
+				} break;
+
+				case render_element_textured_poly: {
+					DrawTexturedPoly (*element);
 				} break;
 			}
 			++element;
@@ -1039,13 +1464,13 @@ void *Render (void*) {
 		if (render_state->debug.show_rendertime) {
 			char str[32];
 			snprintf (str, sizeof(str), "R%4"PRId64"us", frame_time);
-			font_Write (&framework_font, frame, 1, frame->h-2-framework_font.line_height, str, render_state->state_count);
+			DrawWrite (&resources_framework_font, frame, 1, frame->h-2-resources_framework_font.line_height, str, render_state->state_count);
 		}
 
 		if (render_state->debug.show_framerate) {
 			char str[32];
 			snprintf (str,sizeof (str), "FPS%d", fps_this_frame);
-			font_Write (&framework_font, frame, 1, frame->h-2, str, render_state->state_count);
+			DrawWrite (&resources_framework_font, frame, 1, frame->h-2, str, render_state->state_count);
 		}
 
 		if (render_state->cursor.sprite != NULL)
@@ -1080,263 +1505,14 @@ void *Render (void*) {
 	return NULL;
 }
 
-void DrawCircle(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color) {
-	float d;
-	int x, y;
-	d = 3.f - (2.f*radius);
-	x = 0;
-	y = radius;
-	#pragma push_macro ("PXY")
-	#undef PXY
-	#define PXY(a, b) do { auto xx = (a); auto yy = (b); if (xx >= 0 && xx < destination->w && yy >= 0 && yy < destination->h) destination->p[xx + yy*destination->w] = color; } while (0)
-	while(x <= y) {
-		PXY ((center_x+x), (center_y+y));
-		PXY ((center_x-x), (center_y+y));
-		PXY ((center_x+x), (center_y-y));
-		PXY ((center_x-x), (center_y-y));
-		PXY ((center_x+y), (center_y+x));
-		PXY ((center_x-y), (center_y+x));
-		PXY ((center_x+y), (center_y-x));
-		PXY ((center_x-y), (center_y-x));
-		if(d < 0) { d += 4*x     +  6; ++x; }
-		else      { d += 4*(x-y) + 10; ++x; --y; }
-	}
-	#pragma pop_macro ("PXY")
-}
-
-void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color) {
-	float d;
-	int x, y;
-	d = 3.f - (2.f*radius);
-	x = 0;
-	y = radius;
-	while(x <= y) {
-		for(int i = MAX(0, (center_x-x)); i <= MIN(destination->w-1, (center_x+x)); ++i) {
-			if (center_y+y >= 0 && center_y+y < destination->h)
-				destination->p[i + (center_y+y)*destination->w] = color;
-			if (center_y-y >= 0 && center_y-y < destination->h)
-				destination->p[i + (center_y-y)*destination->w] = color;
-		}
-		for(int i = MAX(0, (center_x-y)); i <= MIN(destination->w-1, (center_x+y)); ++i) {
-			if (center_y+x >= 0 && center_y+x < destination->h)
-				destination->p[i + (center_y+x)*destination->w] = color;
-			if (center_y-x >= 0 && center_y-x < destination->h)
-				destination->p[i + (center_y-x)*destination->w] = color;
-		}
-		if(d < 0) { d += 4*x     +  6; ++x; }
-		else      { d += 4*(x-y) + 10; ++x; --y; }
-	}
-}
-
-void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
-	int16_t l = center_x - radiusx,
-			r = center_x + radiusx,
-			b_ = center_y - radiusy,
-			t = center_y + radiusy;
-	int32_t a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
-	int32_t dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
-	int32_t err = dx+dy+b1*a*a, e2; /* error of 1.step */
-
-	if (l > r) SWAP (l, r);
-	if (b_ > t) SWAP (b_, t);
-	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
-	a *= 8*a; b1 = 8*b*b;
-
-	#pragma push_macro ("PXY")
-	#undef PXY
-	#define PXY(x__, y__) do { auto xx = (x__); auto yy = (y__); if (xx >= 0 && xx < destination->w && yy >= 0 && yy < destination->h) destination->p[xx + yy*destination->w] = color; } while (0) 
-	do {
-		PXY(r, b_); /*   I. Quadrant */
-		PXY(l, b_); /*  II. Quadrant */
-		PXY(l, t); /* III. Quadrant */
-		PXY(r, t); /*  IV. Quadrant */
-		e2 = 2*err;
-		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
-		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
-	} while (l <= r);
-
-	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
-		break;
-		PXY(l-1, b_); /* -> finish tip of ellipse */
-		PXY(r+1, b_++); 
-		PXY(l-1, t);
-		PXY(r+1, t--); 
-	}
-	#pragma pop_macro ("PXY")
-}
-
-void DrawLineHorizontal (sprite_t *destination, int16_t l, int16_t r, int16_t y, uint8_t color) {
-	if (y < 0 || color == 0 || y > destination->h-1) return;
-	if (l > r) SWAP (l, r);
-	if (l > destination->w-1 || r < 0) return;
-	if (l < 0) l = 0;
-	if (r > destination->w-1) r = destination->w-1;
-	memset (&destination->p[l + y * destination->w], color, r - l + 1);
-}
-
-void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
-	int16_t l = center_x - radiusx,
-			r = center_x + radiusx,
-			b_ = center_y - radiusy,
-			t = center_y + radiusy;
-	int a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
-	long dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
-	long err = dx+dy+b1*a*a, e2; /* error of 1.step */
-
-	if (l > r) { l = r; r += a; } /* if called with swapped points */
-	if (b_ > t) b_ = t; /* .. exchange them */
-	b_ += (b+1)/2; t = b_-b1;   /* starting pixel */
-	a *= 8*a; b1 = 8*b*b;
-
-	#pragma push_macro ("LINE")
-	#undef LINE
-	#define LINE(l__, r__, y__) DrawLineHorizontal (destination, l__, r__, y__, color)
-	do {
-		LINE(l, r, b_); /*   I. Quadrant */
-		LINE(l, r, t); /* III. Quadrant */
-		e2 = 2*err;
-		if (e2 <= dy) { b_++; t--; err += dy += a; }  /* y step */ 
-		if (e2 >= dx || 2*err > dy) { l++; r--; err += dx += b1; } /* x step */
-	} while (l <= r);
-
-	while (b_-t < b) {  /* too early stop of flat ellipses a=1 */
-		LINE(l-1, r+1, b_); /* -> finish tip of ellipse */
-		LINE(l-1, r+1, t);
-	}
-	#pragma pop_macro ("LINE")
-}
-
-void font_Write_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index) {
-	const char *const text_start = text;
-    char c = *(text++);
-    int i;
-    int x = left, y = top - font->line_height; // Current x and y, updated as we draw each character
-
-	// Escape codes (all start and end with \:
-	// \cXX\ - Color: set color to XX (in hexadecimal). Use \c0\ to reset color. Color can be 1 or 2 digits in the hex range 0 - FF.
-	// \wABC\ - Sine wave: set wave to A pixels in height, B speed, C steepness (all single digit hex values 0-f). Use \w0\ to disable wave. C can be omitted to default to 3 steepness.
-	struct {
-		uint8_t colorize;
-		struct {
-			uint8_t height : 4, speed : 4, steepness : 4;
-			float offset; // Increased with each character within the wave
-		} wave;
-	} state = {};
-
-    while (c != '\0') {
-        switch (c) {
-			__label__ goto_default;
-            case ' ': x += font->space_width; break;
-
-            case '\n': {
-                x = left;
-                y -= font->line_height;
-            } break;
-
-			case '\\': { // Escape code
-        		c = *(text++);
-
-				constexpr uint8_t hex2int[256] = { // Size 255 so that when accessed by an unsigned char, doesn't go out of range. All invalid values are 0
-					['0']=0, ['1']=1, ['2']=2, ['3']=3, ['4']=4, ['5']=5, ['6']=6, ['7']=7, ['8']=8, ['9']=9, ['a']=10, ['b']=11, ['c']=12, ['d']=13, ['e']=14, ['f']=15, ['A']=10, ['B']=11, ['C']=12, ['D']=13, ['E']=14, ['F']=15
-				};
-
-				switch (c) {
-					__label__ goto_invalid_escape_sequence;
-					case 'C':
-					case 'c': { // Color
-						c = *(text++); if (c == '\0') break;
-						unsigned char hex[2] = {};
-						hex[0] = c;
-						c = *(text++); if (c == '\0') break;
-						hex[1] = c;
-						if (hex[1] == '\\') {
-							hex[1] = hex[0];
-							hex[0] = '0';
-						}
-						else {
-							c = *(text++); if (c == '\0') break;
-						}
-						assert (c == '\\');
-						state.colorize = hex2int[hex[0]] * 16 + hex2int[hex[1]];
-					} break;
-
-					case 'W':
-					case 'w': {
-						c = *(text++); if (c == '\0') break;
-						char a, b, c_;
-						a = c;  c = *(text++); if (c == '\0') break;
-						b = c;
-						if (b == '\\') { // Only 1 digit provided. Intentionally or not, this disables wave.
-							state.wave = (typeof (state.wave)){};
-							break;
-						}
-						c = *(text++); if (c == '\0') break;
-						c_ = c;
-						if (c_ == '\\') c_ = '5'; // Steepness not provided. Go to default
-						else { c = *(text++); if (c == '\0') break; }
-
-						assert (c == '\\');
-
-						if ((hex2int[(int)a] == 0 && a != '0') || (hex2int[(int)b] == 0 && b != '0')) goto goto_invalid_escape_sequence;
-						state.wave = (typeof(state.wave)){
-							.height = hex2int[(int)a],
-							.speed = hex2int[(int)b],
-							.steepness = hex2int[(int)c_],
-						};
-					} break;
-
-					case '\\': { // Pass through normal backslash character as text
-						goto goto_default;
-					} break;
-
-					default: {
-					goto_invalid_escape_sequence:
-						LOG ("Unsupported escape code in string [%s] character [%d]", text_start, (int)(text - text_start));
-						assert (false);
-					} break;
-				}
-				if (c == '\0') break;
-			} break;
-
-            default: {
-			goto_default:
-                i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
-                if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
-                    __label__ skip_drawing_letter;
-
-                    int yy = y - font->descent[i];
-					if (state.wave.height) {
-						yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
-						state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
-					}
-                    int right = x + font->bitmaps[i]->w-1;
-                    int top = yy + font->bitmaps[i]->h-1;
-
-                    if (right < 0 || top < 0 || x > destination->w-1 || yy > destination->h-1) goto skip_drawing_letter;
-
-					if (state.colorize) sprite_BlitSubstituteColor (font->bitmaps[i], destination, x, yy, 255, state.colorize);
-					else sprite_Blit (font->bitmaps[i], destination, x, yy);
-
-                    skip_drawing_letter:
-                    x += font->bitmaps[i]->w;
-                } // If character wasn't in the range, then we ignore it.
-            } break;
-        }
-        c = *(text++);
-    }
-}
-
-void font_Write (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index) {
-	font_Write_Length(font, destination, left, top, text, strlen (text), frame_index);
-}
-
-font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text) {
+font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text, const render_text_payload_t *payload_ptr) {
     char c = *(text++);
     int i;
     int x = 0, y = font->line_height; // Current x and y, updated as we draw each character
     bool string_is_visible = false;
     int width = 0;
     int line_descent = 0;
+	const render_text_payload_t *payload = (payload_ptr ? payload_ptr : (render_text_payload_t *)(text - sizeof(*payload)));
     while (c != '\0') {
         switch (c) {
 			__label__ goto_default;
@@ -1350,10 +1526,19 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, const 
 
 			case '\\': { // Escape sequence. Everything other than \\\\ should be ignored
         		c = *(text++);
-				if (c == '\0') { --text; break; }
-				else if (c == '\\') goto goto_default;
-				while (c != '\\') {
-					c = *(text++); if (c == '\0') { --text; break; }
+				switch (c) {
+					case '\0': --text; break;
+					case '\\': goto goto_default;
+					case '&': {
+						switch (payload->tag) {
+							case render_text_payload_sprite: x += payload->_.sprite._->w; break;
+						}
+					} break;
+					default: {
+						while (c != '\\') {
+							c = *(text++); if (c == '\0') { --text; break; }
+						}
+					} break;
 				}
 			} break;
 
@@ -1377,6 +1562,30 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, const 
         return (font_StringDimensions_return_t){.w = 0, .h = 0};
     }
     return (font_StringDimensions_return_t){.w = width, .h = y};
+}
+
+int16_t Render_TextGetPayloadCountFromString (const char *text) {
+	int16_t payload_count = 0;
+    char c = *(text++);
+	while (c != '\0') {
+		if (c == '\\') {
+			c = *(text++);
+			switch (c) {
+				case '\0': --text; break;
+				case '\\': break;
+				case '&': {
+					++payload_count;
+				} break;
+				default: {
+					while (c != '\\') {
+						c = *(text++); if (c == '\0') { --text; break; }
+					}
+				} break;
+			}
+		}
+        c = *(text++);
+	}
+	return payload_count;
 }
 
 void Render_Screenshot (sprite_t *destination) {

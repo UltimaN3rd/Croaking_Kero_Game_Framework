@@ -57,20 +57,6 @@ static struct {
 
 static typeof(update_data.frame) unedited_frameinput = {}; // Save input state in case game modifies it
 
-typedef struct __attribute__((__packed__)) {
-	uint32_t id;
-	uint32_t memory_offset;
-	Update_Object_Func_t UpdateAndRender;
-	int8_t layer; // Objects are ordered by layer - higher layer means processed first. Objects in higher layers may occlude input from objects in lower layers.
-	bool survive_state_change : 1;
-} update_object_t;
-
-// Placed at the base address of every object's memory
-typedef struct {
-	bool used : 1;
-	uint32_t size : 31;
-} update_object_header_t;
-
 void *Update(void*) {
 	LOG ("Update thread started");
 	while (!render_data.thread_initialized) os_uSleepEfficient (1000);
@@ -231,7 +217,7 @@ void *Update(void*) {
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				char temp[64];
 					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-framework_font.line_height*2, .string = temp, .ignore_camera = true);
+					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-resources_framework_font.line_height*2, .string = temp, .ignore_camera = true);
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
 			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
@@ -472,6 +458,7 @@ static void Update_ObjectDelete (uint16_t index) {
 }
 
 // Sort starting from index, continuing up. If 0 or 1, sort all objects.
+// Lowest layer object goes to front of array, because objects are processed from end of array back to the front.
 static void Update_ObjectSort (uint16_t starting_index) {
 	if (update_data.objects.count == 0) return;
 	assert (starting_index < update_data.objects.count);
@@ -481,7 +468,7 @@ static void Update_ObjectSort (uint16_t starting_index) {
 		auto obj = &((update_object_t*)update_data.objects.mem)[index];
 		auto objbelow = &((update_object_t*)update_data.objects.mem)[index-1];
 		for (auto i = index; i > 0; --i, --obj, --objbelow) {
-			if (objbelow->layer >= obj->layer) break;
+			if (objbelow->layer <= obj->layer) break;
 			SWAP (*obj, *objbelow);
 		}
 		++index;
@@ -490,29 +477,38 @@ static void Update_ObjectSort (uint16_t starting_index) {
 	object_created_or_destroyed_this_frame = true;
 }
 
-uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change) {
-	uint16_t object_size = sizeof (update_object_header_t) + data_size;
+update_object_t *Update_ObjectAlloc (const uint32_t bytes) {
+	uint16_t object_size = sizeof (update_object_header_t) + bytes;
 	// object_size += object_size % 8; // Align by 8 bytes
 	const auto new_bottom = update_data.objects.bottom_used + sizeof (update_object_t);
 	const auto new_top = update_data.objects.top_used + object_size;
-	if (new_bottom + new_top >= UPDATE_OBJECT_MEMORY_SIZE) return 0; // Out of memory
-	const auto id = update_data.objects.nextid++;
+	if (new_bottom + new_top >= UPDATE_OBJECT_MEMORY_SIZE) return NULL; // Out of memory
+
+	const auto id_ = update_data.objects.nextid++;
 	auto obj = &((update_object_t*)update_data.objects.mem)[update_data.objects.count++];
 	*obj = (update_object_t) {
-		.id = id,
+		.id = id_,
 		.memory_offset = UPDATE_OBJECT_MEMORY_SIZE - new_top + sizeof(update_object_header_t),
-		.UpdateAndRender = UpdateAndRenderFunc,
-		.layer = layer,
-		.survive_state_change = survive_state_change,
 	};
-	memcpy (&update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE - new_top], &(update_object_header_t){.used = 1, .size = object_size}, sizeof (update_object_header_t));
-	memcpy (&update_data.objects.mem[obj->memory_offset], data, data_size);
 	update_data.objects.bottom_used = new_bottom;
 	update_data.objects.top_used = new_top;
-
+	memcpy (&update_data.objects.mem[UPDATE_OBJECT_MEMORY_SIZE - new_top], &(update_object_header_t){.used = 1, .size = object_size}, sizeof (update_object_header_t));
 	object_created_or_destroyed_this_frame = true;
 
-	return id;
+	return obj;
+}
+
+uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change) {
+	auto obj = Update_ObjectAlloc (data_size);
+	obj->UpdateAndRender = UpdateAndRenderFunc;
+	obj->layer = layer;
+	obj->survive_state_change = survive_state_change;
+	memcpy (&update_data.objects.mem[obj->memory_offset], data, data_size);
+	return obj->id;
+}
+
+void *Update_ObjectMemOffsetToAddr (const uint32_t mem_offset) {
+	return &update_data.objects.mem[mem_offset];
 }
 
 void Update_ClearInputAll () {
@@ -520,7 +516,7 @@ void Update_ClearInputAll () {
 }
 
 void Update_ClearInputMouse () {
-	update_data.frame.mouse = (typeof(update_data.frame.mouse)){};
+	update_data.frame.mouse = (typeof(update_data.frame.mouse)){.x = INT16_MIN, .y = INT16_MIN};
 }
 
 void Update_ClearInputMouseButtons () {

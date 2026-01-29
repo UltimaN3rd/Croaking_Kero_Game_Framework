@@ -219,23 +219,30 @@ static inline bool FileExists (const char *const filename) { return access (file
 #endif
 
 static inline char *ReadEntireFileAllocateBuffer (const char *filename) {
-	FILE *file = fopen (filename, "rb");
-	if (!file) { LOG ("Failed to read file [%s]", filename); return NULL; }
-	DEFER (fclose (file));
-	long start_pos = ftell (file);
-	fseek (file, 0, SEEK_END);
-	long end_pos = ftell (file);
-	fseek (file, start_pos, SEEK_SET);
-	long size = end_pos - start_pos;
-	char *buf = malloc (size);
-	assert (buf); if (buf == NULL) { LOG ("[%s] Failed to allocate %ld bytes", filename, size); return NULL; }
+    __label__ goto_return;
+    char *ret = NULL;
     bool success = false;
-	DEFER (if (!success) free (buf););
-	auto result = fread (buf, 1, size, file);
-    assert (result == size);
-    if (result != size) { LOG ("Reading file [%s] only read %lu/%ld bytes", filename, result, size); return NULL; }
-    success = true;
-    return buf;
+	FILE *file = fopen (filename, "rb");
+	if (!file) { LOG ("Failed to read file [%s]", filename); goto goto_return; }
+    {
+	    long start_pos = ftell (file);
+        fseek (file, 0, SEEK_END);
+        long end_pos = ftell (file);
+        fseek (file, start_pos, SEEK_SET);
+        long size = end_pos - start_pos;
+        ret = (char*)malloc (size);
+        assert (ret); if (ret == NULL) { LOG ("[%s] Failed to allocate %ld bytes", filename, size); goto goto_return; }
+        {
+            auto result = fread (ret, 1, size, file);
+            assert (result == size);
+            if (result != size) { LOG ("Reading file [%s] only read %zu/%ld bytes", filename, result, size); return NULL; }
+            success = true;
+        }
+    }
+goto_return:
+    if (ret && !success) { free (ret); ret = NULL; }
+    if (file) fclose(file);
+    return ret;
 }
 
 #define IS_POINTER(__var_or_type__) (__builtin_types_compatible_p(typeof (__var_or_type__), void*) || __builtin_types_compatible_p(typeof (__var_or_type__), void const*) || __builtin_types_compatible_p(typeof (__var_or_type__), void volatile*) || __builtin_types_compatible_p(typeof (__var_or_type__), void const volatile*))
@@ -250,7 +257,7 @@ static inline uint32_t RandFast () {
 	return r;
 }
 
-static inline float RandFastf () { return (float)RandFast() / UINT32_MAX; }
+static inline float RandFastf () { return (float)RandFast() / (float)UINT32_MAX; }
 
 static inline int32_t RandFast_Range (int32_t from, int32_t to) {
     if (from > to) SWAP (from, to);

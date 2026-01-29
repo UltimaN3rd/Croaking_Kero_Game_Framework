@@ -29,4 +29,3 @@ extern char GAME_FOLDER_CONFIG[];
 
 extern const update_state_functions_t state_functions[update_state_count];
 extern const uint8_t palette[256][3];
-extern const font_t framework_font;

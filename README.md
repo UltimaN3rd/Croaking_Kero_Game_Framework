@@ -36,7 +36,7 @@ mkdir build
 cd build
 cmake ..
 cmake --build build
-./build/a.exe
+./build/flappy.exe
 ```
 
 
@@ -58,7 +58,7 @@ cd build
 cmake ..
 cd ..
 cmake --build build
-./build/a
+./build/flappy
 ```
 
 
@@ -85,7 +85,7 @@ cd build
 CC=gcc-15 OBJC=clang cmake ..
 cd ..
 cmake --build build
-./build/a
+./build/flappy
 ```
 
 You may have trouble with the line,
@@ -101,14 +101,28 @@ Apple redirects gcc to clang, but to build this code you actually need to use GC
 Modify the below build instructions based on your operating system, as shown above.
 
 ```
-mkdir build-release
-cd build-release
+mkdir build_release
+cd build_release
 cmake .. -DCMAKE_BUILD_TYPE=MinSizeRel
 cd ..
-cmake --build build-release
-./build-release/a
+cmake --build build_release
+./build_release/a
 ```
 
+### Building Resources
+
+My framework is designed not to load external files at runtime wherever possible. Player save data and configuration must be loaded, but all resource files (images, music, etc) are compiled into the binary. To build the resource_builder program:
+
+```
+mkdir build_resource_builder
+cd build_resource_builder
+cmake ..
+cd ..
+cmake --build build_resource_builder
+./build_resource_builder/resource_builder --new source/game ../framework/resources resources
+```
+
+That last line runs the resource builder, passing in the directory in which to generate the resources.c/h pair, and the directories from which to load resources. These resources files come precompiled for convenience but can be rebuilt as above if any changes are made to the sprites, etc.
 
 # Architecture
 

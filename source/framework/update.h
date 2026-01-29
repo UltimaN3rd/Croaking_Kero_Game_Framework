@@ -133,6 +133,20 @@ void Update_RunAfterStateChange (void (*func)());
 
 typedef bool (*Update_Object_Func_t) (const void *self);
 
+typedef struct __attribute__((__packed__)) {
+	uint32_t id;
+	uint32_t memory_offset;
+	Update_Object_Func_t UpdateAndRender;
+	int8_t layer; // Objects are ordered by layer - higher layer means processed first. Objects in higher layers may occlude input from objects in lower layers.
+	bool survive_state_change : 1;
+} update_object_t;
+
+// Placed at the base address of every object's memory
+typedef struct {
+	bool used : 1;
+	uint32_t size : 31;
+} update_object_header_t;
+
 uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change);
 
 // 4th argument is your object, which can be initialized as (object_t){a, b, c}
@@ -144,5 +158,9 @@ uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, c
 		static_assert (layer__ >= -128 && layer__ <= 127, "Layer must be between -128 and 127"); \
 		Update_ObjectCreate_ (&(__VA_ARGS__), sizeof (typeof(__VA_ARGS__)), (Update_Object_Func_t)(update_and_render_func__), layer__, survive_state_change__); \
 	})
+
+update_object_t *Update_ObjectAlloc (const uint32_t bytes);
+
+void *Update_ObjectMemOffsetToAddr (const uint32_t mem_offset);
 
 typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState ();

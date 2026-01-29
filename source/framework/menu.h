@@ -24,6 +24,7 @@ struct submenu_t {
     int selected;
     bool retain_selection;
     uint8_t color;
+    bool show_name;
     void (*on_exit_func) ();
     enum { menu_type_list, menu_type_explorer, menu_type_name_creator, menu_type_internal } type;
     union {
@@ -84,6 +85,7 @@ typedef struct {
     struct {
         int x, y;
         uint8_t left;
+        int8_t scroll; // 1 for up, -1 for down, 0 for no scroll
     } mouse;
     char typing[32];
 } menu_inputs_t;

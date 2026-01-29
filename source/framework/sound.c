@@ -48,13 +48,13 @@ typedef struct {
     struct {
         float volume;
     } fx;
+    float master_volume;
     struct {
         const sound_music_t *new_source;
         float volume;
         enum {music_state_pause, music_state_playing} state;
         sound_music_t source;
     } music;
-    float master_volume;
 } sound_internal_t;
 
 static sound_internal_t sound = {

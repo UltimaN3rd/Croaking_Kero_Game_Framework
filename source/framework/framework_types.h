@@ -63,7 +63,7 @@ static inline float AngleDifference(float from, float to) {
 
 typedef struct {
 	uint16_t w, h;
-	uint8_t p[];
+	uint8_t *p;
 } sprite_t;
 
 #define BITMAP_FONT_FIRST_VISIBLE_CHAR 33

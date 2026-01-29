@@ -15,15 +15,12 @@
 #include "framework.h"
 
 #include "cereal.c"
-#define EXPLORER_PRINT_ERRORS
-#define FOLDERS_PRINT_ERRORS
 #include "explorer.c"
 #include "folders.c"
 #include "log.c"
 #include "menu.c"
 #include "utilities.c"
 #include "render.c"
-#include "samples.c"
 #include "sprite.c"
 #include "update.c"
 

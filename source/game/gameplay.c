@@ -273,10 +273,9 @@ void SaveHighScore () {
     snprintf (game_save_data.high_score.name, sizeof(game_save_data.high_score.name), "%s", menu_high_score_name_entry.name_creator.text_buffer);
     game_save_data.high_score.score = data.player.coins;
     SaveGame ();
-    int width = font_StringDimensions(&framework_font, game_save_data.high_score.name).w;
-    width += font_StringDimensions(&framework_font, "'s score saved").w;
-    char buf[sizeof("%s's score saved") + sizeof(game_save_data.high_score.name)];
+    char buf[sizeof("'s score saved") + sizeof(game_save_data.high_score.name)];
     snprintf (buf, sizeof (buf), "%s's score saved", game_save_data.high_score.name);
-    TextPopup_Create(buf, (RESOLUTION_WIDTH - width) / 2, 200, 0, 120, -1, 1);
+    int width = font_StringDimensions(&resources_framework_font, buf, NULL).w;
+    TextPopup_Create(buf, (RESOLUTION_WIDTH - width) / 2, 200, 0, 4800, 480, 1);
     data.dead.new_high_score = false;
 }

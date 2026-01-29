@@ -34,8 +34,12 @@ void log_Init () {
 void log_Init () {}
 #endif
 
+#ifndef CMAKE_SOURCE_BASE_DIRECTORY_LENGTH
+#define CMAKE_SOURCE_BASE_DIRECTORY_LENGTH 0
+#endif
+
 void log_Location (const char *file, const int line) {
-    fprintf(stderr, "File [%s] Line [%d]: ", file, line);
+    fprintf(stderr, "[%s:%d]: ", file + CMAKE_SOURCE_BASE_DIRECTORY_LENGTH, line);
 }
 
 void log_Time () {

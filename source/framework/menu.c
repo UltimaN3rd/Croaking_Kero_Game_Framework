@@ -13,22 +13,25 @@
 // limitations under the License.
 
 #include "menu.h"
-
-extern const cursor_t framework_cursor;
-extern const sprite_t framework_menu_folder_open;
-extern const sprite_t framework_menu_back;
+#include "resources.h"
 
 explorer_t menu_explorer;
 
 // Slider width include one pixel outline - inner width is this width - 2
+#define EXPLORER_ITEMS_TO_SHOW 17
 #define SLIDER_WIDTH 34
 #define SLIDER_MARGIN 2
 #define XMARGIN 2
-#define TOGGLE_WIDTH (framework_font.line_height - 2)
+#define TOGGLE_WIDTH (resources_framework_font.line_height - 2)
+#define MENU_NAME_VERTICAL_DISTANCE_ABOVE 20
+#define MENU_NAME_DISTANCE_BELOW_TOP 20
+#define MENU_DISTANCE_ABOVE_BOTTOM 20
 
 static struct { int l, b, r, t; } title_bounds = {};
 
 static struct { int x, y; } mouse;
+
+static uint8_t explorer_scroll = 0;
 
 static void menu_Delete_Yes ();
 
@@ -55,6 +58,7 @@ void submenu_Init (submenu_t *self) {
 	switch (self->type) {
 		case menu_type_explorer: {
 			explorer_Init (&menu_explorer, self->explorer.base_directory_func());
+			explorer_scroll = 0;
 		} break;
 		case menu_type_list: {
 			for (int i = 0; i < self->list.item_count; ++i) {
@@ -97,28 +101,28 @@ vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length)
 	for (int j = 0; j < length && c != '\0'; ++j) {
         switch (c) {
             case ' ': {
-				x += framework_font.space_width;
+				x += resources_framework_font.space_width;
 				if (x > width) width = x;
 			} break;
 
             case '\n': {
 				const char *spaces = item;
 				while (spaces > item_start && *(spaces-1) == ' ') {
-					x -= framework_font.space_width;
+					x -= resources_framework_font.space_width;
 					--spaces;
 				}
 				if (x > width) width = x;
                 x = 0;
-				y -= framework_font.line_height;
+				y -= resources_framework_font.line_height;
             } break;
 
             default: {
                 int i = c - BITMAP_FONT_FIRST_VISIBLE_CHAR;
                 if (i >= 0 && i < BITMAP_FONT_NUM_VISIBLE_CHARS) {
-                    x += framework_font.bitmaps[i]->w;
+                    x += resources_framework_font.bitmaps[i]->w;
                     if (x > width) width = x;
-					int b = y;// - framework_font.descent[i]; // Previously measured descent, but decided that the baseline should be used instead. Particularly caused issues when the first item contained a latter below the basline
-					int t = b + framework_font.bitmaps[i]->h-1;
+					int b = y;// - resources_framework_font.descent[i]; // Previously measured descent, but decided that the baseline should be used instead. Particularly caused issues when the first item contained a latter below the basline
+					int t = b + resources_framework_font.bitmaps[i]->h-1;
 					if (b < bottom) bottom = b;
 					if (t > top) top = t;
                 } // If character wasn't in the range, then we ignore it.
@@ -153,9 +157,9 @@ void menu_CalculateDimensions (menu_t *self) {
 			repeat (submenu->list.item_count) {
 				auto dimensions = menu_ItemDimensions (item->name);
 				if (item == submenu->list.items)// first item
-					top_item_offset = framework_font.line_height - dimensions.y;
+					top_item_offset = resources_framework_font.line_height - dimensions.y;
 				if (dimensions.width > self->dimensions.w) self->dimensions.w = dimensions.width;
-				y -= framework_font.line_height;
+				y -= resources_framework_font.line_height;
 				switch (item->type) {
 					case menu_list_item_type_function:
 					case menu_list_item_type_submenu: break;
@@ -188,9 +192,9 @@ void menu_CalculateDimensions (menu_t *self) {
 			for (int i = explorer_start; i < explorer_end; ++i) {
 				auto dimensions = menu_ItemDimensions (menu_explorer.filenames[i]);
 				if (i == explorer_start)// first item
-					top_item_offset = framework_font.line_height - dimensions.y;
+					top_item_offset = resources_framework_font.line_height - dimensions.y;
 				if (dimensions.width > self->dimensions.w) self->dimensions.w = dimensions.width;
-				y -= framework_font.line_height;
+				y -= resources_framework_font.line_height;
 			}
 			self->dimensions.x = 20;
 			self->dimensions.h = abs(y);
@@ -202,9 +206,9 @@ void menu_CalculateDimensions (menu_t *self) {
 			// title_bounds.r = title_bounds.l + 1 + title_dimensions.x;
 			// title_bounds.b = title_bounds.t - 1 - title_dimensions.y;
 			title_bounds.r = RESOLUTION_WIDTH-1;
-			title_bounds.l = title_bounds.r - framework_menu_folder_open.w + 1;
+			title_bounds.l = title_bounds.r - resources_framework_menu_folder_open.w + 1;
 			title_bounds.t = RESOLUTION_HEIGHT-1;
-			title_bounds.b = title_bounds.t - framework_menu_folder_open.h + 1;
+			title_bounds.b = title_bounds.t - resources_framework_menu_folder_open.h + 1;
 		} break;
 
 		case menu_type_name_creator: {
@@ -224,10 +228,30 @@ void menu_CalculateDimensions (menu_t *self) {
 			assert (submenu == &submenu_delete_confirmation);
 			auto dim = menu_ItemDimensions("Really delete this file?");
 			delete_confirmation_text_offset.x = (self->dimensions.w - dim.w) / 2;
-			delete_confirmation_text_offset.y = framework_font.line_height * 3;
+			delete_confirmation_text_offset.y = resources_framework_font.line_height * 3;
 			self->dimensions.y -= delete_confirmation_text_offset.y;
 	}
 	self->dimensions.topoffset = top_item_offset;
+	if (submenu->show_name) {
+		self->dimensions.y -= MENU_NAME_VERTICAL_DISTANCE_ABOVE / 2;
+		if (self->dimensions.y + self->dimensions.h + MENU_NAME_DISTANCE_BELOW_TOP > RESOLUTION_HEIGHT)
+			self->dimensions.y = RESOLUTION_HEIGHT - MENU_NAME_DISTANCE_BELOW_TOP - self->dimensions.h;
+		if (self->dimensions.y < MENU_DISTANCE_ABOVE_BOTTOM) {
+			int h = self->dimensions.h + MENU_NAME_VERTICAL_DISTANCE_ABOVE;
+			if (self->dimensions.h > RESOLUTION_HEIGHT - MENU_DISTANCE_ABOVE_BOTTOM - MENU_NAME_DISTANCE_BELOW_TOP) {
+				if (self->dimensions.h > RESOLUTION_HEIGHT) {
+					assert (false);
+					self->dimensions.y = 0;
+				}
+				else {
+					self->dimensions.y = 0;
+				}
+			}
+			else {
+				self->dimensions.y = MENU_DISTANCE_ABOVE_BOTTOM + (RESOLUTION_HEIGHT - MENU_NAME_DISTANCE_BELOW_TOP - MENU_DISTANCE_ABOVE_BOTTOM - self->dimensions.h) / 2;
+			}
+		}
+	}
 }
 
 static void SwitchMenu (menu_t *self, submenu_t *new_menu) {
@@ -342,6 +366,7 @@ static int ItemAt (menu_t *self, int x, int y, menu_inputs_t inputs) {
     y -= self->dimensions.y;
     if (x < -XMARGIN || x > self->dimensions.w-1+XMARGIN || y < 0 || y > self->dimensions.h-1) return -1;
     int item_count = 0;
+	int addon = 0;
     switch (submenu->type) {
         case menu_type_list: {
 		goto_item_at_list:
@@ -361,6 +386,7 @@ static int ItemAt (menu_t *self, int x, int y, menu_inputs_t inputs) {
                 }
             }
             item_count = explorer_end - explorer_start;
+			addon = explorer_scroll;
         } break;
 		case menu_type_name_creator: return 0;
 
@@ -370,7 +396,7 @@ static int ItemAt (menu_t *self, int x, int y, menu_inputs_t inputs) {
 		} break;
     }
     int divisor = self->dimensions.h / item_count;
-    return item_count-1 - (inputs.mouse.y - self->dimensions.y) / divisor;
+    return item_count-1 - (inputs.mouse.y - self->dimensions.y) / divisor + addon;
 };
 
 static bool menu_NameCreatorDeleteCharacter (typeof((submenu_t){}.name_creator) *self) {
@@ -432,12 +458,36 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 		} break;
 
 		case menu_type_explorer: {
-			if (input.up)
-				if (--submenu->selected < 0)
+			bool updown = false;
+			if (input.up) {
+				updown = true;
+				if (submenu->selected == 0)
 					submenu->selected = menu_explorer.file_count-1;
-			if (input.down)
+				else --submenu->selected;
+			}
+			if (input.down) {
+				updown = true;
 				if (++submenu->selected >= menu_explorer.file_count)
 					submenu->selected = 0;
+			}
+			if (updown) {
+				if (explorer_scroll < submenu->selected - EXPLORER_ITEMS_TO_SHOW + 1) {
+					explorer_scroll = submenu->selected - EXPLORER_ITEMS_TO_SHOW + 1;
+				}
+				if (submenu->selected < explorer_scroll) {
+					explorer_scroll = submenu->selected;
+				}
+			}
+			if (input.mouse.scroll != 0) {
+				if (input.mouse.scroll > 0 && explorer_scroll > 0) {
+					--explorer_scroll;
+					if (submenu->selected > explorer_scroll + EXPLORER_ITEMS_TO_SHOW - 1) submenu->selected = explorer_scroll + EXPLORER_ITEMS_TO_SHOW - 1;
+				}
+				else if (input.mouse.scroll < 0 && explorer_scroll < menu_explorer.file_count - EXPLORER_ITEMS_TO_SHOW) {
+					++explorer_scroll;
+					if (submenu->selected < explorer_scroll) submenu->selected = explorer_scroll;
+				}
+			}
 			if (input.confirm) {
 				SelectItem (self, submenu->selected);
 			}
@@ -505,7 +555,7 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 	if (left_click) {
 		if (input.mouse.x >= self->dimensions.x - XMARGIN && input.mouse.x < self->dimensions.x + self->dimensions.w - 1 + XMARGIN
 		&& input.mouse.y >= self->dimensions.y && input.mouse.y < self->dimensions.y + self->dimensions.h) SelectItem (self, ItemAt (self, input.mouse.x, input.mouse.y, input));
-		else if (submenu->parent != NULL && input.mouse.x >= 0 && input.mouse.x <= framework_menu_back.w && input.mouse.y >= RESOLUTION_HEIGHT - framework_menu_back.h && input.mouse.y <= RESOLUTION_HEIGHT) MenuBack (self);
+		else if (submenu->parent != NULL && input.mouse.x >= 0 && input.mouse.x <= resources_framework_menu_back.w && input.mouse.y >= RESOLUTION_HEIGHT - resources_framework_menu_back.h && input.mouse.y <= RESOLUTION_HEIGHT) MenuBack (self);
 	}
 
     input_prev = input;
@@ -539,6 +589,17 @@ void menu_Render (menu_t *self, int depth) {
 	int y = self->dimensions.y + self->dimensions.h - 1 + self->dimensions.topoffset;
 	int x = self->dimensions.x;
 
+	if (submenu->show_name) {
+		int yy = y + MENU_NAME_VERTICAL_DISTANCE_ABOVE;
+		switch (submenu->type) {
+			case menu_type_name_creator: yy += 30; break;
+			case menu_type_explorer: break;
+			case menu_type_list: break;
+			case menu_type_internal: break;
+		}
+		Render_Text (.x = x, .y = yy, .string = submenu->name, .depth = depth, .ignore_camera = true, .center_horizontally_on_screen = true);
+	}
+
 	switch (submenu->type) {
 		case menu_type_internal: {
 			goto goto_draw_box_list;
@@ -551,12 +612,12 @@ void menu_Render (menu_t *self, int depth) {
 				.type = render_shape_rectangle,
 				.rectangle = {
 					.w = self->dimensions.w-1 + XMARGIN * 2,
-					.h = framework_font.line_height,
+					.h = resources_framework_font.line_height,
 					.x = self->dimensions.x - XMARGIN,
 					.color_edge = self->selection_color,
 				}
 			};
-			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * framework_font.line_height - rectangle.rectangle.h;
+			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * resources_framework_font.line_height - rectangle.rectangle.h;
 			Render_Shape (.shape = rectangle, .depth = depth, .ignore_camera = true);
 		} break;
 	}
@@ -572,75 +633,67 @@ void menu_Render (menu_t *self, int depth) {
 					case menu_list_item_type_submenu:
 						break;
 					case menu_list_item_type_slider: {
-						int b = y - framework_font.line_height/2 - 3;
+						int b = y - resources_framework_font.line_height/2 - 3;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_edge = self->selection_color, .x = l, .w = SLIDER_WIDTH, .y = b, .h = 3}}, .depth = depth, .ignore_camera = true);
 						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / (float)item->slider.max);
 						if (item->slider.value_0_to_255 > 0) Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 255, .x0 = l+1, .x1 = l+1+w, .y0 = b+1, .y1 = b+1}}, .depth = depth, .ignore_camera = true);
 					} break;
 					case menu_list_item_type_toggle: {
-						int b = y - framework_font.line_height;
+						int b = y - resources_framework_font.line_height;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						uint8_t fill_color = 0;
 						if (*item->toggle.var) fill_color = 255;
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .color_edge = self->selection_color, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .ignore_camera = true);
 					} break;
 				}
-				y -= framework_font.line_height;
+				y -= resources_framework_font.line_height;
 				++item;
 			}
 		} break;
 
 		case menu_type_explorer: {
 			int file_count = menu_explorer.file_count;
-			explorer_start = 0;
-			explorer_end = file_count;
-			if (file_count > 17) {
-				explorer_start = submenu->selected - 8;
-				if (explorer_start < 0) explorer_start = 0;
-				explorer_end = explorer_start + 17;
-				if (explorer_end > file_count) {
-					explorer_end = file_count;
-					explorer_start = explorer_end - 17;
-				}
-			}
+			explorer_start = explorer_scroll;
+			explorer_end = explorer_scroll + EXPLORER_ITEMS_TO_SHOW;
+			if (explorer_end > file_count) explorer_end = file_count;
 			Render_Text (.x = x, .y = y + 20, .string = submenu->explorer.show_name_instead_of_directory ? submenu->name : menu_explorer.current_directory_string, .depth = depth, .ignore_camera = true);
 			for (int i = explorer_start; i < explorer_end; ++i) {
 				if (i == submenu->selected)
 					Render_Text (.x = x-10, .y = y, .string = ">", .depth = depth, .ignore_camera = true);
 				Render_Text (.x = x, .y = y, .string = menu_explorer.filenames[i], .depth = depth, .ignore_camera = true);
-				y -= framework_font.line_height;
+				y -= resources_framework_font.line_height;
 			}
-			Render_Sprite (.sprite = &framework_menu_folder_open, .x = RESOLUTION_WIDTH - framework_menu_folder_open.w, .y = RESOLUTION_HEIGHT - framework_menu_folder_open.h, .depth = depth, .ignore_camera = true);
+			Render_Sprite (.sprite = &resources_framework_menu_folder_open, .x = RESOLUTION_WIDTH - resources_framework_menu_folder_open.w, .y = RESOLUTION_HEIGHT - resources_framework_menu_folder_open.h, .depth = depth, .ignore_camera = true);
 		} break;
 
 		case menu_type_name_creator: {
 			const auto fc = &submenu->name_creator;
 			y = RESOLUTION_HEIGHT / 2;
-			int texty = y + framework_font.baseline;
+			int texty = y + resources_framework_font.baseline;
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = y - 1, .w = self->dimensions.w, .h = 1, .color_edge = self->selection_color}}, .depth = depth);
 			auto cursorx = menu_ItemDimensions_Length(fc->text_buffer, fc->cursor).x + x;
 			vec2i_t cursorsize;
 			if (fc->cursor == strlen (fc->text_buffer)) {
 				cursorsize.x = 1;
-				cursorsize.y = framework_font.baseline;
+				cursorsize.y = resources_framework_font.baseline;
 			}
 			else {
 				cursorsize = menu_ItemDimensions_Length(&fc->text_buffer[fc->cursor], 1);
 			}
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = y, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62}}, .depth = depth);
-			Render_Text (.x = x, .y = y + framework_font.line_height, .string = fc->text_buffer, .depth = depth, .ignore_camera = true);
+			Render_Text (.x = x, .y = y + resources_framework_font.line_height, .string = fc->text_buffer, .depth = depth, .ignore_camera = true);
 		} break;
 		case menu_type_internal: {
 			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y, .string = "Really delete this file?", .depth = depth, .ignore_camera = true);
-			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - framework_font.line_height, .string = delete_confirmation_filename, .depth = depth, .ignore_camera = true);
+			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - resources_framework_font.line_height, .string = delete_confirmation_filename, .depth = depth, .ignore_camera = true);
 			goto goto_render_list;
 		} break;
 	}
 
-	if (submenu->parent != NULL) Render_Sprite (.sprite = &framework_menu_back, .y = RESOLUTION_HEIGHT - framework_menu_back.h, .depth = depth, .ignore_camera = true);
+	if (submenu->parent != NULL) Render_Sprite (.sprite = &resources_framework_menu_back, .y = RESOLUTION_HEIGHT - resources_framework_menu_back.h, .depth = depth, .ignore_camera = true);
 
-    Render_CursorAtRawMousePos (&framework_cursor);
+    Render_CursorAtRawMousePos (&resources_framework_cursor);
 }
 
 static void menu_Delete_Yes () {

@@ -177,6 +177,7 @@ const sound_waveform_e waveform_to_sound_sample[WAVEFORM_COUNT] = {[waveform_sin
 #define NOTE_MIN 33
 
 void ExploreFolder(const char *directory) {
+    printf ("Entering folder %s\n", directory);
 	folder_ChangeDirectory(directory);
 	auto result = folder_FindFirstFile("./");
 	if (result.is_error) {
@@ -208,7 +209,7 @@ void ExploreFolder(const char *directory) {
 				assert(snprintf(&codename[len], sizeof(codename) - len, "%s",
 								folder.name) == strlen(folder.name));
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
-					fprintf (phil, "const sprite_t %s_bitmap_%d={.w=%d,.h=%d,.p={", codename, i, font.bitmaps[i].w, font.bitmaps[i].h);
+					fprintf (phil, "const sprite_t %s_bitmap_%d={.w=%d,.h=%d,.p=(uint8_t[]){", codename, i, font.bitmaps[i].w, font.bitmaps[i].h);
 					for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
 						fprintf (phil, "%d,", font.pixels[font.bitmaps[i].offset + j]);
 					}
@@ -264,11 +265,57 @@ void ExploreFolder(const char *directory) {
 		d = codename;
 		while (*d != '.') ++d;
 		*d = 0;
-		if (StringCompareCaseInsensitive(extension, "bmp") == 0) {
+        if (StringCompareCaseInsensitive(folder.name, "palette.bmp") == 0) {
+            printf ("Loading palette: %s%s\n", current_directory, folder.name);
+
+            fputs("const uint8_t palette[256][3] = {", phil);
+
+            typedef struct __attribute((__packed__)) {
+                struct __attribute((__packed__)) {
+                    char magic[2];
+                    uint32_t file_size;
+                    uint32_t filler;
+                    uint32_t image_data_address;
+                } file;
+                struct __attribute((__packed__)) {
+                    uint32_t header_size;
+                    int32_t width;
+                    int32_t height;
+                    uint16_t color_planes;
+                    uint16_t bits_per_pixel;
+                    uint32_t compression;
+                    uint32_t compressed_size;
+                    uint32_t pixels_per_m_horizontal;
+                    uint32_t pixels_per_m_vertical;
+                    uint32_t colors_used;
+                    uint32_t important_colors;
+                } info;
+            } bmp_header_t;
+            assert (sizeof (bmp_header_t) == 54);
+            bmp_header_t header = {};
+            FILE *palettebmp = fopen (folder.name, "rb");
+            assert (palettebmp);
+            fread (&header.file, sizeof (header.file), 1, palettebmp);
+            fread (&header.info.header_size, sizeof (header.info.header_size), 1, palettebmp);
+            {
+                char buf[header.info.header_size - sizeof (header.info.header_size)];
+                fread (&buf, sizeof (buf), 1, palettebmp);
+            }
+
+            for (int i = 0; i < 256; ++i) {
+                uint8_t bgr[3];
+                fread (bgr, sizeof (bgr), 1, palettebmp);
+                fprintf (phil, "{%u,%u,%u},", bgr[2], bgr[1], bgr[0]);
+                fgetc (palettebmp);
+            }
+            fclose (palettebmp); 
+            fputs ("};\n", phil);
+        }
+		else if (StringCompareCaseInsensitive(extension, "bmp") == 0) {
 			printf("Loading bmp: %s%s\n", current_directory, folder.name);
 			resources_sprite_t spr = sprite_LoadBMP(folder.name);
 			fprintf (header, "extern const sprite_t %s;\n", codename);
-			fprintf(phil, "const sprite_t %s = {.w = %u, .h = %u, .p = {",
+			fprintf(phil, "const sprite_t %s = {.w = %u, .h = %u, .p = (uint8_t[]){",
 					codename, spr.w, spr.h);
 			for (int i = 0; i < spr.w * spr.h; ++i) {
 				fprintf(phil, "%u,", spr.p[i]);
@@ -312,8 +359,9 @@ void ExploreFolder(const char *directory) {
 	PopDir();
 }
 
-int main(int argc, char **argv) {
-	printf("Hello world!\n");
+void CreateNewFiles () {
+    if (phil && ftell(phil) > 0) fclose (phil);
+    if (header && ftell(header)) fclose (header);
 
 	phil = fopen("resources.c", "w");
 	assert(phil);
@@ -330,54 +378,50 @@ R"(#pragma once
 
 )");
 
-	typedef struct __attribute((__packed__)) {
-		struct __attribute((__packed__)) {
-			char magic[2];
-			uint32_t file_size;
-			uint32_t filler;
-			uint32_t image_data_address;
-		} file;
-		struct __attribute((__packed__)) {
-			uint32_t header_size;
-			int32_t width;
-			int32_t height;
-			uint16_t color_planes;
-			uint16_t bits_per_pixel;
-			uint32_t compression;
-			uint32_t compressed_size;
-			uint32_t pixels_per_m_horizontal;
-			uint32_t pixels_per_m_vertical;
-			uint32_t colors_used;
-			uint32_t important_colors;
-		} info;
-	} bmp_header_t;
-	assert (sizeof (bmp_header_t) == 54);
-	bmp_header_t header = {};
-    FILE *palettebmp = fopen ("palette.bmp", "rb");
-    assert (palettebmp);
-    fread (&header.file, sizeof (header.file), 1, palettebmp);
-    fread (&header.info.header_size, sizeof (header.info.header_size), 1, palettebmp);
-    {
-        char buf[header.info.header_size - sizeof (header.info.header_size)];
-        fread (&buf, sizeof (buf), 1, palettebmp);
+    fputs("#include \"resources.h\"\n", phil);
+}
+
+int main(int argc, char **argv) {
+    assert (argc > 1);
+
+    --argc;
+    ++argv;
+
+	printf("Building resources! I received these arguments:\n");
+    for (int i = 0; i < argc; ++i) printf ("%s\n", argv[i]);
+    printf ("\n\n");
+
+    const auto base_dir = getcwd (NULL, 0);
+    assert (base_dir);
+
+    printf ("Running in base dir [%s]\n", base_dir);
+
+    auto start_dir = base_dir;
+    if (strcmp(*argv, "--new") != 0) {
+        CreateNewFiles();
+
+        printf ("Creating new files from [%s]\n", start_dir);
     }
 
-	fputs(R"(#include "resources.h"
-
-const uint8_t palette[256][3] = {)", phil);
-
-	for (int i = 0; i < 256; ++i) {
-        uint8_t bgr[3];
-		fread (bgr, sizeof (bgr), 1, palettebmp);
-        fprintf (phil, "{%u,%u,%u},", bgr[2], bgr[1], bgr[0]);
-		fgetc (palettebmp);
-	}
-	fclose (palettebmp); 
-    fputs ("};\n", phil);
-
-	ExploreFolder("framework");
-    current_directory[0] = 0;
-	ExploreFolder("resources");
+    while (argc--) {
+        if (strcmp(*argv, "--new") == 0) {
+            assert (argc); --argc; ++argv;
+            start_dir = *argv;
+            printf ("\n\nCreating new files from [%s]\n", start_dir);
+            assert (!folder_ChangeDirectory(base_dir).is_error);
+            assert (!folder_ChangeDirectory(start_dir).is_error);
+            CreateNewFiles ();
+        }
+        else {
+            printf ("Entering directory [%s]\n", *argv);
+            assert (!folder_ChangeDirectory(*argv).is_error);
+            ExploreFolder ("resources");
+        }
+        ++argv;
+        current_directory[0] = 0;
+        assert (!folder_ChangeDirectory(base_dir).is_error);
+        if (start_dir != base_dir) assert (!folder_ChangeDirectory(start_dir).is_error);
+    }
 
 	fclose(phil);
 	printf("Goodbye world!\n");
@@ -842,7 +886,7 @@ bool LoadCursor (const char *const folder, const char *const codename) {
     }
 
     fprintf (header, "extern const cursor_t %s;\n", codename);
-    fprintf (phil, "const cursor_t %s = {.offset = {.x = %d, .y = %d}, .sprite = &(sprite_t){.w = %d, .h = %d, .p = {", codename, cursor.x, cursor.y, sprite.w, sprite.h);
+    fprintf (phil, "const cursor_t %s = {.offset = {.x = %d, .y = %d}, .sprite = &(sprite_t){.w = %d, .h = %d, .p = (uint8_t[]){", codename, cursor.x, cursor.y, sprite.w, sprite.h);
     for (int i = 0; i < sprite.w * sprite.h; ++i) {
         fprintf (phil, "%d,", sprite.p[i]);
     }

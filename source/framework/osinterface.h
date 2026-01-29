@@ -362,5 +362,6 @@ void os_MessageBox_ (os_MessageBox_arguments arguments);
 os_char1024_t os_OpenFileDialog (const char *title);
 os_char1024_t os_SaveFileDialog (const char *title, const char *save_button_text, const char *filename_label, const char *default_filename);
 
+void os_OpenURL (const char *url);
 void os_OpenFileBrowser (const char *directory);
 bool os_LogGLErrors ();

@@ -24,6 +24,9 @@ uint64_t cereal_dummy;
 bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const char *const filename) {
 	FILE *file = fopen (filename, "wb");
 	assert (file); if (!file) { LOG ("Failed to open file [%s]", filename); return false; }
+	#ifdef __clang__
+	#error "No clang!!! >:("
+	#endif
 	DEFER (fclose (file););
 	int items_written = 0;
 	for (int i = 0; i < cereal_count; ++i) {
