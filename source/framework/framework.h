@@ -64,6 +64,7 @@ extern os_private_t os_private;
 #include "cereal.h"
 #include "update.h"
 #include "zen_timer.h"
+#include "objects/_.h"
 
 #ifndef OSINTERFACE_FRAME_BUFFER_SCALED
 #error "You must define OSINTERFACE_FRAME_BUFFER_SCALED"
