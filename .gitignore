@@ -3,3 +3,4 @@
 build
 build_release
 build_resource_builder
+*.DS_Store
