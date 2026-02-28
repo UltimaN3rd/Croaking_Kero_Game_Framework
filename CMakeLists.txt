@@ -24,14 +24,18 @@ else()
     add_executable(flappy source/framework/main.c)
 endif()
 
-add_compile_options(-fdefer-ts)
+include(CheckCCompilerFlag)
+check_c_compiler_flag(-fdefer-ts HAS_FDEFER_TS)
+if(HAS_FDEFER_TS)
+    add_compile_options(-fdefer-ts)
+endif()
 
 # Recommended build types: Debug for general debugging, RelWithDebInfo for testing optimized version, MinSizeRel for actual release.
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_link_options(flappy PRIVATE -static-libgcc)
     endif()
-    if(NOT APPLE) # Apple does not support static crt
+    if(WIN32) # Apple does not support static crt. Linux difficult to static link X11, GL, GLU.
         target_link_options(flappy PRIVATE -static)
     endif()
 endif()
