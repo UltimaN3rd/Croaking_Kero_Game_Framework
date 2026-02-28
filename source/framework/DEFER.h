@@ -15,18 +15,26 @@
 #pragma once
 
 // USAGE
-// VAR_DEFER (int, greg, { printf ("greg is falling out of scope now D: greg = %d\n", *this); } ) = 10;
-// or
-// DEFER (printf ("This code has been deferred!\n"));
+// defer {
+//     printf ("This code has been deferred!\n");
+// }
 
-#define VAR_DEFER_UNIQUE_NAME__(counter) unique_##counter
-#define VAR_DEFER_UNIQUE_NAME_(counter) VAR_DEFER_UNIQUE_NAME__(counter)
-#define VAR_DEFER_UNIQUE_NAME VAR_DEFER_UNIQUE_NAME_(__COUNTER__)
-
-#define VAR_DEFER_(type, name, function_body, unique_name) \
-void unique_name (type *this) function_body \
-type name __attribute__((cleanup(unique_name)))
-
-#define VAR_DEFER(type, name, function_body) VAR_DEFER_(type, name, function_body, VAR_DEFER_UNIQUE_NAME)
-
-#define DEFER(function_body) VAR_DEFER (char, VAR_DEFER_UNIQUE_NAME, { function_body ;})
+#if __has_include(<stddefer.h>)
+# if defined(__clang__) && !defined(__STDC_DEFER_TS25755__)
+#  define __STDC_DEFER_TS25755__
+# endif
+# include <stddefer.h>
+#elif __GNUC__ > 8
+# define defer _Defer
+# define _Defer      _Defer_A(__COUNTER__)
+# define _Defer_A(N) _Defer_B(N)
+# define _Defer_B(N) _Defer_C(_Defer_func_ ## N, _Defer_var_ ## N)
+# define _Defer_C(F, V)                                                 \
+  auto void F(int*);                                                    \
+  __attribute__((__cleanup__(F), __deprecated__, __unused__))           \
+     int V;                                                             \
+  __attribute__((__always_inline__, __deprecated__, __unused__))        \
+    inline auto void F(__attribute__((__unused__)) int*V)
+#else
+# error "The _Defer feature seems unavailable. Compile with either GCC version 8 or later, or Clang version 22 or later."
+#endif

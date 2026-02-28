@@ -12,13 +12,13 @@ Used to make my games on Steam: [Nick's Saturday Morning Games](https://store.st
 
 ## Building
 
-Most of this is written in GNUC23, so you need a recent version of GCC. On MacOS, the sound and osinterface libraries are written in Objective-C, and require Clang.
+Due to the use of the [defer feature](https://thephd.dev/c2y-the-defer-technical-specification-its-time-go-go-go), this code requires a recent version of GCC(15+) or Clang (22+) to compile. On MacOS, the sound and osinterface libraries are written in Objective-C. At time of writing, AppleClang is nowhere close to catching up to Clang 22, so please install Clang through Homebrew or something and ensure the correct version gets used by CMake.
 
 ### Windows
 
 Prerequisites
 
-- A recent version of GCC which supports GNUC23
+- A recent version of GCC(15+) or Clang(22+)
 - OpenGL
 - CMake
 
@@ -44,7 +44,7 @@ cmake --build build
 
 Prerequisites
 
-- GCC
+- GCC(15+) or Clang(22+)
 - CMake
 - OpenGL
 
@@ -66,11 +66,11 @@ cmake --build build
 
 Prerequisites
 
-- GCC
+- Clang(22+)
 - CMake
 - XCode Command Line Tools
 
-You can install GCC and CMake through Homebrew. See https://brew.sh/ for more information. XCode Command Line Tools can be installed by typing this in a terminal:
+You can install Clang and CMake through Homebrew. See https://brew.sh/ for more information. XCode Command Line Tools can be installed by typing this in a terminal:
 
 ```
 xcode-select --install
@@ -82,7 +82,7 @@ Clone this repository. Open a terminal inside the repository folder.
 ```
 mkdir build
 cd build
-CC=gcc-15 OBJC=clang cmake ..
+CC=clang cmake ..
 cd ..
 cmake --build build
 ./build/flappy
@@ -91,10 +91,10 @@ cmake --build build
 You may have trouble with the line,
 
 ```
-CC=gcc-15 OBJC=clang cmake ..
+CC=clang cmake ..
 ```
 
-Apple redirects gcc to clang, but to build this code you actually need to use GCC for all the non-Objective-C stuff. Depending on the version of GCC you installed with brew, you should be able to call it as gcc-VERSION, where VERSION is the version of GCC you have installed. At time of writing, gcc-15 is current.
+Apple ships their variant of clang, but to build this code you need version 22+. If you install Clang through Homebrew, it should be the target when you type clang in a terminal. If not, you may need to either provide the full path to Homebrew Clang, or in some way add the Homebrew bin directory to your PATH.
 
 ### Release builds
 

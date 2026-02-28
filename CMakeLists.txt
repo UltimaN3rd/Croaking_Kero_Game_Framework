@@ -12,9 +12,9 @@ cmake_path(GET CMAKE_CURRENT_SOURCE_DIR PARENT_PATH MY_PARENT_DIR)
 string(LENGTH "${MY_PARENT_DIR}/" SOURCE_PATH_SIZE)
 add_definitions("-DCMAKE_SOURCE_BASE_DIRECTORY_LENGTH=${SOURCE_PATH_SIZE}")
 
-if(CMAKE_BUILD_TYPE STREQUAL "")
+if(NOT CMAKE_BUILD_TYPE)
     message(WARNING "CMAKE_BUILD_TYPE not specified. Defaulting to Debug")
-    set(CMAKE_BUILD_TYPE "Debug")
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
 endif()
 
 if(APPLE AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -24,20 +24,24 @@ else()
     add_executable(flappy source/framework/main.c)
 endif()
 
+include(CheckCCompilerFlag)
+check_c_compiler_flag(-fdefer-ts HAS_FDEFER_TS)
+if(HAS_FDEFER_TS)
+    add_compile_options(-fdefer-ts)
+endif()
+
 # Recommended build types: Debug for general debugging, RelWithDebInfo for testing optimized version, MinSizeRel for actual release.
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_options(flappy PRIVATE -static-libgcc)
-    if(WIN32)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(flappy PRIVATE -static-libgcc)
+    endif()
+    if(WIN32) # Apple does not support static crt. Linux difficult to static link X11, GL, GLU.
         target_link_options(flappy PRIVATE -static)
     endif()
 endif()
 add_compile_options(-Wall -Werror -Wno-initializer-overrides -Wno-format-security -Wno-initializer-overrides -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable)
 if(NOT APPLE)
     add_compile_options(-fmax-errors=5)
-endif()
-
-if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_options(flappy PRIVATE -static)
 endif()
 
 add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTERFACE_FRAME_BUFFER_SCALED OSINTERFACE_COLOR_INDEX_MODE)
