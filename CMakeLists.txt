@@ -24,20 +24,20 @@ else()
     add_executable(flappy source/framework/main.c)
 endif()
 
+add_compile_options(-fdefer-ts)
+
 # Recommended build types: Debug for general debugging, RelWithDebInfo for testing optimized version, MinSizeRel for actual release.
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_options(flappy PRIVATE -static-libgcc)
-    if(WIN32)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(flappy PRIVATE -static-libgcc)
+    endif()
+    if(NOT APPLE) # Apple does not support static crt
         target_link_options(flappy PRIVATE -static)
     endif()
 endif()
 add_compile_options(-Wall -Werror -Wno-initializer-overrides -Wno-format-security -Wno-initializer-overrides -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable)
 if(NOT APPLE)
     add_compile_options(-fmax-errors=5)
-endif()
-
-if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_options(flappy PRIVATE -static)
 endif()
 
 add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTERFACE_FRAME_BUFFER_SCALED OSINTERFACE_COLOR_INDEX_MODE)

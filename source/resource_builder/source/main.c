@@ -742,10 +742,10 @@ static void PrepareTrack (uint8_t track) {
 
 static bool LoadMusic (const char *filename) {
     bool success = false;
-    DEFER (if (!success) { printf ("Failed to load file [%s]\n", filename); });
+    defer { if (!success) { printf ("Failed to load file [%s]\n", filename); } }
     FILE *file = fopen (filename, "rb");
     assert (file); if (!file) { LOG ("Failed to open file [%s]", filename); return false; }
-    DEFER (fclose (file));
+    defer { fclose (file) }
     struct {
         char magic[14];
         uint32_t version;
@@ -841,7 +841,7 @@ bool LoadCursor (const char *const folder, const char *const codename) {
     printf ("Loading cursor [%s]\n", codename);
     auto result = folder_ChangeDirectory(folder);
     if (result.is_error) return false;
-    DEFER (folder_ChangeDirectory (".."););
+    defer { folder_ChangeDirectory (".."); }
 
     struct {
         int x, y;
@@ -854,7 +854,7 @@ bool LoadCursor (const char *const folder, const char *const codename) {
         printf ("Cursor properties file not found\n");
         return false;
     }
-    DEFER (free (props););
+    defer { free (props); }
 
     {
         FILE *file_sprite = fopen ("sprite.bmp", "rb");

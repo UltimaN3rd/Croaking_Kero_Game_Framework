@@ -22,6 +22,8 @@ if(NOT APPLE)
     add_compile_options(-fmax-errors=5)
 endif()
 
+add_compile_options(-fdefer-ts)
+
 add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTERFACE_FRAME_BUFFER_SCALED OSINTERFACE_COLOR_INDEX_MODE EXPLORER_PRINT_ERRORS FOLDERS_PRINT_ERRORS)
 
 add_library(osinterface OBJECT osinterface.c)

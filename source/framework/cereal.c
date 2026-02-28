@@ -24,10 +24,7 @@ uint64_t cereal_dummy;
 bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const char *const filename) {
 	FILE *file = fopen (filename, "wb");
 	assert (file); if (!file) { LOG ("Failed to open file [%s]", filename); return false; }
-	#ifdef __clang__
-	#error "No clang!!! >:("
-	#endif
-	DEFER (fclose (file););
+	defer { fclose (file); }
 	int items_written = 0;
 	for (int i = 0; i < cereal_count; ++i) {
 		fprintf (file, "%s [", cereal[i].key);
@@ -83,7 +80,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const 
 int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const char *const filename) {
 	FILE *file = fopen (filename, "rb");
 	if (!file) { LOG ("Failed to read file [%s]", filename); return false; }
-	DEFER (fclose (file));
+	defer { fclose (file); }
 	long start_pos = ftell (file);
 	fseek (file, 0, SEEK_END);
 	long end_pos = ftell (file);
@@ -91,7 +88,7 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 	uint32_t size = end_pos - start_pos;
 	char *buf = malloc (size);
 	assert (buf); if (buf == NULL) { LOG ("[%s] Failed to allocate %"PRIu32" bytes", filename, size); return false; }
-	DEFER (free (buf););
+	defer { free (buf); }
 	fread (buf, 1, size, file);
 	char *c = buf;
 	int items_read = 0;
