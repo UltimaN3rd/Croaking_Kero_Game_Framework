@@ -189,13 +189,14 @@ void SoundFXSetVolume (float volume_0_to_1) {
 }
 float SoundFXGetVolume () { return sound.fx.volume; }
 
-#define SAMPLING_RATE 48000
+static int32_t sampling_rate = 48000;
+static int32_t period_size = 
 #ifdef __linux__
-#define PERIOD_SIZE (SAMPLING_RATE / 200)
+(sampling_rate / 200);
 #elifdef WIN32
-#define PERIOD_SIZE 256
+256;
 #elifdef __APPLE__
-#define PERIOD_SIZE 240
+240;
 #endif
 
 // Two 5ms buffers
@@ -210,7 +211,7 @@ struct {
 bool sample_buffer_swap = 0; // Use this to index the buffer which is compressed and ready for playback.
 int16_t sample_buffer_size = 0;
 
-ADSR_t ADSRf_to_ADSR (ADSRf_t in) { return (ADSR_t){.peak = in.peak, .attack = in.attack * SAMPLING_RATE, .decay = in.decay * SAMPLING_RATE, .sustain = in.sustain, .release = in.release * SAMPLING_RATE}; }
+ADSR_t ADSRf_to_ADSR (ADSRf_t in) { return (ADSR_t){.peak = in.peak, .attack = in.attack * sampling_rate, .decay = in.decay * sampling_rate, .sustain = in.sustain, .release = in.release * sampling_rate}; }
 
 sound_t SoundGenerate_(SoundFXPlay_args args) {
     assert (args.waveform);
@@ -218,7 +219,7 @@ sound_t SoundGenerate_(SoundFXPlay_args args) {
     args.ADSR.peak *= args.volume;
     args.ADSR.sustain *= args.volume;
     uint32_t duration = args.duration_samples;
-    if (duration == 0) duration = args.duration_seconds * SAMPLING_RATE;
+    if (duration == 0) duration = args.duration_seconds * sampling_rate;
     sound_t sound = {
         .waveform = args.waveform,
         .duration = duration,
@@ -283,7 +284,7 @@ static inline float CosineInterpolate (float d) { return (1.f - cos_turns(d/2)) 
 static inline int16_t Lerpi16 (int16_t from, int16_t to, float ratio) { return (1-ratio)*from + to*ratio;}
 
 static inline float PolyBLEP (float t, float frequency) {
-    float dt = frequency / SAMPLING_RATE;
+    float dt = frequency / sampling_rate;
     if (t < dt) {
         t /= dt;
         return t + t - t*t - 1;
@@ -314,11 +315,11 @@ static inline float CreateNextSample () {
                     auto vibrato_range = sound->vibrato.frequency_range;
                     int16_t vibrato = sin_turns (channel->vibrato_d) * vibrato_range;
                     freq += vibrato;
-                    channel->vibrato_d += sound->vibrato.vibrations_per_hundred_seconds / (float)(SAMPLING_RATE * 100);
+                    channel->vibrato_d += sound->vibrato.vibrations_per_hundred_seconds / (float)(sampling_rate * 100);
                 }
                 // At this point, due to sweep and vibrato, freq may be negative. Turns out that's totally fine and allows for some nice effects!
                 int prevd = channel->d;
-                float d_change = (float)freq / SAMPLING_RATE;
+                float d_change = (float)freq / sampling_rate;
                 channel->d += d_change;
                 switch (sound->waveform) {
                     case sound_waveform_sine: sample = sin_turns (channel->d); break;
@@ -523,14 +524,49 @@ void *Sound (void *data_void) {
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <avrt.h> // AvSetMmThreadCharacteristics()
-
+#include <Functiondiscoverykeys_devpkey.h> // PKEY_Device_FriendlyName
 #include <tchar.h>
 
-void Sound_Loop_i8 (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudioRenderClient *render, UINT32 frames_per_period);
-void Sound_Loop_i16 (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudioRenderClient *render, UINT32 frames_per_period);
-void Sound_Loop_i32 (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudioRenderClient *render, UINT32 frames_per_period);
-void Sound_Loop_Float (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudioRenderClient *render, UINT32 frames_per_period);
-auto Sound_Loop_Default = Sound_Loop_i16;
+static bool restart_audio = true;
+
+// MMNoitifcationClient stuff to auto-switch when default device changes
+
+static STDMETHODIMP MMNotificationClient_QueryInterface(IMMNotificationClient *self, REFIID riid, void **ppvObject) {
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IMMNotificationClient)) {
+        *ppvObject = self;
+        return S_OK;
+    }
+    else {
+       *ppvObject = NULL;
+        return E_NOINTERFACE;
+    }
+}
+
+static ULONG MMNotificationClient_AddRef(IMMNotificationClient *self) { return 1; } // Just don't count the references
+static ULONG MMNotificationClient_Release(IMMNotificationClient *self) { return 0; }
+static STDMETHODIMP MMNotificationClient_OnDeviceStateChanged(IMMNotificationClient *self, LPCWSTR wid, DWORD state) { LOG ("WASAPI device state changed"); return S_OK; }
+static STDMETHODIMP MMNotificationClient_OnDeviceAdded(IMMNotificationClient *self, LPCWSTR wid) { LOG ("WASAPI device added"); return S_OK; }
+static STDMETHODIMP MMNotificationClient_OnDeviceRemoved(IMMNotificationClient *self, LPCWSTR wid) { LOG ("WASAPI device removed"); return S_OK; }
+static STDMETHODIMP MMNotificationClient_OnPropertyValueChanged(IMMNotificationClient *self, LPCWSTR wid, const PROPERTYKEY key) { LOG ("WASAPI property value changed"); return S_OK; }
+
+static STDMETHODIMP MMNotificationClient_OnDefaultDeviceChange(IMMNotificationClient *self, EDataFlow flow, ERole role, LPCWSTR wid) {
+    LOG ("WASAPI default device changed");
+    restart_audio = true;
+    return S_OK;
+}
+
+static IMMNotificationClient notification_client = {
+    .lpVtbl = &(struct IMMNotificationClientVtbl){
+        MMNotificationClient_QueryInterface,
+        MMNotificationClient_AddRef,
+        MMNotificationClient_Release,
+        MMNotificationClient_OnDeviceStateChanged,
+        MMNotificationClient_OnDeviceAdded,
+        MMNotificationClient_OnDeviceRemoved,
+        MMNotificationClient_OnDefaultDeviceChange,
+        MMNotificationClient_OnPropertyValueChanged,
+    }
+};
 
 const char *HResultToStr (HRESULT result) {
     static char wasapi_error_buffer[512];
@@ -549,172 +585,175 @@ const char *HResultToStr (HRESULT result) {
     return wasapi_error_buffer;
 }
 
-#define DO_OR_QUIT(__function_call__, __error_message__) do { auto result = __function_call__; if (result != S_OK) { LOG (__error_message__ " [%ld] [%s]", result, HResultToStr(result)); return NULL; } } while (0)
-#define DO_OR_CONTINUE(__function_call__, __error_message__) do { auto result = __function_call__; if (result != S_OK) { LOG (__error_message__ " [%ld] [%s]", result, HResultToStr(result)); } } while (0)
-#define QUIT_IF_NULL(__variable__, __error_message__) do { auto __var__ = (__variable__); if (__var__ == NULL) { LOG (__error_message__); return NULL; } } while (0)
+#define DO_OR_QUIT(function_call__, error_message__) do { auto result = function_call__; assert (result == S_OK); if (result != S_OK) { LOG (error_message__ " [%ld] [%s]", result, HResultToStr(result)); return NULL; } } while (0)
+#define DO_OR_CONTINUE(function_call__, error_message__) do { auto result = function_call__; if (result != S_OK) { LOG (error_message__ " [%ld] [%s]", result, HResultToStr(result)); } } while (0)
+#define QUIT_IF_NULL(variable__, error_message__) do { auto __var__ = (variable__); assert (__var__); if (__var__ == NULL) { LOG (error_message__); return NULL; } } while (0)
+#define IF_NULL_RESTART(variable__, message__) if (variable__ == NULL) { LOG (message__); restart_audio = true; continue; }
+#define BREAK_ON_FAIL(code__, message__) { auto result = code__; assert (!FAILED(result)); if (FAILED(result)) { LOG (message__); break; } }
+#define DO_OR_RESTART(function_call__, error_message__) ({ auto result = function_call__; if (result != S_OK) { LOG (error_message__ " [%ld] [%s]", result, HResultToStr(result)); restart_audio = true; continue; } })
+
+#pragma push_macro ("TYPE__")
+#pragma push_macro ("FUNCNAME__")
+#undef TYPE__
+#define TYPE__ int32_t
+#undef FUNCNAME__
+#define FUNCNAME__ SoundLoop_int
+#include "wasapi_sound_func.c"
+#undef TYPE__
+#define TYPE__ float
+#undef FUNCNAME__
+#define FUNCNAME__ SoundLoop_float
+#include "wasapi_sound_func.c"
+#pragma pop_macro ("FUNCNAME__")
+#pragma pop_macro ("TYPE__")
 
 void *Sound (void *data_void) {
     DO_OR_QUIT (CoInitializeEx(NULL, 0), "Sound thread failed to CoInitializeEx");
-	IMMDeviceEnumerator *device_enumerator = NULL;
-	DO_OR_QUIT (CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void**)&device_enumerator), "WASAPI failed to create Device Enumerator");
-    QUIT_IF_NULL (device_enumerator, "WASAPI failed to create Device Enumerator, even though CoCreateInstance returned S_OK");
-	IMMDevice *default_device = NULL;
-	DO_OR_QUIT (device_enumerator->lpVtbl->GetDefaultAudioEndpoint(device_enumerator, eRender, eConsole, &default_device), "WASAPI failed to get default audio endpoint");
-    QUIT_IF_NULL (default_device, "WASAPI failed to create get default audio endpoint, even though GetDefaultAudioEndpoint returned S_OK");
-	DO_OR_CONTINUE (device_enumerator->lpVtbl->Release(device_enumerator), "Device Enumerator Release() failed");
-
-	IAudioClient3 *client = NULL;
-	DO_OR_QUIT (default_device->lpVtbl->Activate(default_device, &IID_IAudioClient3, CLSCTX_ALL, NULL, (void**)&client), "WASAPI failed to activate audio client");
-    QUIT_IF_NULL (client, "WASAPI failed to activate audio client, even though Activate returned S_OK");
-
-	DO_OR_CONTINUE (default_device->lpVtbl->Release(default_device), "Audio Client Release() failed");
-
-	AudioClientProperties audio_properties = {
-		.cbSize = sizeof(AudioClientProperties),
-		.bIsOffload = FALSE,
-		.eCategory = AudioCategory_GameEffects,
-	};
-	DO_OR_QUIT (client->lpVtbl->SetClientProperties(client, &audio_properties), "WASAPI failed to set client properties");
-
-	WAVEFORMATEXTENSIBLE wave_format = {
-		.Format = {
-			.wFormatTag = WAVE_FORMAT_PCM,
-			.nChannels = 2,
-			.nSamplesPerSec = SAMPLING_RATE,
-			.wBitsPerSample = 16,
-		},
-	};
-	wave_format.Format.nBlockAlign = wave_format.Format.nChannels * wave_format.Format.wBitsPerSample / 8;
-	wave_format.Format.nAvgBytesPerSec = wave_format.Format.nSamplesPerSec * wave_format.Format.nBlockAlign;
-
-	{
-        WAVEFORMATEX *wave_format_closest;
-        HRESULT result = client->lpVtbl->IsFormatSupported (client, AUDCLNT_SHAREMODE_SHARED, &wave_format.Format, &wave_format_closest);
-        if (result == S_OK) {
-            LOG ("Default audio format supported");
-        }
-        else if (result == S_FALSE && wave_format_closest != NULL) {
-            wave_format = *(WAVEFORMATEXTENSIBLE*)wave_format_closest;
-            LOG ("Default audio format unsupported. Using this instead: Channels[%d] Bits per sample[%d] Extensible[%s] Valid bits per sample[%d] Format: [", wave_format.Format.nChannels, wave_format.Format.wBitsPerSample, wave_format_closest->wFormatTag == WAVE_FORMAT_EXTENSIBLE ? "true" : "false", wave_format.Samples.wValidBitsPerSample);
-            if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)) LOG ("KSDATAFORMAT_SUBTYPE_PCM]");
-            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) LOG ("KSDATAFORMAT_SUBTYPE_IEEE_FLOAT]");
-            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_DRM)) LOG ("KSDATAFORMAT_SUBTYPE_DRM]");
-            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_ALAW)) LOG ("KSDATAFORMAT_SUBTYPE_ALAW]");
-            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_MULAW)) LOG ("KSDATAFORMAT_SUBTYPE_MULAW]");
-            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_ADPCM)) LOG ("KSDATAFORMAT_SUBTYPE_ADPCM]");
-            else { LOG ("UNKNOWN]"); return NULL; }
-        }
-        else { LOG ("No audio format supported"); return NULL; }
-    }
-
-	UINT32 period_default = 0, period_fundamental = 0, period_min = 0, period_max = 0;
-	UINT32 frames_per_period;
-	DO_OR_QUIT (client->lpVtbl->GetSharedModeEnginePeriod (client, &wave_format.Format, &period_default, &period_fundamental, &period_min, &period_max), "WASAPI failed to get shared mode engine period");
-    frames_per_period = period_min;
-    if (frames_per_period < PERIOD_SIZE) { // Windows supports below 5ms? Wow! But we need 5ms or more to compress well.
-        frames_per_period = (PERIOD_SIZE / period_fundamental) * period_fundamental;
-        if (PERIOD_SIZE % period_fundamental != 0) frames_per_period += period_fundamental;
-        if (frames_per_period > period_max) {
-            LOG ("frames_per_period > period_max: %u > %u. Sound compression might be gnarly", frames_per_period, period_max);
-            frames_per_period = period_max;
-        }
-    }
-    sample_buffer_size = frames_per_period;
-    if (sample_buffer_size > SAMPLE_BUFFER_SIZE) { LOG ("sample_buffer_size[%d] > SAMPLE_BUFFER_SIZE[%d]", sample_buffer_size, SAMPLE_BUFFER_SIZE); }
-	LOG ("Device min period [%u] requested period [%u] samples [%.2fms]", period_min, frames_per_period, 1000.f * frames_per_period / wave_format.Format.nSamplesPerSec);
-	DO_OR_QUIT (client->lpVtbl->InitializeSharedAudioStream(client, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, frames_per_period, &wave_format.Format, NULL), "WASAPI failed to initialize shared audio stream");
-
-	HANDLE event_handle = CreateEvent (NULL, FALSE, FALSE, NULL);
-	QUIT_IF_NULL (event_handle, "Failed to create event handle");
-	DO_OR_QUIT (client->lpVtbl->SetEventHandle (client, event_handle), "WASAPI failed to set event handle");
-
-	IAudioRenderClient *render = NULL;
-	// const GUID _IID_IAudioRenderClient = {0xf294acfc, 0x3146, 0x4483, {0xa7,0xbf, 0xad,0xdc,0xa7,0xc2,0x60,0xe2}};
-	DO_OR_QUIT (client->lpVtbl->GetService(client, &IID_IAudioRenderClient, (void**)&render), "WASAPI failed to get AudioRenderClient service");
-    QUIT_IF_NULL (render, "Failed to get AudioRenderClient even though GetService returned S_OK");
+    defer { CoUninitialize(); }
 
 	{ DWORD task_index = 0; if (AvSetMmThreadCharacteristics(TEXT("Pro Audio"), &task_index) == 0) { LOG ("WASAPI failed to set thread characteristics to \"Pro Audio\""); } }
 
-	DO_OR_QUIT (client->lpVtbl->Start(client), "WASAPI failed to start audio client");
+	IMMDeviceEnumerator *device_enumerator = NULL;
+	DO_OR_QUIT (CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void**)&device_enumerator), "WASAPI failed to create Device Enumerator");
+    QUIT_IF_NULL (device_enumerator, "WASAPI failed to create Device Enumerator, even though CoCreateInstance returned S_OK");
+	defer { device_enumerator->lpVtbl->Release(device_enumerator); }
 
-	if (wave_format.Format.wFormatTag != WAVE_FORMAT_EXTENSIBLE) {
-		if (wave_format.Format.wFormatTag != WAVE_FORMAT_PCM || wave_format.Format.nChannels != 2 || wave_format.Format.nSamplesPerSec != 48000 || wave_format.Format.wBitsPerSample != 16) {
-			LOG ("Mismatch between default audio WAVEFORMATEX and the default audio output function. Please change the defaults back or make a custom function to output the correct samples.");
-		}
-		Sound_Loop_Default (wave_format, event_handle, render, frames_per_period);
-	}
-	else {
-		if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)) {
-			// Handle different bit depths and stuff
-			if (wave_format.Format.wBitsPerSample == 8)
-				Sound_Loop_i8 (wave_format, event_handle, render, frames_per_period);
-			else if (wave_format.Format.wBitsPerSample == 16)
-				Sound_Loop_i16 (wave_format, event_handle, render, frames_per_period);
-			else if (wave_format.Format.wBitsPerSample == 32)
-				Sound_Loop_i32 (wave_format, event_handle, render, frames_per_period);
-		}
-		else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
-			// Do I need to handle any specifics here?
-			Sound_Loop_Float (wave_format, event_handle, render, frames_per_period);
-		}
-		// Handle the other formats at some point?
-		else {
-			if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_DRM))
-                LOG ("Audio format KSDATAFORMAT_SUBTYPE_DRM unsupported");
-            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_ALAW))
-                LOG ("Audio format KSDATAFORMAT_SUBTYPE_ALAW unsupported");
-			else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_MULAW))
-                LOG ("Audio format KSDATAFORMAT_SUBTYPE_MULAW unsupported");
-			else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_ADPCM))
-                LOG ("Audio format KSDATAFORMAT_SUBTYPE_ADPCM unsupported");
-		}
-	}
+    bool multiple_restart_attempts = false;
+    while (restart_audio && !sound_extern_data.quit) {
+        if (multiple_restart_attempts) Sleep (1000);
+        multiple_restart_attempts = true;
+        LOG ("Initializing WASAPI device");
 
-	render->lpVtbl->Release(render);
-	client->lpVtbl->Release(client);
+        device_enumerator->lpVtbl->RegisterEndpointNotificationCallback (device_enumerator, &notification_client);
+        defer { device_enumerator->lpVtbl->UnregisterEndpointNotificationCallback (device_enumerator, &notification_client); }
+
+        IMMDevice *default_device = NULL;
+        DO_OR_RESTART (device_enumerator->lpVtbl->GetDefaultAudioEndpoint(device_enumerator, eRender, eConsole, &default_device), "WASAPI failed to get default audio endpoint");
+        IF_NULL_RESTART (default_device, "WASAPI failed to create get default audio endpoint, even though GetDefaultAudioEndpoint returned S_OK");
+
+        do { // Print default audio device friendly name
+            LPWSTR id = NULL;
+            BREAK_ON_FAIL (default_device->lpVtbl->GetId (default_device, &id), "Couldn't get default device ID"); 
+
+            IPropertyStore *properties = NULL;
+            BREAK_ON_FAIL (default_device->lpVtbl->OpenPropertyStore (default_device, STGM_READ, &properties), "Couldn't open property store of default device");
+            defer { properties->lpVtbl->Release (properties); }
+
+            PROPVARIANT property_name;
+            PropVariantInit (&property_name);
+            BREAK_ON_FAIL (properties->lpVtbl->GetValue (properties, &PKEY_Device_FriendlyName, &property_name), "Failed to get default audio device name");
+            defer { PropVariantClear (&property_name); }
+
+            if (property_name.vt != VT_EMPTY) LOG ("Default audio device selected: [%S]", property_name.pwszVal);
+            else LOG ("Default audio device name blank?");
+        } while (0);
+
+        IAudioClient3 *client = NULL;
+        DO_OR_RESTART (default_device->lpVtbl->Activate(default_device, &IID_IAudioClient3, CLSCTX_ALL, NULL, (void**)&client), "WASAPI failed to activate audio client");
+        IF_NULL_RESTART (client, "WASAPI failed to activate audio client, even though Activate returned S_OK");
+        defer { client->lpVtbl->Release(client); }
+
+        default_device->lpVtbl->Release(default_device);
+
+        AudioClientProperties audio_properties = {
+            .cbSize = sizeof(AudioClientProperties),
+            .bIsOffload = FALSE,
+            .eCategory = AudioCategory_GameEffects,
+        };
+        DO_OR_RESTART (client->lpVtbl->SetClientProperties(client, &audio_properties), "WASAPI failed to set client properties");
+
+        WAVEFORMATEXTENSIBLE wave_format = {
+            .Format = {
+                .wFormatTag = WAVE_FORMAT_PCM,
+                .nChannels = 2,
+                .nSamplesPerSec = sampling_rate,
+                .wBitsPerSample = 16,
+            },
+        };
+        wave_format.Format.nBlockAlign = wave_format.Format.nChannels * wave_format.Format.wBitsPerSample / 8;
+        wave_format.Format.nAvgBytesPerSec = wave_format.Format.nSamplesPerSec * wave_format.Format.nBlockAlign;
+
+        {
+            WAVEFORMATEX *wave_format_closest;
+            HRESULT result = client->lpVtbl->IsFormatSupported (client, AUDCLNT_SHAREMODE_SHARED, &wave_format.Format, &wave_format_closest);
+            if (result == S_OK) {
+                LOG ("Default audio format supported");
+            }
+            else if (result == S_FALSE && wave_format_closest != NULL) {
+                wave_format = *(WAVEFORMATEXTENSIBLE*)wave_format_closest;
+                LOG ("Default audio format unsupported. Using this instead: Channels[%d] Bits per sample[%d] Sampling rate[%lu] Extensible[%s] Valid bits per sample[%d] Format: [", wave_format.Format.nChannels, wave_format.Format.wBitsPerSample, wave_format.Format.nSamplesPerSec, wave_format_closest->wFormatTag == WAVE_FORMAT_EXTENSIBLE ? "true" : "false", wave_format.Samples.wValidBitsPerSample);
+                sampling_rate = wave_format.Format.nSamplesPerSec;
+                if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)) LOG ("KSDATAFORMAT_SUBTYPE_PCM]");
+                else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) LOG ("KSDATAFORMAT_SUBTYPE_IEEE_FLOAT]");
+                else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_DRM)) LOG ("KSDATAFORMAT_SUBTYPE_DRM]");
+                else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_ALAW)) LOG ("KSDATAFORMAT_SUBTYPE_ALAW]");
+                else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_MULAW)) LOG ("KSDATAFORMAT_SUBTYPE_MULAW]");
+                else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_ADPCM)) LOG ("KSDATAFORMAT_SUBTYPE_ADPCM]");
+                else { LOG ("UNKNOWN]"); return NULL; }
+            }
+            else { LOG ("No audio format supported"); return NULL; }
+        }
+
+        uint32_t period_default = 0, period_fundamental = 0, period_min = 0, period_max = 0;
+        DO_OR_RESTART (client->lpVtbl->GetSharedModeEnginePeriod (client, &wave_format.Format, &period_default, &period_fundamental, &period_min, &period_max), "WASAPI failed to get shared mode engine period");
+        // Calculate closest to 5ms period
+        uint32_t frames_per_period = period_min;
+        const uint32_t frames_for_5ms = sampling_rate / 200;
+        if (period_min < frames_for_5ms) {
+            const uint32_t blobs = (frames_for_5ms - period_min) / period_fundamental;
+            frames_per_period += blobs * period_fundamental;
+            if (frames_per_period < frames_for_5ms) frames_per_period += period_fundamental;
+        }
+        LOG ("Device min period [%u] requested period [%u] samples [%.2fms]", period_min, frames_per_period, 1000.f * frames_per_period / wave_format.Format.nSamplesPerSec);
+        DO_OR_RESTART (client->lpVtbl->InitializeSharedAudioStream(client, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, frames_per_period, &wave_format.Format, NULL), "WASAPI failed to initialize shared audio stream");
+
+        HANDLE event_handle = CreateEvent (NULL, FALSE, FALSE, NULL);
+        IF_NULL_RESTART (event_handle, "Failed to create event handle");
+        DO_OR_RESTART (client->lpVtbl->SetEventHandle (client, event_handle), "WASAPI failed to set event handle");
+
+        IAudioRenderClient *render = NULL;
+        DO_OR_RESTART (client->lpVtbl->GetService(client, &IID_IAudioRenderClient, (void**)&render), "WASAPI failed to get AudioRenderClient service");
+        IF_NULL_RESTART (render, "Failed to get AudioRenderClient even though GetService returned S_OK");
+        defer { render->lpVtbl->Release(render); }
+
+        DO_OR_RESTART (client->lpVtbl->Start(client), "WASAPI failed to start audio client");
+
+        uint32_t format = wave_format.Format.wFormatTag;
+        if (format == WAVE_FORMAT_EXTENSIBLE) {
+            if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM))
+                format = WAVE_FORMAT_PCM;
+            else if (IsEqualGUID(&wave_format.SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))
+                format = WAVE_FORMAT_IEEE_FLOAT;
+            else {
+                format = 0;
+                LOG ("Unsupported wave format: [%lx]", wave_format.SubFormat.Data1);
+            }
+        }
+        else {
+            wave_format.Samples.wValidBitsPerSample = wave_format.Format.wBitsPerSample;
+        }
+
+        restart_audio = multiple_restart_attempts = false;
+
+        switch (format) {
+            case WAVE_FORMAT_PCM: {
+                LOG ("Entering SoundLoop_int");
+                SoundLoop_int (wave_format, event_handle, render, frames_per_period);
+            } break;
+            case WAVE_FORMAT_IEEE_FLOAT: {
+                LOG ("Entering SoundLoop_float");
+                SoundLoop_float (wave_format, event_handle, render, frames_per_period);
+            } break;
+            // Handle the other formats at some point?
+            default: LOG ("Not entering a sound loop - unsupported format"); break;
+        }
+    }
+
+    LOG ("Sound thread exiting");
 
 	return NULL;
 }
 
-#define WASAPI_SOUND_FUNC(__funcname__, __type__, __multiplier__) \
-void __funcname__ (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudioRenderClient *render, UINT32 frames_per_period) { \
-    RefillSampleBuffer (); \
-	while (!sound_extern_data.quit) { \
-		/* Wait for next buffer event to be signaled.*/ \
-		{ DWORD result = WaitForSingleObject(event_handle, INFINITE); if (result != WAIT_OBJECT_0) { LOG ("WaitForSingleObject failed. Error code [%lu] [%s]", result, result == WAIT_ABANDONED ? "WAIT_ABANDONED" : result == WAIT_TIMEOUT ? "WAIT_TIMEOUT" : result == WAIT_FAILED ? "WAIT_FAILED" : "Unknown"); return; } } \
- \
-		__type__ *data; \
-		HRESULT result = render->lpVtbl->GetBuffer (render, frames_per_period, (BYTE**)&data); \
-		switch (result) { \
-			case S_OK: break;/*LOG ("ok"); break;*/ \
-			case AUDCLNT_E_BUFFER_ERROR: LOG ("AUDCLNT_E_BUFFER_ERROR"); break; \
-			case AUDCLNT_E_BUFFER_TOO_LARGE: LOG ("AUDCLNT_E_BUFFER_TOO_LARGE"); break; \
-			case AUDCLNT_E_BUFFER_SIZE_ERROR: LOG ("AUDCLNT_E_BUFFER_SIZE_ERROR"); break; \
-			case AUDCLNT_E_OUT_OF_ORDER: LOG ("AUDCLNT_E_OUT_OF_ORDER"); break; \
-			case AUDCLNT_E_DEVICE_INVALIDATED: LOG ("AUDCLNT_E_DEVICE_INVALIDATED"); break; \
-			case AUDCLNT_E_BUFFER_OPERATION_PENDING: LOG ("AUDCLNT_E_BUFFER_OPERATION_PENDING"); break; \
-			case AUDCLNT_E_SERVICE_NOT_RUNNING: LOG ("AUDCLNT_E_SERVICE_NOT_RUNNING"); break; \
-			case E_POINTER: LOG ("E_POINTER"); break; \
-			default: LOG ("Unknown error"); break; \
-		} \
-        for (int i = 0; i < frames_per_period; ++i) { \
-            __type__ sample = sample_buffer[sample_buffer_swap].samples[i] * __multiplier__; \
-            repeat (wave_format.Format.nChannels) *data++ = sample; \
-        } \
-		DO_OR_CONTINUE (render->lpVtbl->ReleaseBuffer (render, frames_per_period, 0), "Failed to release audio buffer"); \
-        RefillSampleBuffer (); \
-	} \
-    LOG ("Render thread exiting normally"); \
-}
-
-// Any number of identical channels, 48KHz, 16-bit signed integer
-WASAPI_SOUND_FUNC (Sound_Loop_i16, int16_t, INT16_MAX)
-// Any number of identical channels, 48KHz, 16-bit signed integer
-WASAPI_SOUND_FUNC (Sound_Loop_i8, int8_t, INT8_MAX)
-// Any number of identical channels, 48KHz, 16-bit signed integer
-WASAPI_SOUND_FUNC (Sound_Loop_i32, int32_t, INT32_MAX)
-// Any number of identical channels, 48KHz, 16-bit signed integer
-WASAPI_SOUND_FUNC (Sound_Loop_Float, float, 1.f)
 
 
 
@@ -806,7 +845,7 @@ void *Sound (void* args) {
     AudioStreamBasicDescription asbd = {
         .mFormatID = kAudioFormatLinearPCM,
         .mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
-        .mSampleRate = SAMPLING_RATE,
+        .mSampleRate = sampling_rate,
         .mBitsPerChannel = 16,
         .mChannelsPerFrame = 1,
         .mFramesPerPacket = 1,
