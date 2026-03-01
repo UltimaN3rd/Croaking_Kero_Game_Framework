@@ -148,7 +148,7 @@ static inline void SoundExecuteCommands () {
                 for (int c = MUSIC_CHANNELS_FIRST; c <= MUSIC_CHANNELS_LAST; ++c)
                     sound.channels[c].sound.waveform = sound_waveform_silence;
                 int channel_count = sound.music.new_source->count;
-                assert (channel_count <= MUSIC_CHANNELS); if (channel_count > MUSIC_CHANNELS) { LOG ("New music requested has too many channels [%d] > [%d]", channel_count, MUSIC_CHANNELS); channel_count = MUSIC_CHANNELS; }
+                if (channel_count > MUSIC_CHANNELS) { LOG ("New music requested has too many channels [%d] > [%d]", channel_count, MUSIC_CHANNELS); channel_count = MUSIC_CHANNELS; }
                 for (int c = 0; c < channel_count; ++c)
                     sound.channels[c] = (typeof(sound.channels[c])){.sound = *sound.music.new_source->sounds[c]};
             } break;
@@ -159,13 +159,10 @@ static inline void SoundExecuteCommands () {
                 sound.music.state = music_state_playing;
             } break;
             case sound_command_music_volume_set: {
-                assert (c.data.music_volume_set.volume >= 0); if (c.data.music_volume_set.volume < 0) c.data.music_volume_set.volume = 0;
-                assert (c.data.music_volume_set.volume <= 1); if (c.data.music_volume_set.volume > 1) c.data.music_volume_set.volume = 1;
                 sound.music.volume = c.data.music_volume_set.volume;
             } break;
         }
     }
-    assert (command_buffer.executed == filled);
 }
 
 void SoundMusicStop () {
@@ -176,8 +173,8 @@ void SoundMusicResume () {
 }
 
 void SoundMusicSetVolume (float volume_0_to_1) {
-    assert (volume_0_to_1 >= 0); if (volume_0_to_1 < 0) volume_0_to_1 = 0;
-    assert (volume_0_to_1 <= 1); if (volume_0_to_1 > 1) volume_0_to_1 = 1;
+    if (volume_0_to_1 < 0) volume_0_to_1 = 0;
+    if (volume_0_to_1 > 1) volume_0_to_1 = 1;
     SoundAddCommand (.type = sound_command_music_volume_set, .data.music_volume_set.volume = volume_0_to_1);
 }
 float SoundMusicGetVolume () { return sound.music.volume; }
@@ -186,8 +183,8 @@ void SoundFXStop () {
     SoundAddCommand (.type = sound_command_fx_stop);
 }
 void SoundFXSetVolume (float volume_0_to_1) {
-    assert (volume_0_to_1 >= 0); if (volume_0_to_1 < 0) volume_0_to_1 = 0;
-    assert (volume_0_to_1 <= 1); if (volume_0_to_1 > 1) volume_0_to_1 = 1;
+    if (volume_0_to_1 < 0) volume_0_to_1 = 0;
+    if (volume_0_to_1 > 1) volume_0_to_1 = 1;
     SoundAddCommand (.type = sound_command_fx_volume_set, .data.fx_volume_set.volume = volume_0_to_1);
 }
 float SoundFXGetVolume () { return sound.fx.volume; }
@@ -260,7 +257,6 @@ void SoundFXPrepare (const sound_t *const sound) {
 }
 
 uint32_t SoundFXPlayGroup (const sound_group_t *group) {
-    // assert (!sound_extern_data.prepared_sounds_ready);
     uint32_t channels = 0;
     for (int i = 0; i < group->count; ++i)
         SoundAddCommand (.type = sound_command_fx_prepare, .data.fx_prepare.sound = group->sounds[i]);
@@ -398,7 +394,7 @@ static inline float CreateNextSample () {
                     }
                 }
                 sample *= envelope;
-                assert (sample >=-1 && sample <= 1);
+                // assert (sample >=-1 && sample <= 1);
                 *value += sample;
             }
             
@@ -488,7 +484,7 @@ void *Sound (void *data_void) {
 
     pa_simple *simple = NULL;
     int pulse_error;
-    { simple = pa_simple_new (NULL, GAME_TITLE, PA_STREAM_PLAYBACK, NULL, "playback", &(pa_sample_spec){.format = PA_SAMPLE_S16LE, .rate = SAMPLING_RATE, .channels = 1}, NULL, &(pa_buffer_attr){.maxlength = PERIOD_SIZE * 8, .tlength = PERIOD_SIZE * 4, .prebuf = PERIOD_SIZE * 2, .minreq = -1, .fragsize = PERIOD_SIZE * 2}, &pulse_error); assert (simple); if (simple == NULL) { LOG ("Failed to initialize PulseAudio [%s]", pa_strerror (pulse_error)); return NULL; }}
+    { simple = pa_simple_new (NULL, GAME_TITLE, PA_STREAM_PLAYBACK, NULL, "playback", &(pa_sample_spec){.format = PA_SAMPLE_S16LE, .rate = SAMPLING_RATE, .channels = 1}, NULL, &(pa_buffer_attr){.maxlength = PERIOD_SIZE * 8, .tlength = PERIOD_SIZE * 4, .prebuf = PERIOD_SIZE * 2, .minreq = -1, .fragsize = PERIOD_SIZE * 2}, &pulse_error); if (simple == NULL) { LOG ("Failed to initialize PulseAudio [%s]", pa_strerror (pulse_error)); return NULL; }}
 
     while (!sound_extern_data.quit) {
         RefillSampleBuffer ();
@@ -497,7 +493,7 @@ void *Sound (void *data_void) {
 
         repeat (PERIOD_SIZE) buffer[buffer_index] = sample_buffer[sample_buffer_swap].samples[buffer_index] * INT16_MAX, buffer_index++;
 
-        { auto result = pa_simple_write (simple, buffer, PERIOD_SIZE * 2, &pulse_error); assert (result == 0); if (result != 0) { LOG ("PulseAudio failed to write buffer [%s]", pa_strerror (pulse_error)); return NULL; } }
+        { auto result = pa_simple_write (simple, buffer, PERIOD_SIZE * 2, &pulse_error); if (result != 0) { LOG ("PulseAudio failed to write buffer [%s]", pa_strerror (pulse_error)); return NULL; } }
     }
 
     LOG ("Render thread exiting normally");
@@ -553,9 +549,9 @@ const char *HResultToStr (HRESULT result) {
     return wasapi_error_buffer;
 }
 
-#define DO_OR_QUIT(__function_call__, __error_message__) do { auto result = __function_call__; assert (result == S_OK); if (result != S_OK) { LOG (__error_message__ " [%ld] [%s]", result, HResultToStr(result)); return NULL; } } while (0)
+#define DO_OR_QUIT(__function_call__, __error_message__) do { auto result = __function_call__; if (result != S_OK) { LOG (__error_message__ " [%ld] [%s]", result, HResultToStr(result)); return NULL; } } while (0)
 #define DO_OR_CONTINUE(__function_call__, __error_message__) do { auto result = __function_call__; if (result != S_OK) { LOG (__error_message__ " [%ld] [%s]", result, HResultToStr(result)); } } while (0)
-#define QUIT_IF_NULL(__variable__, __error_message__) do { auto __var__ = (__variable__); assert (__var__); if (__var__ == NULL) { LOG (__error_message__); return NULL; } } while (0)
+#define QUIT_IF_NULL(__variable__, __error_message__) do { auto __var__ = (__variable__); if (__var__ == NULL) { LOG (__error_message__); return NULL; } } while (0)
 
 void *Sound (void *data_void) {
     DO_OR_QUIT (CoInitializeEx(NULL, 0), "Sound thread failed to CoInitializeEx");
@@ -563,7 +559,7 @@ void *Sound (void *data_void) {
 	DO_OR_QUIT (CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void**)&device_enumerator), "WASAPI failed to create Device Enumerator");
     QUIT_IF_NULL (device_enumerator, "WASAPI failed to create Device Enumerator, even though CoCreateInstance returned S_OK");
 	IMMDevice *default_device = NULL;
-	DO_OR_QUIT (device_enumerator->lpVtbl->GetDefaultAudioEndpoint(device_enumerator, eRender, eConsole, &default_device); assert (result == S_OK), "WASAPI failed to get default audio endpoint");
+	DO_OR_QUIT (device_enumerator->lpVtbl->GetDefaultAudioEndpoint(device_enumerator, eRender, eConsole, &default_device), "WASAPI failed to get default audio endpoint");
     QUIT_IF_NULL (default_device, "WASAPI failed to create get default audio endpoint, even though GetDefaultAudioEndpoint returned S_OK");
 	DO_OR_CONTINUE (device_enumerator->lpVtbl->Release(device_enumerator), "Device Enumerator Release() failed");
 
@@ -624,7 +620,7 @@ void *Sound (void *data_void) {
         }
     }
     sample_buffer_size = frames_per_period;
-    assert (sample_buffer_size <= SAMPLE_BUFFER_SIZE); if (sample_buffer_size > SAMPLE_BUFFER_SIZE) { LOG ("sample_buffer_size[%d] > SAMPLE_BUFFER_SIZE[%d]", sample_buffer_size, SAMPLE_BUFFER_SIZE); }
+    if (sample_buffer_size > SAMPLE_BUFFER_SIZE) { LOG ("sample_buffer_size[%d] > SAMPLE_BUFFER_SIZE[%d]", sample_buffer_size, SAMPLE_BUFFER_SIZE); }
 	LOG ("Device min period [%u] requested period [%u] samples [%.2fms]", period_min, frames_per_period, 1000.f * frames_per_period / wave_format.Format.nSamplesPerSec);
 	DO_OR_QUIT (client->lpVtbl->InitializeSharedAudioStream(client, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, frames_per_period, &wave_format.Format, NULL), "WASAPI failed to initialize shared audio stream");
 
@@ -685,7 +681,7 @@ void __funcname__ (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudio
     RefillSampleBuffer (); \
 	while (!sound_extern_data.quit) { \
 		/* Wait for next buffer event to be signaled.*/ \
-		{ DWORD result = WaitForSingleObject(event_handle, INFINITE); assert (result == WAIT_OBJECT_0); if (result != WAIT_OBJECT_0) { LOG ("WaitForSingleObject failed. Error code [%lu] [%s]", result, result == WAIT_ABANDONED ? "WAIT_ABANDONED" : result == WAIT_TIMEOUT ? "WAIT_TIMEOUT" : result == WAIT_FAILED ? "WAIT_FAILED" : "Unknown"); return; } } \
+		{ DWORD result = WaitForSingleObject(event_handle, INFINITE); if (result != WAIT_OBJECT_0) { LOG ("WaitForSingleObject failed. Error code [%lu] [%s]", result, result == WAIT_ABANDONED ? "WAIT_ABANDONED" : result == WAIT_TIMEOUT ? "WAIT_TIMEOUT" : result == WAIT_FAILED ? "WAIT_FAILED" : "Unknown"); return; } } \
  \
 		__type__ *data; \
 		HRESULT result = render->lpVtbl->GetBuffer (render, frames_per_period, (BYTE**)&data); \
@@ -741,11 +737,7 @@ static AudioUnit toneUnit;
 OSStatus myAudioObjectPropertyListenerProc (AudioObjectID inObjectID, UInt32 inNumberAddresses, const AudioObjectPropertyAddress *inAddresses,void* __nullable inClientData);
 
 OSStatus SoundCallback (void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData) {
-    assert (*ioActionFlags == 0);
     SInt16 *left = (SInt16*)ioData->mBuffers[0].mData;
-
-    // assert (inNumberFrames == sample_buffer_size);
-    // LOG ("Audio frames requested: %u", inNumberFrames);
 
     if (inNumberFrames != sample_buffer_size) {
         LOG ("Reset audio buffer size!");
@@ -756,7 +748,6 @@ OSStatus SoundCallback (void *inRefCon, AudioUnitRenderActionFlags *ioActionFlag
     }
 
     for (UInt32 frame = 0; frame < inNumberFrames; ++frame) {
-        // *(left++) = CreateNextSample () * INT16_MAX;
         *(left++) = sample_buffer[sample_buffer_swap].samples[frame] * INT16_MAX;
     }
 
@@ -793,7 +784,7 @@ OSStatus SoundCallback (void *inRefCon, AudioUnitRenderActionFlags *ioActionFlag
 //     return noErr;
 // }
 
-#define DO_OR_QUIT(__function__, __error_message__) { OSErr err = __function__; assert (err == 0); if (err != 0) { LOG (__error_message__ "[%d]", err); return NULL; } }
+#define DO_OR_QUIT(__function__, __error_message__) { OSErr err = __function__; if (err != 0) { LOG (__error_message__ "[%d]", err); return NULL; } }
 
 void *Sound (void* args) {
     sample_buffer_size = PERIOD_SIZE;
@@ -807,7 +798,7 @@ void *Sound (void* args) {
     };
     AudioComponent output;
 
-    { output = AudioComponentFindNext(NULL, &acd); assert (output); if (!output) { LOG("Can't find default output"); return NULL; } }
+    { output = AudioComponentFindNext(NULL, &acd); if (!output) { LOG("Can't find default output"); return NULL; } }
     DO_OR_QUIT (AudioComponentInstanceNew(output, &toneUnit), "Error creating audio unit");
     AURenderCallbackStruct input = { .inputProc = SoundCallback };
     DO_OR_QUIT (AudioUnitSetProperty(toneUnit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &input, sizeof(input)), "Error setting render callback");
