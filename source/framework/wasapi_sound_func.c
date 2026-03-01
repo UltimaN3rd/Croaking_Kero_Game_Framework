@@ -41,13 +41,25 @@ void FUNCNAME__ (WAVEFORMATEXTENSIBLE wave_format, HANDLE event_handle, IAudioRe
 		}
         if (result != S_OK) continue;
 
+        // for (int i = 0; i < frames_per_period; ++i) {
+        //     TYPE__ sample = sample_buffer[sample_buffer_swap].samples[i] * maxval;
+        //     repeat (wave_format.Format.nChannels) {
+        //         *(TYPE__*)data = sample;
+        //         data += bytes_per_sample;
+        //     }
+        // }
+
+        static const uint32_t wavelength = 48000/440;
         for (int i = 0; i < frames_per_period; ++i) {
-            TYPE__ sample = sample_buffer[sample_buffer_swap].samples[i] * maxval;
-            repeat (wave_format.Format.nChannels) {
+            static uint16_t sound_counter = 0;
+            TYPE__ sample = sound_counter < wavelength/2 ? maxval : -maxval;
+            if (++sound_counter >= wavelength) sound_counter = 0;
+            for (int j = 0; j < wave_format.Format.nChannels; ++j) {
                 *(TYPE__*)data = sample;
                 data += bytes_per_sample;
             }
         }
+
 		DO_OR_CONTINUE (render->lpVtbl->ReleaseBuffer (render, frames_per_period, 0), "Failed to release audio buffer");
 
         RefillSampleBuffer ();
