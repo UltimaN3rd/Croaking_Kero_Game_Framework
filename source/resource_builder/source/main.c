@@ -745,7 +745,7 @@ static bool LoadMusic (const char *filename) {
     defer { if (!success) { printf ("Failed to load file [%s]\n", filename); } }
     FILE *file = fopen (filename, "rb");
     assert (file); if (!file) { LOG ("Failed to open file [%s]", filename); return false; }
-    defer { fclose (file) }
+    defer { fclose (file); }
     struct {
         char magic[14];
         uint32_t version;
