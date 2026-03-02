@@ -15,11 +15,15 @@
 #pragma once
 
 #ifndef counted_by
-    #ifdef __clang__
-    #define counted_by(__count__) __counted_by(__count__)
-    #elifdef __GNUC__
-    #define counted_by(__count__) __attribute((counted_by(__count__)))
-    #endif
+# ifdef __cplusplus
+#  define counted_by(ignored__) 
+# else
+#  ifdef __clang__
+#   define counted_by(__count__) __counted_by(__count__)
+#  elifdef __GNUC__
+#   define counted_by(__count__) __attribute((counted_by(__count__)))
+#  endif
+# endif
 #endif
 
 #ifndef unreachable
