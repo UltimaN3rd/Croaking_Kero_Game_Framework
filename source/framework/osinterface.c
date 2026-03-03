@@ -91,6 +91,10 @@ static const char *os_HResultToStr (HRESULT result) {
     return win32_error_buffer;
 }
 
+
+static RECT windowed_size = {};
+static RECT windowed_pos = {};
+
 bool os_Init (const char *window_title) {
 	{ ULONG time; NtSetTimerResolution (1000, TRUE, &time); }
 	SetErrorMode (SEM_FAILCRITICALERRORS);
@@ -194,6 +198,9 @@ bool os_Init (const char *window_title) {
 	{ auto result = wglMakeCurrent (os_private.win32.window_context, NULL); assert (result); if (result == FALSE) { LOG ("wglMakeCurrent(NULL) to release the context for another thread failed [%s]", os_HResultToStr(GetLastError())); return false; } }
 	#endif
 
+	GetClientRect (os_private.win32.window_handle, &windowed_size);
+	GetWindowRect (os_private.win32.window_handle, &windowed_pos);
+
 	LOG ("os_Init completed successfully");
 
 	return true;
@@ -215,17 +222,42 @@ void os_Fullscreen (bool fullscreen) {
 	if (fullscreen) {
 		os_public.window.is_fullscreen = true;
 		
-		RECT desktop_rect;
-		HWND desktop_handle = GetDesktopWindow();
-		if (desktop_handle) GetWindowRect(desktop_handle, &desktop_rect);
-		else { desktop_rect.left = 0; desktop_rect.top = 0; desktop_rect.right = 800; desktop_rect.bottom = 600; }
+		GetClientRect (os_private.win32.window_handle, &windowed_size);
+		GetWindowRect (os_private.win32.window_handle, &windowed_pos);
+
+		RECT fullscreen_rect;
+
+		const auto monitor = MonitorFromWindow (os_private.win32.window_handle, MONITOR_DEFAULTTOPRIMARY);
+		MONITORINFO info = {.cbSize = sizeof (MONITORINFO)};
+		{
+			auto result = GetMonitorInfo (monitor, &info); assert (result);
+			if (!result) {
+				LOG ("Failed to get monitor info.");
+				HWND desktop_handle = GetDesktopWindow();
+				if (desktop_handle) GetWindowRect(desktop_handle, &fullscreen_rect);
+				else { fullscreen_rect.left = 0; fullscreen_rect.top = 0; fullscreen_rect.right = 800; fullscreen_rect.bottom = 600; }
+			}
+			else {
+				fullscreen_rect = info.rcMonitor;
+			}
+		}
+		
 		SetWindowLongPtr (os_private.win32.window_handle, GWL_STYLE, (WS_POPUP | WS_VISIBLE) & ~WS_OVERLAPPEDWINDOW);
-		SetWindowPos (os_private.win32.window_handle, NULL, desktop_rect.left, desktop_rect.top, desktop_rect.right - desktop_rect.left, desktop_rect.bottom - desktop_rect.top, SWP_NOOWNERZORDER);
+		SetWindowPos (os_private.win32.window_handle, NULL, fullscreen_rect.left, fullscreen_rect.top, fullscreen_rect.right - fullscreen_rect.left, fullscreen_rect.bottom - fullscreen_rect.top, SWP_NOOWNERZORDER);
+
+		RECT client_rect;
+		GetClientRect (os_private.win32.window_handle, &client_rect);
+		PostMessageA (os_private.win32.window_handle, WM_SIZE, SIZE_RESTORED, (client_rect.bottom << 16) + client_rect.right);
 	} else {
 		os_public.window.is_fullscreen = false;
 
 		SetWindowLongPtr (os_private.win32.window_handle, GWL_STYLE, ~WS_POPUP & (WS_OVERLAPPEDWINDOW | WS_VISIBLE));
+		SetWindowPos (os_private.win32.window_handle, NULL, windowed_pos.left, windowed_pos.top, windowed_size.right - windowed_size.left, windowed_size.bottom - windowed_size.top, SWP_NOOWNERZORDER);
 		ShowWindow (os_private.win32.window_handle, SW_SHOW);
+		
+		RECT client_rect;
+		GetClientRect (os_private.win32.window_handle, &client_rect);
+		PostMessageA (os_private.win32.window_handle, WM_SIZE, SIZE_RESTORED, (client_rect.bottom << 16) + client_rect.right);
 	}
 }
 
@@ -263,6 +295,7 @@ void os_ShowCursor () {
 }
 
 void os_HideCursor () {
+	SetCursor (NULL);
 	ShowCursor (false);
 }
 
