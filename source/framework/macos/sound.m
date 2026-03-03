@@ -50,35 +50,6 @@ void *Sound (void* args) {
 
     RefillSampleBuffer();
 
-    // const AudioComponentDescription acd = {
-    //     .componentType = kAudioUnitType_Output,
-    //     .componentSubType = kAudioUnitSubType_DefaultOutput,
-    //     .componentManufacturer = kAudioUnitManufacturer_Apple,
-    // };
-    // AudioComponent output;
-
-    // { output = AudioComponentFindNext(NULL, &acd); if (!output) { LOG("Can't find default output"); return NULL; } }
-    // DO_OR_QUIT (AudioComponentInstanceNew(output, &toneUnit), "Error creating audio unit");
-    // AURenderCallbackStruct input = { .inputProc = SoundCallback };
-    // DO_OR_QUIT (AudioUnitSetProperty(toneUnit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &input, sizeof(input)), "Error setting render callback");
-
-    // AudioStreamBasicDescription asbd = {
-    //     .mFormatID = kAudioFormatLinearPCM,
-    //     .mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
-    //     .mSampleRate = SAMPLING_RATE,
-    //     .mBitsPerChannel = 16,
-    //     .mChannelsPerFrame = 1,
-    //     .mFramesPerPacket = 1,
-    //     .mBytesPerFrame = 2,
-    //     .mBytesPerPacket = 2,
-    // };
-    // DO_OR_QUIT (AudioUnitSetProperty(toneUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &asbd, sizeof(asbd)), "Error setting stream format");
-
-    // UInt32 period_size_in = sample_buffer_size;
-    // DO_OR_QUIT (AudioUnitSetProperty(toneUnit, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Input, 0, &period_size_in, sizeof(period_size_in)), "Error setting stream format");
-    // DO_OR_QUIT (AudioUnitInitialize(toneUnit), "Error initializing unit");
-    // DO_OR_QUIT (AudioOutputUnitStart(toneUnit), "Error starting unit");
-
     bool restart_multiple_attempts = false;
     while (restart_audio && !sound_extern_data.quit) {
         if (restart_multiple_attempts > 0) sleep (1);
