@@ -2,9 +2,8 @@
 #include "update.h"
 #include "game.h"
 
-extern update_data_t update_data;
-
 static bool FullscreenTextBox_Update (const char *const self) {
+    const auto input = *Update_FrameInput ();
     bool retval = true;
     const auto dimensions = font_StringDimensions(&resources_framework_font, self, NULL);
     const int16_t l = (RESOLUTION_WIDTH - dimensions.w) / 2;
@@ -15,7 +14,7 @@ static bool FullscreenTextBox_Update (const char *const self) {
     Render_DarkenRectangle(.depth = 127, .l = l, .r = r, .b = b, .t = t, .levels = 1);
     Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = l-1, .y = b-1, .w = dimensions.w+2, .h = dimensions.h+2, .color_edge = 1}}, .depth = 127);
     Render_Text (.string = self, .center_horizontally_on_screen = true, .center_vertically_on_screen = true, .depth = 127);
-    if (update_data.frame.mouse.buttons[MOUSE_LEFT] & KEY_PRESSED || update_data.frame.keyboard[os_KEY_ENTER] & KEY_PRESSED || update_data.frame.keyboard[os_KEY_ESCAPE] & KEY_PRESSED || update_data.frame.keyboard[os_KEY_SPACE] & KEY_PRESSED) {
+    if (input.mouse.buttons[MOUSE_LEFT] & KEY_PRESSED || input.keyboard[os_KEY_ENTER] & KEY_PRESSED || input.keyboard[os_KEY_ESCAPE] & KEY_PRESSED || input.keyboard[os_KEY_SPACE] & KEY_PRESSED) {
         retval = false; // Delete self
     }
     Update_ClearInputAll();

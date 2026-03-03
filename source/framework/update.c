@@ -528,3 +528,7 @@ void Update_ClearInputKeyboard () {
 typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState () {
 	return unedited_frameinput;
 }
+
+typeof((update_data_t){}.frame) *Update_FrameInput () {
+	return &update_data.frame;
+}

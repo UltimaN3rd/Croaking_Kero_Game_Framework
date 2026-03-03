@@ -17,7 +17,6 @@
 
 #include <stdarg.h>
 
-extern update_data_t update_data;
 extern bool quit;
 
 void menu_Function_NewGame ();
@@ -48,27 +47,19 @@ void menu_Function_Quit () {
 }
 
 void game_menu_Init () {
-	// auto keyboard = update_data.frame.keyboard;
-
 	menu_Init (&menu, &submenus[0]);
-	// SoundPlayMusic (&resources_music_ost1);
 }
 
-// static uint64_t random_state = 57490372;
-
 void game_menu_Update () {
-	auto keyboard = update_data.frame.keyboard;
-	auto mouse = update_data.frame.mouse;
-	auto typing = update_data.frame.typing;
-	static vec2i_t last_mouse_position = {};
+	const auto input = *Update_FrameInput ();
 	auto m = menu.submenu;
 	
 	#define PRESSORREPEAT (KEY_PRESSED | KEY_REPEATED)
 	menu_inputs_t inputs = {
-		.up = keyboard[os_KEY_UP] & PRESSORREPEAT, .down = keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
-		.backspace = keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = keyboard[os_KEY_DELETE] & PRESSORREPEAT,
-		.mouse = {.x = mouse.x, .y = mouse.y, .left = mouse.buttons[MOUSE_LEFT]}};
-	memcpy (inputs.typing, typing.chars, MIN (sizeof(inputs.typing), typing.count));
+		.up = input.keyboard[os_KEY_UP] & PRESSORREPEAT, .down = input.keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = input.keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = input.keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = input.keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = input.keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
+		.backspace = input.keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = input.keyboard[os_KEY_DELETE] & PRESSORREPEAT,
+		.mouse = {.x = input.mouse.x, .y = input.mouse.y, .left = input.mouse.buttons[MOUSE_LEFT]}};
+	memcpy (inputs.typing, input.typing.chars, MIN (sizeof(inputs.typing), input.typing.count));
 	menu_Update (&menu, inputs);
 
 	menu_Render (&menu, 1);

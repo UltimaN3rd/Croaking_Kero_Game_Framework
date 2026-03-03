@@ -18,7 +18,6 @@
 #include <string.h>
 #include "update.h"
 
-extern update_data_t update_data;
 uint64_t cereal_dummy;
 
 bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const char *const filename) {

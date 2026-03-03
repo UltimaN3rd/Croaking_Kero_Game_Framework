@@ -163,4 +163,5 @@ update_object_t *Update_ObjectAlloc (const uint32_t bytes);
 
 void *Update_ObjectMemOffsetToAddr (const uint32_t mem_offset);
 
+typeof((update_data_t){}.frame) *Update_FrameInput ();
 typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState ();

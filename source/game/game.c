@@ -14,6 +14,8 @@
 
 #include "game.h"
 
+extern update_data_t update_data;
+
 void game_Init (const void *const ignore);
 void game_Update () {}
 void game_menu_Init (const void *const ignore);
@@ -27,7 +29,6 @@ const update_state_functions_t state_functions[update_state_count] = {
     [update_state_gameplay] = {gameplay_Init, gameplay_Update},
 };
 
-extern update_data_t update_data;
 extern const cereal_t cereal_options[];
 extern const size_t cereal_options_size;
 
@@ -106,8 +107,6 @@ const cereal_t cereal_options[] = {
 const size_t cereal_options_size = sizeof (cereal_options) / sizeof (*cereal_options);
 
 #include "DEFER.h"
-extern update_data_t update_data;
-
 
 void SaveSettings () {
 	cereal_WriteToFile(cereal_options, cereal_options_size, config_filename);

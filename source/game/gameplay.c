@@ -51,7 +51,6 @@ static struct {
 } data;
 
 static uint64_t random_state;
-extern update_data_t update_data;
 
 #define ADSR_DEFAULT ((ADSR_t){.peak = .5, .sustain = .4, .attack = 48000 * .01, .decay = 48000 * .005, .release = 48000 * .01})
 const sound_t sound_coin2 = {.waveform = sound_waveform_sine, .duration = 48000 * .1, .frequency = 2000, .ADSR = ADSR_DEFAULT};
@@ -98,9 +97,9 @@ void gameplay_Init () {
 }
 
 void gameplay_Update () {
-    auto keyboard = update_data.frame.keyboard;
+    const auto input = *Update_FrameInput ();
     
-    if (keyboard[os_KEY_ESCAPE] & KEY_PRESSED) {
+    if (input.keyboard[os_KEY_ESCAPE] & KEY_PRESSED) {
         gameplay_Exit ();
         return;
     }
@@ -179,10 +178,10 @@ void PlayerDie () {
 
 
 void UpdateAlive () {
-    auto keyboard = update_data.frame.keyboard;
+    const auto input = *Update_FrameInput ();
 
     data.player.vy += GRAVITY;
-    if (keyboard[os_KEY_SPACE] & KEY_PRESSED) PlayerFlap ();
+    if (input.keyboard[os_KEY_SPACE] & KEY_PRESSED) PlayerFlap ();
 
     data.player.y.i32 += data.player.vy;
     data.player.propeller_speed *= .95f;
@@ -241,9 +240,7 @@ void UpdateAlive () {
 }
 
 void UpdateDead () {
-    auto keyboard = update_data.frame.keyboard;
-	auto mouse = update_data.frame.mouse;
-	auto typing = update_data.frame.typing;
+    const auto input = *Update_FrameInput ();
 
     if (data.dead.cooldown > 0) {
         --data.dead.cooldown;
@@ -253,15 +250,15 @@ void UpdateDead () {
             Render_Text (.string = "New high score!!!\nEnter your name:", .x = 110, .y = 200);
             #define PRESSORREPEAT (KEY_PRESSED | KEY_REPEATED)
             menu_inputs_t inputs = {
-                .up = keyboard[os_KEY_UP] & PRESSORREPEAT, .down = keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
-                .backspace = keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = keyboard[os_KEY_DELETE] & PRESSORREPEAT,
-                .mouse = {.x = mouse.x, .y = mouse.y, .left = mouse.buttons[MOUSE_LEFT]}};
-	        memcpy (inputs.typing, typing.chars, MIN (sizeof(inputs.typing), typing.count));
+                .up = input.keyboard[os_KEY_UP] & PRESSORREPEAT, .down = input.keyboard[os_KEY_DOWN] & PRESSORREPEAT, .left = input.keyboard[os_KEY_LEFT] & PRESSORREPEAT, .right = input.keyboard[os_KEY_RIGHT] & PRESSORREPEAT, .confirm = input.keyboard[os_KEY_ENTER] & KEY_PRESSED, .cancel = input.keyboard[os_KEY_ESCAPE] & KEY_PRESSED,
+                .backspace = input.keyboard[os_KEY_BACKSPACE] & PRESSORREPEAT, .delete = input.keyboard[os_KEY_DELETE] & PRESSORREPEAT,
+                .mouse = {.x = input.mouse.x, .y = input.mouse.y, .left = input.mouse.buttons[MOUSE_LEFT]}};
+	        memcpy (inputs.typing, input.typing.chars, MIN (sizeof(inputs.typing), input.typing.count));
             menu_Update (&menu_death, inputs);
             menu_Render (&menu_death, 20);
         }
         else {
-            if (keyboard[os_KEY_SPACE] & KEY_PRESSED) {
+            if (input.keyboard[os_KEY_SPACE] & KEY_PRESSED) {
                 gameplay_Init ();
             }
             Render_Text (.string = "Press [SPACE] to play again", .y = 140, .depth = 10, .center_horizontally_on_screen = true);
