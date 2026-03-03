@@ -1336,8 +1336,8 @@ void *Render (void*) {
 		int fps_this_frame = 0;
 		if (show_fps){
 			static int64_t last_time = 0;
-			auto time = os_uTime ();
-			int64_t delta = time - last_time;
+			const auto time = os_uTime ();
+			const int64_t delta = time - last_time;
 			last_time = time;
 			#define FPS_SAMPLES 30
 			static int64_t total_time = 0;
@@ -1347,17 +1347,19 @@ void *Render (void*) {
 				total_time = 0;
 				sample_count = 0;
 			}
-			if (sample_count < FPS_SAMPLES) {
-				++sample_count;
-				total_time += delta;
-			}
 			else {
-				total_time *= (float)(FPS_SAMPLES - 1) / (FPS_SAMPLES);
-				total_time += delta;
+				if (sample_count < FPS_SAMPLES) {
+					++sample_count;
+					total_time += delta;
+				}
+				else {
+					total_time *= (float)(FPS_SAMPLES - 1) / (FPS_SAMPLES);
+					total_time += delta;
+				}
+				static_assert (FPS_SAMPLES > 1);
+				int64_t average_time = total_time / sample_count;
+				fps_this_frame = 1000000.f/average_time + 0.5f;
 			}
-			static_assert (FPS_SAMPLES > 1);
-			int64_t average_time = total_time / sample_count;
-			fps_this_frame = 1000000.f/average_time + 0.5f;
 		}
 		os_SetWindowFrameBuffer (frame->p, frame->w, frame->h);
 
@@ -1392,7 +1394,7 @@ void *Render (void*) {
 			render_state->element_count = RENDER_MAX_ELEMENTS;
 		}
 
-		zen_timer_t frame_timer = zen_Start();
+		const auto frame_start = os_uTime ();
 
 		// Draw background
 		DrawBackground (render_state);
@@ -1459,11 +1461,23 @@ void *Render (void*) {
 			frame->p[x + y * frame->w] = render_state->particles.array[i].pixel;
 		}
 
-		auto frame_time = zen_End (&frame_timer);
+		const auto frame_end = os_uTime ();
+		const auto frame_time = frame_end - frame_start;
 
 		if (render_state->debug.show_rendertime) {
+			static int frames_before_reset = 60;
+			static int64_t max_recorded_frame_time = 0;
+			if (--frames_before_reset == 0) {
+				frames_before_reset = 120;
+				max_recorded_frame_time = frame_time;
+			}
+			else if (frame_time > max_recorded_frame_time) {
+				frames_before_reset = 120;
+				max_recorded_frame_time = frame_time;
+			}
+
 			char str[32];
-			snprintf (str, sizeof(str), "R%4"PRId64"us", frame_time);
+			snprintf (str, sizeof(str), "R%4"PRId64"us", max_recorded_frame_time);
 			DrawWrite (&resources_framework_font, frame, 1, frame->h-2-resources_framework_font.line_height, str, render_state->state_count);
 		}
 

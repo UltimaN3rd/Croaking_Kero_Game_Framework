@@ -68,8 +68,6 @@ void *Update(void*) {
 
 	Update_ChangeState(0);
 
-	zen_timer_t frame_timer;
-
 	typeof (update_data.events) events;
 	#define KEYBOARD_REPEAT_INITIAL_DELAY 30
 	#define KEYBOARD_REPEAT_DELAY 10
@@ -81,7 +79,7 @@ void *Update(void*) {
 		update_data.frame.typing = (typeof(update_data.frame.typing)){};
 		update_data.frame.mouse.scroll = 0;
 
-		frame_timer = zen_Start ();
+		const auto frame_begin = os_uTime ();
 
 		for (int i = 0; i < UPDATE_KEYBOARD_KEY_COUNT; ++i) {
 			auto pk = &update_data.frame.keyboard[i];
@@ -217,7 +215,7 @@ void *Update(void*) {
 			if (update_data.debug.show_simtime && *update_data.debug.show_simtime) {
 				char temp[64];
 					sprintf (temp, "S%4"PRId64"us", max_recorded_frame_time);
-					Render_Text (.x = 0, .y = RESOLUTION_HEIGHT-resources_framework_font.line_height*2, .string = temp, .ignore_camera = true);
+					Render_Text (.x = 1, .y = RESOLUTION_HEIGHT-resources_framework_font.line_height*2, .string = temp, .ignore_camera = true);
 			}
 			if (update_data.debug.show_rendertime && *update_data.debug.show_rendertime) Render_ShowRenderTime (true);
 			if (update_data.debug.show_framerate && *update_data.debug.show_framerate) Render_ShowFPS (true);
@@ -262,15 +260,14 @@ void *Update(void*) {
 		if (object_created_or_destroyed_this_frame)
 			Update_ObjectSort (0);
 
-		int64_t frame_time = zen_End (&frame_timer);
+		const auto frame_end = os_uTime ();
+		const auto frame_time = frame_end - frame_begin;
 
 		// Sleep until next frame
-		time_now = os_uTime ();
-		int64_t sleep_time;
-		sleep_time = time_last + us_per_frame - time_now;
+		const int64_t sleep_time = time_last + us_per_frame - frame_end;
 
 		time_last += us_per_frame;
-		if(time_now - time_last > us_per_frame) time_last = time_now;
+		if(frame_end - time_last > us_per_frame) time_last = frame_end;
 		// LOG("Update sleep: %lldus", sleep_time);
 		os_uSleepPrecise (sleep_time);
 
@@ -279,7 +276,7 @@ void *Update(void*) {
 			frames_before_reset = 120;
 			max_recorded_frame_time = 0;
 		}
-		if (frame_time > max_recorded_frame_time) {
+		else if (frame_time > max_recorded_frame_time) {
 			frames_before_reset = 120;
 			max_recorded_frame_time = frame_time;
 		}
