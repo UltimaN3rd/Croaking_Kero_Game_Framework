@@ -1401,16 +1401,18 @@ void *Render (void*) {
 
 		auto count = render_state->element_count;
 
+		// Sort render objects. Front-most elements go toward [0], and elements are drawn starting from [count-1] down to [0]
+		// High depth means draw on top, low depth means draw further behind
 		for (int r = 1; r < count; ++r) {
 			auto elementr = &render_state->elements[r];
-			for (int l = r-1; l >= 0 && render_state->elements[l].depth > elementr->depth; --l) {
+			for (int l = r-1; l >= 0 && render_state->elements[l].depth < elementr->depth; --l) {
 				SWAP (render_state->elements[l], *elementr);
 				--elementr;
 			}
 		}
 
 		camera = render_state->camera;
-		auto element = render_state->elements;
+		auto element = &render_state->elements[count-1];
 		repeat (count) {
 			switch (element->type) {
 				case render_element_sprite: {
@@ -1447,7 +1449,7 @@ void *Render (void*) {
 					DrawTexturedPoly (*element);
 				} break;
 			}
-			++element;
+			--element;
 		}
 
 		// ************************************

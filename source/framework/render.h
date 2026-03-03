@@ -131,8 +131,6 @@ typedef struct render_state_s {
 	struct {
 		int x, y;
 	} camera;
-	// #define RENDER_TEXT_MAX_BYTES 4096
-	// char text[RENDER_TEXT_MAX_BYTES]; // A series of strings formatted like so: {uint16_t length, uint16_t x, uint16_t y, "null-terminated string" [if not aligned to a word, skip a byte]} repeat until length = 0
 	struct {
 		enum { background_type_none, background_type_blank, background_type_stripes, background_type_checkers, background_type_sprite } type;
 		union {
@@ -168,7 +166,11 @@ typedef struct render_data_s {
 	render_state_t render_states[3];
 	sprite_t *frame[2];
 	sprite_t *level;
-	volatile bool pause_thread, resume_thread; // The render thread will pause at the start of an iteration. To use these:
+	volatile bool pause_thread, resume_thread; // The render thread will pause at the start of an iteration if pause_thread is set. To use:
+											   // resume_thread = false;
+											   // pause_thread = true;
+											   // Do stuff
+											   // resume_thread = true;
 } render_data_t;
 
 void *Render(void*);
