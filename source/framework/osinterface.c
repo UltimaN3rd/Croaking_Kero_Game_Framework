@@ -1372,7 +1372,7 @@ enum {
   kVK_JIS_Kana                  = 0x68
 };
 
-enum { OSXUserEvent_WindowClose, OSXUserEvent_WindowResize, OSXUserEvent_LostFocus, OSXUserEvent_EnterFullscreen, OSXUserEvent_ExitFullscreen, };
+enum { OSXUserEvent_WindowClose, OSXUserEvent_WindowResize, OSXUserEvent_LostFocus, OSXUserEvent_EnterFullscreen, OSXUserEvent_ExitFullscreen, OSXUserEvent_MouseMoved, };
 
 @interface AppDelegate : NSObject<NSApplicationDelegate>
 -(NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender;
@@ -1390,12 +1390,17 @@ static bool live_resizing = false;
 
 #define TRUESIZE [[os_private.osx.window contentView] convertRectToBacking:[[os_private.osx.window contentView] bounds]].size
 
-@interface WindowDelegate : NSObject<NSWindowDelegate>
+@interface WindowDelegate : NSObject<NSWindowDelegate> {
+	BOOL cursor_hidden;
+	BOOL mouse_in_bounds;
+}
 -(void)windowWillClose:(NSNotification*)notification;
 -(void)windowDidResignKey:(NSNotification*)notification;
 -(void)windowDidResize:(NSNotification *)notification;
 -(void)windowWillStartLiveResize:(NSNotification *)notification;
 -(void)windowDidEndLiveResize:(NSNotification *)notification;
+-(void)My_ShowCursor;
+-(void)My_HideCursor;
 @end
 @implementation WindowDelegate
 -(void)windowWillClose:(NSNotification *)notification {
@@ -1407,6 +1412,11 @@ static bool live_resizing = false;
 	NSEvent *event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined location:(NSPoint){0,0} modifierFlags:0 timestamp:[[NSProcessInfo processInfo] systemUptime] windowNumber:[os_private.osx.window windowNumber] context:nil subtype:OSXUserEvent_LostFocus data1:0 data2:0];
 	assert (event);
 	[NSApp postEvent:event atStart:false];
+
+    if (cursor_hidden) {
+        [NSCursor unhide];
+        cursor_hidden = NO;
+    }
 }
 -(void)windowDidResize:(NSNotification *)notification {
 	if (live_resizing) return;
@@ -1424,6 +1434,38 @@ static bool live_resizing = false;
 	NSEvent *event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined location:(NSPoint){0,0} modifierFlags:0 timestamp:[[NSProcessInfo processInfo] systemUptime] windowNumber:[os_private.osx.window windowNumber] context:nil subtype:OSXUserEvent_WindowResize data1:size.width data2:size.height];
 	assert (event);
 	[NSApp postEvent:event atStart:false];
+}
+- (void)mouseEntered:(NSEvent *)event {
+	mouse_in_bounds = YES;
+    if (os_public.mouse.hidden && !cursor_hidden) {
+        [NSCursor hide];
+        cursor_hidden = YES;
+    }
+}
+- (void)mouseExited:(NSEvent *)event {
+	mouse_in_bounds = NO;
+    if (cursor_hidden) {
+        [NSCursor unhide];
+        cursor_hidden = NO;
+    }
+}
+-(void)My_ShowCursor {
+    if (cursor_hidden) {
+        [NSCursor unhide];
+        cursor_hidden = NO;
+    }
+}
+-(void)My_HideCursor {
+    if (!cursor_hidden && mouse_in_bounds) {
+        [NSCursor hide];
+        cursor_hidden = YES;
+    }
+}
+- (void)mouseMoved:(NSEvent *)event {
+    NSPoint p = [[os_private.osx.window contentView] convertPointToBacking:[event locationInWindow]];
+	NSEvent *e = [NSEvent otherEventWithType:NSEventTypeApplicationDefined location:(NSPoint){0,0} modifierFlags:0 timestamp:[[NSProcessInfo processInfo] systemUptime] windowNumber:[os_private.osx.window windowNumber] context:nil subtype:OSXUserEvent_MouseMoved data1:(int)p.x data2:(int)p.y];
+	assert (e);
+	[NSApp postEvent:e atStart:false];
 }
 @end
 
@@ -1462,6 +1504,11 @@ bool os_Init (const char *window_title) {
 	os_private.osx.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,600) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
 	[os_private.osx.window setReleasedWhenClosed:NO];
 	[os_private.osx.window setDelegate:[WindowDelegate new]];
+
+    NSView *content_view = [os_private.osx.window contentView];
+    NSTrackingArea *tracking_area = [[NSTrackingArea alloc] initWithRect:content_view.bounds options:NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:[os_private.osx.window delegate] userInfo:nil];
+    [content_view addTrackingArea:tracking_area];
+
 	[os_private.osx.window setTitle:@(os_public.window.title)];
 	[os_private.osx.window setFrameAutosaveName:[os_private.osx.window title]]; // Autosave and load window position and size
 	NSOpenGLPixelFormatAttribute glAttributes[] = {
@@ -1534,25 +1581,6 @@ os_event_t os_NextEvent () {
 			break;
 		}
 		switch ([e type]) {
-			case NSEventTypeLeftMouseDragged:
-			case NSEventTypeRightMouseDragged:
-			case NSEventTypeOtherMouseDragged:
-			case NSEventTypeMouseMoved: {
-				NSPoint ep = [[os_private.osx.window contentView] convertPointToBacking:[e locationInWindow]];
-				os_vec2i p = {ep.x, ep.y};
-				// if (p.x < 0) p.x = 0;
-				// if (p.x > os_public.window.w-1) p.x = os_public.window.w-1;
-				// if (p.y < 0) p.y = 0;
-				// if (p.y > os_public.window.h-1) p.y = os_public.window.h-1;
-				if (p.x < 0 || p.x > os_public.window.w-1 || p.y < 0 || p.y > os_public.window.h-1) break;
-				event = (os_event_t){
-					.type = os_EVENT_MOUSE_MOVE,
-					.previous_position = os_public.mouse.p,
-					.new_position = p,
-				};
-				os_public.mouse.p = p;
-			} break;
-
 			case NSEventTypeLeftMouseUp:
 			case NSEventTypeRightMouseUp:
 			case NSEventTypeOtherMouseUp:
@@ -1797,18 +1825,18 @@ os_event_t os_NextEvent () {
 					case OSXUserEvent_EnterFullscreen: os_Fullscreen (true); break;
 					case OSXUserEvent_ExitFullscreen: os_Fullscreen (false); break;
 
+					case OSXUserEvent_MouseMoved: {
+						const os_vec2i p = {[e data1], [e data2]};
+						event = (os_event_t){
+							.type = os_EVENT_MOUSE_MOVE,
+							.previous_position = os_public.mouse.p,
+							.new_position = p,
+						};
+						os_public.mouse.p = p;
+					} break;
+
 					default: break;
 				}
-			} break;
-
-			case NSEventTypeMouseEntered: {
-				if (os_public.mouse.hidden)
-					[NSCursor hide];
-			} break;
-
-			case NSEventTypeMouseExited: {
-				if (os_public.mouse.hidden)
-					[NSCursor unhide];
 			} break;
 
 			default: break;
@@ -1884,13 +1912,12 @@ void os_uSleepPrecise (int64_t microseconds) {
 
 void os_ShowCursor () {
 	os_public.mouse.hidden = false;
-	[NSCursor unhide];
+	[[os_private.osx.window delegate] My_ShowCursor];
 }
 
-// void os_HideCursor () { [NSCursor hide]; }
 void os_HideCursor () {
 	os_public.mouse.hidden = true;
-	[NSCursor hide];
+	[[os_private.osx.window delegate] My_HideCursor];
 }
 
 // Returns the refresh rate of the display on which the program window is.
