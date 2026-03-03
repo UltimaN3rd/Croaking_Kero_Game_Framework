@@ -101,7 +101,7 @@ bool StringsAreTheSameCaseInsensitive (const char *a, const char *b);
 bool StringEndsWithCaseInsensitive (const char *a, const char *b);
 
 static inline char *StringSkipWhiteSpace (char *c) {
-	register char a = *c;
+	char a = *c;
 	while (a > 0 && (a < 33 || a > 126)) {
 		a = *(++c);
 	}
@@ -109,7 +109,7 @@ static inline char *StringSkipWhiteSpace (char *c) {
 }
 
 static inline char *StringSkipNonWhiteSpace (char *c) {
-	register char a = *c;
+	char a = *c;
 	while (a > 0 && (a > 32 && a < 127)) {
 		a = *(++c);
 	}
@@ -229,13 +229,13 @@ static inline char *ReadEntireFileAllocateBuffer (const char *filename) {
         fseek (file, 0, SEEK_END);
         long end_pos = ftell (file);
         fseek (file, start_pos, SEEK_SET);
-        long size = end_pos - start_pos;
+        size_t size = end_pos - start_pos;
         ret = (char*)malloc (size);
-        assert (ret); if (ret == NULL) { LOG ("[%s] Failed to allocate %ld bytes", filename, size); goto goto_return; }
+        assert (ret); if (ret == NULL) { LOG ("[%s] Failed to allocate %zu bytes", filename, size); goto goto_return; }
         {
             auto result = fread (ret, 1, size, file);
             assert (result == size);
-            if (result != size) { LOG ("Reading file [%s] only read %zu/%ld bytes", filename, result, size); return NULL; }
+            if (result != size) { LOG ("Reading file [%s] only read %zu/%zu bytes", filename, result, size); return NULL; }
             success = true;
         }
     }

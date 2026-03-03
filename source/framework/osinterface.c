@@ -274,8 +274,14 @@ static struct {
 
 static inline void PushEvent (os_event_t event) { events.event[events.pushed++ % OS_INTERNAL_EVENTS_SIZE] = event; }
 
+// Handle resize differently because otherwise we end up with a zillion resize events being pushed. Wait until all other events are processed, then, if there were any number of resizes, handle just the last one.
+static struct {
+	bool happened;
+	int16_t w, h;
+} internal_resize_event = {};
 os_event_t os_NextEvent () {
-    MSG message = {};
+	MSG message = {};
+	internal_resize_event.happened = false;
 	do {
 		assert (events.pushed - events.popped < OS_INTERNAL_EVENTS_SIZE);
 		if (events.pushed > events.popped)
@@ -284,8 +290,10 @@ os_event_t os_NextEvent () {
 			if (message.message == WM_QUIT) // WM_QUIT is a weird special case. It can't be passed into the MessageProcessing function by DispatchMessage. If using GetMessage it will only return 0 when it finally gets WM_QUIT, whereas with PeekMessage we must check it here.
 				return (os_event_t){ .type = os_EVENT_QUIT, .exit_code = message.wParam };
 			else DispatchMessage (&message); // Fills out event structure by passing on message to Internal_WindowProcessMessage
-			}
+		}
 	} while (events.pushed > events.popped);
+	if (internal_resize_event.happened)
+		return (os_event_t) { .type = os_EVENT_WINDOW_RESIZE, .width = os_public.window.w = internal_resize_event.w, .height = internal_resize_event.h };
     return (os_event_t){ .type = os_EVENT_NULL };
 }
 
@@ -317,7 +325,9 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 		} break;
         
 		case WM_SIZE: {
-			PushEvent ((os_event_t){.type = os_EVENT_WINDOW_RESIZE, .width = os_public.window.w = LOWORD(lParam), .height = os_public.window.h = HIWORD(lParam)});
+			internal_resize_event.happened = true;
+			os_public.window.w = internal_resize_event.w = LOWORD(lParam);
+			os_public.window.h = internal_resize_event.h = HIWORD(lParam);
 
 			glViewport (0, 0, os_public.window.w, os_public.window.h);
 			glMatrixMode (GL_PROJECTION);

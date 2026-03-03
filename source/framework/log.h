@@ -29,4 +29,4 @@ void log_Location (const char *file, const int line);
 #define LOG_STRINGIFY___2(x) #x
 #define LOG_STRINGIFY___(x) LOG_STRINGIFY___2(x)
 
-#define ERROR_STRING(__string_literal__) "ERROR in file ["__FILE__"] line ["LOG_STRINGIFY___(__LINE__)"]: "__string_literal__
+#define ERROR_STRING(__string_literal__) "ERROR in file [" __FILE__ "] line [" LOG_STRINGIFY___(__LINE__) "]: " __string_literal__
