@@ -1233,11 +1233,7 @@ void os_Cleanup () {}
 
 
 #define GL_SILENCE_DEPRECATION
-#include <CoreGraphics/CoreGraphics.h>
-#import <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
-#import <objc/objc.h>
-#import <Foundation/Foundation.h>
 #include "OpenGL2_1.h"
 #import <stdint.h>
 #import <mach/mach_time.h>
@@ -1376,9 +1372,7 @@ enum {
   kVK_JIS_Kana                  = 0x68
 };
 
-enum {
-	OSXUserEvent_WindowClose, OSXUserEvent_WindowResize, OSXUserEvent_LostFocus, OSXUserEvent_EnterFullscreen, OSXUserEvent_ExitFullscreen,
-};
+enum { OSXUserEvent_WindowClose, OSXUserEvent_WindowResize, OSXUserEvent_LostFocus, OSXUserEvent_EnterFullscreen, OSXUserEvent_ExitFullscreen, };
 
 @interface AppDelegate : NSObject<NSApplicationDelegate>
 -(NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender;
@@ -1395,7 +1389,6 @@ enum {
 static bool live_resizing = false;
 
 #define TRUESIZE [[os_private.osx.window contentView] convertRectToBacking:[[os_private.osx.window contentView] bounds]].size
-// #define TRUESIZE [os_private.osx.window convertRectToScreen:[[os_private.osx.window contentView] bounds]].size
 
 @interface WindowDelegate : NSObject<NSWindowDelegate>
 -(void)windowWillClose:(NSNotification*)notification;
@@ -1459,7 +1452,6 @@ bool os_Init (const char *window_title) {
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 	AppDelegate *appDelegate = [AppDelegate new];
 	[NSApp setDelegate:appDelegate];
-	[NSApp finishLaunching];
 	id menuBar = [NSMenu new];
 	id menuItemApp = [NSMenuItem new];
 	[menuBar addItem:menuItemApp];
@@ -1470,7 +1462,7 @@ bool os_Init (const char *window_title) {
 	os_private.osx.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,600) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
 	[os_private.osx.window setReleasedWhenClosed:NO];
 	[os_private.osx.window setDelegate:[WindowDelegate new]];
-	[os_private.osx.window setTitle:[NSString stringWithCString:os_public.window.title encoding:NSASCIIStringEncoding]];
+	[os_private.osx.window setTitle:@(os_public.window.title)];
 	[os_private.osx.window setFrameAutosaveName:[os_private.osx.window title]]; // Autosave and load window position and size
 	NSOpenGLPixelFormatAttribute glAttributes[] = {
 		NSOpenGLPFAColorSize, 24,
@@ -1656,7 +1648,7 @@ os_event_t os_NextEvent () {
 					case kVK_UpArrow: key = os_KEY_UP; break;
 					case kVK_Option: key = os_KEY_LALT; break;
 					case kVK_RightOption: key = os_KEY_RALT; break;
-					case kVK_Control: case kVK_RightControl: key = os_KEY_CTRL; abort ();  break;
+					case kVK_Control: case kVK_RightControl: key = os_KEY_CTRL; break;
 					case kVK_Home: key = os_KEY_HOME; break;
 					case kVK_End: key = os_KEY_END; break;
 					case kVK_PageUp: key = os_KEY_PAGEUP; break;
@@ -1914,8 +1906,8 @@ void os_MessageBox_ (os_MessageBox_arguments arguments) {
 	if (arguments.message == NULL) arguments.message = "";
 	if (arguments.title == NULL) arguments.title = "";
 	NSAlert *alert = [NSAlert new];
-	[alert setMessageText:[NSString stringWithCString:arguments.message encoding:NSASCIIStringEncoding]];
-	[alert setInformativeText:[NSString stringWithCString:arguments.title encoding:NSASCIIStringEncoding]];
+	[alert setMessageText:@(arguments.message)];
+	[alert setInformativeText:@(arguments.title)];
 	[alert addButtonWithTitle:@"Okay"];
 	[alert runModal];
 	// [alert beginSheetModalForWindow:os_private.osx.window completionHandler:nil];
@@ -1932,7 +1924,7 @@ bool os_GLMakeCurrent () {
 
 os_char1024_t os_OpenFileDialog (const char *title) {
 	NSOpenPanel *win = [NSOpenPanel openPanel];
-	win.title = [NSString stringWithCString:title encoding:NSASCIIStringEncoding];
+	win.title = @(title);
 	[win setCanChooseFiles:YES];
 	[win setCanChooseDirectories:YES];
 	[win setAllowsOtherFileTypes:YES];
@@ -1950,10 +1942,10 @@ os_char1024_t os_OpenFileDialog (const char *title) {
 
 os_char1024_t os_SaveFileDialog (const char *title, const char *save_button_text, const char *filename_label, const char *default_filename) {
 	NSSavePanel *win = [NSSavePanel savePanel];
-	win.title = [NSString stringWithCString:title encoding:NSASCIIStringEncoding];
-	win.prompt = [NSString stringWithCString:save_button_text encoding:NSASCIIStringEncoding];
-	win.nameFieldLabel = [NSString stringWithCString:filename_label encoding:NSASCIIStringEncoding];
-	win.nameFieldStringValue = [NSString stringWithCString:default_filename encoding:NSASCIIStringEncoding];
+	win.title = @(title);
+	win.prompt = @(save_button_text);
+	win.nameFieldLabel = @(filename_label);
+	win.nameFieldStringValue = @(default_filename);
 	win.showsTagField = NO;
 	if ([win runModal] == NSModalResponseOK) {
 		os_char1024_t str;
