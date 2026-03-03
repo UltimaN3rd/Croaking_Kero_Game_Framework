@@ -75,8 +75,9 @@ void submenu_Init (submenu_t *self) {
 			}
 		} break;
 		case menu_type_name_creator: {
-			memset (self->name_creator.text_buffer, 0, sizeof (self->name_creator.buffer_size));
-			self->name_creator.cursor = 0;
+			if (!self->name_creator.dont_clear_buffer)
+				memset (self->name_creator.text_buffer, 0, *self->name_creator.buffer_size);
+			self->name_creator.cursor = strlen (self->name_creator.text_buffer);
 		} break;
 		case menu_type_internal:
 			unreachable();
@@ -213,8 +214,12 @@ void menu_CalculateDimensions (menu_t *self) {
 
 		case menu_type_name_creator: {
 			auto dimensions = menu_ItemDimensions(submenu->name_creator.text_buffer);
-			self->dimensions.x = (RESOLUTION_WIDTH - dimensions.x) / 2;
-			self->dimensions.y = (RESOLUTION_HEIGHT - dimensions.y) / 2;
+			// Add extra pixel for baseline and cursor on right
+			top_item_offset = resources_framework_font.line_height - dimensions.y;
+			self->dimensions.x = (RESOLUTION_WIDTH - dimensions.w) / 2;
+			self->dimensions.y = (RESOLUTION_HEIGHT - dimensions.h) / 2;
+			++dimensions.w;
+			++dimensions.h;
 			self->dimensions.w = dimensions.w;
 			self->dimensions.h = dimensions.h;
 		} break;
@@ -669,9 +674,8 @@ void menu_Render (menu_t *self, int depth) {
 
 		case menu_type_name_creator: {
 			const auto fc = &submenu->name_creator;
-			y = RESOLUTION_HEIGHT / 2;
-			int texty = y + resources_framework_font.baseline;
-			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = y - 1, .w = self->dimensions.w, .h = 1, .color_edge = self->selection_color}}, .depth = depth);
+			const int baseliney = y - resources_framework_font.baseline - 1;
+			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = baseliney - 1, .w = self->dimensions.w, .h = 1, .color_edge = self->selection_color}}, .depth = depth);
 			auto cursorx = menu_ItemDimensions_Length(fc->text_buffer, fc->cursor).x + x;
 			vec2i_t cursorsize;
 			if (fc->cursor == strlen (fc->text_buffer)) {
@@ -681,8 +685,8 @@ void menu_Render (menu_t *self, int depth) {
 			else {
 				cursorsize = menu_ItemDimensions_Length(&fc->text_buffer[fc->cursor], 1);
 			}
-			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = y, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62}}, .depth = depth);
-			Render_Text (.x = x, .y = y + resources_framework_font.line_height, .string = fc->text_buffer, .depth = depth, .ignore_camera = true);
+			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = cursorx, .y = baseliney, .w = cursorsize.x, .h = cursorsize.y, .color_edge = 62, .color_fill = 62}}, .depth = depth);
+			Render_Text (.x = x, .y = y, .string = fc->text_buffer, .depth = depth, .ignore_camera = true);
 		} break;
 		case menu_type_internal: {
 			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y, .string = "Really delete this file?", .depth = depth, .ignore_camera = true);

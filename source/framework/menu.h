@@ -63,6 +63,7 @@ struct submenu_t {
             const size_t *const buffer_size; // Amount of characters that can be held +1 for NULL terminator
             void (*const confirm_func) ();
             uint8_t cursor;
+            bool dont_clear_buffer;
         } name_creator;
     };
 };
