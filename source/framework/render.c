@@ -147,14 +147,6 @@ void Render_Text_ (Render_Text_arguments arguments) {
 		arguments.ignore_camera = true;
 	}
 
-	if (arguments.translucent_background_darkness) {
-		const int16_t l = arguments.x-1;
-		const int16_t r = l + dimensions.w+1;
-		const int16_t t = arguments.y-2;
-		const int16_t b = t - dimensions.h+1;
-		Render_DarkenRectangle(.l = l, .b = b, .r = r, .t = t, .levels = arguments.translucent_background_darkness, .depth = arguments.depth);
-	}
-
 	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
 
 	size_t alloc_payload = arguments.payload.count * sizeof(*arguments.payload._);
@@ -178,6 +170,14 @@ void Render_Text_ (Render_Text_arguments arguments) {
 	for (int i = 0; i < arguments.payload.count; ++i) {
 		// Copy the payload in reverse order
 		memcpy (str - sizeof(*arguments.payload._) * (i+1), &arguments.payload._[i], sizeof(*arguments.payload._));
+	}
+
+	if (arguments.translucent_background_darkness) {
+		const int16_t l = arguments.x-1;
+		const int16_t r = l + dimensions.w+1;
+		const int16_t t = arguments.y-2;
+		const int16_t b = t - dimensions.h+1;
+		Render_DarkenRectangle(.l = l, .b = b, .r = r, .t = t, .levels = arguments.translucent_background_darkness, .depth = arguments.depth);
 	}
 }
 
