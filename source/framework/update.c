@@ -68,7 +68,7 @@ void *Update(void*) {
 
 	Update_ChangeState(0);
 
-	typeof (update_data.events) events;
+	typeof (update_data.events) events = {};
 	#define KEYBOARD_REPEAT_INITIAL_DELAY 30
 	#define KEYBOARD_REPEAT_DELAY 10
 	uint8_t keyboard_repeat_time[UPDATE_KEYBOARD_KEY_COUNT] = {};
