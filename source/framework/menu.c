@@ -580,14 +580,6 @@ void menu_Render (menu_t *self, int depth) {
         default: break;
     }
 
-    if (self->transparent_background_darkess) {
-        const int16_t l = self->dimensions.x - 2;
-        const int16_t r = l + self->dimensions.w-1 + 3;
-        const int16_t b = self->dimensions.y;
-        const int16_t t = b + self->dimensions.h-1;
-        Render_DarkenRectangle (.l = l, .r = r, .b = b, .t = t, .depth = depth, .levels = self->transparent_background_darkess);
-    }
-
 	int explorer_start = 0;
 	int explorer_end = 0;
 
@@ -696,6 +688,14 @@ void menu_Render (menu_t *self, int depth) {
 	}
 
 	if (submenu->parent != NULL) Render_Sprite (.sprite = &resources_framework_menu_back, .y = RESOLUTION_HEIGHT - resources_framework_menu_back.h, .depth = depth, .ignore_camera = true);
+
+    if (self->transparent_background_darkess) {
+        const int16_t l = self->dimensions.x - 2;
+        const int16_t r = l + self->dimensions.w-1 + 3;
+        const int16_t b = self->dimensions.y;
+        const int16_t t = b + self->dimensions.h-1;
+        Render_DarkenRectangle (.l = l, .r = r, .b = b, .t = t, .depth = depth, .levels = self->transparent_background_darkess);
+    }
 
     Render_CursorAtRawMousePos (&resources_framework_cursor);
 }
