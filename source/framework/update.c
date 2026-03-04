@@ -134,7 +134,7 @@ void *Update(void*) {
 				}
 			} while (had_multi_event);
 		}
-		assert (events_cache.count - events.count < UPDATE_EVENTS_MAX);
+		assert (events_cache.count - events.count <= UPDATE_EVENTS_MAX);
 		events_this_frame = events_cache.count - events.count;
 
 		// Copy events from cache to events array, starting at position 0 for linear traversal
