@@ -10,10 +10,10 @@ static bool FullscreenTextBox_Update (const char *const self) {
     const int16_t r = l + dimensions.w - 1;
     const int16_t b = (RESOLUTION_HEIGHT - dimensions.h) / 2;
     const int16_t t = b + dimensions.h - 1;
-    Render_DarkenRectangle(.depth = 127, .l = 0, .r = RESOLUTION_WIDTH-1, .b = 0, .t = RESOLUTION_HEIGHT-1, .levels = 1);
-    Render_DarkenRectangle(.depth = 127, .l = l, .r = r, .b = b, .t = t, .levels = 1);
-    Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = l-1, .y = b-1, .w = dimensions.w+2, .h = dimensions.h+2, .color_edge = 1}}, .depth = 127);
     Render_Text (.string = self, .center_horizontally_on_screen = true, .center_vertically_on_screen = true, .depth = 127);
+    Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = l-1, .y = b-1, .w = dimensions.w+2, .h = dimensions.h+2, .color_edge = 1}}, .depth = 127);
+    Render_DarkenRectangle(.depth = 127, .l = l, .r = r, .b = b, .t = t, .levels = 1);
+    Render_DarkenRectangle(.depth = 127, .l = 0, .r = RESOLUTION_WIDTH-1, .b = 0, .t = RESOLUTION_HEIGHT-1, .levels = 1);
     if (input.mouse.buttons[MOUSE_LEFT] & KEY_PRESSED || input.keyboard[os_KEY_ENTER] & KEY_PRESSED || input.keyboard[os_KEY_ESCAPE] & KEY_PRESSED || input.keyboard[os_KEY_SPACE] & KEY_PRESSED) {
         retval = false; // Delete self
     }
