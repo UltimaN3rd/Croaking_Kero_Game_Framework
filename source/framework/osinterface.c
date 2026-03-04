@@ -290,13 +290,19 @@ void os_WindowSize (int width, int height) {
 }
 
 void os_ShowCursor () {
+	os_public.mouse.hidden = false;
 	SetCursor (LoadCursor (NULL, IDC_ARROW));
-	ShowCursor (true);
 }
 
 void os_HideCursor () {
-	SetCursor (NULL);
-	ShowCursor (false);
+	os_public.mouse.hidden = true;
+	POINT p;
+	GetCursorPos(&p);
+	ScreenToClient(os_private.win32.window_handle, &p);
+
+	RECT rect;
+	GetClientRect(os_private.win32.window_handle, &rect);
+	if (PtInRect(&rect, p)) SetCursor(NULL);
 }
 
 #define OS_INTERNAL_EVENTS_SIZE 256
@@ -347,13 +353,6 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 		} break;
         
 		case WM_PAINT: {
-			// glClearColor (os_private.background_color.r / 255.f, os_private.background_color.g / 255.f, os_private.background_color.b / 255.f, 1);
-			// glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-			// glDrawPixels (os_private.frame_buffer.width, os_private.frame_buffer.height, GL_BGRA, GL_UNSIGNED_BYTE, os_private.frame_buffer.pixels);
-
-			// SwapBuffers (os_private.win32.window_context);
-
 			ValidateRect (os_private.win32.window_handle, NULL);
 		} break;
         
@@ -552,6 +551,13 @@ LRESULT CALLBACK os_Internal_WindowProcessMessage(HWND window_handle, UINT messa
 		case WM_MOUSEWHEEL: {
 			PushEvent ((os_event_t){.type = os_EVENT_MOUSE_SCROLL, .scrolled_up = !(wParam & 0b10000000000000000000000000000000)});
 		} break;
+
+		case WM_SETCURSOR: {
+            if (LOWORD(lParam) == HTCLIENT && os_public.mouse.hidden)
+                SetCursor(NULL);
+            else
+                return DefWindowProc(window_handle, message, wParam, lParam);
+        } break;
 
 		default: return DefWindowProc(window_handle, message, wParam, lParam);
     }
