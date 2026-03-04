@@ -598,28 +598,6 @@ void menu_Render (menu_t *self, int depth) {
 	}
 
 	switch (submenu->type) {
-		case menu_type_internal: {
-			goto goto_draw_box_list;
-		} break;
-		case menu_type_name_creator: break;
-		case menu_type_explorer:
-		case menu_type_list: {
-		goto_draw_box_list:
-			render_shape_t rectangle = {
-				.type = render_shape_rectangle,
-				.rectangle = {
-					.w = self->dimensions.w-1 + XMARGIN * 2,
-					.h = resources_framework_font.line_height,
-					.x = self->dimensions.x - XMARGIN,
-					.color_edge = self->selection_color,
-				}
-			};
-			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * resources_framework_font.line_height - rectangle.rectangle.h;
-			Render_Shape (.shape = rectangle, .depth = depth, .ignore_camera = true);
-		} break;
-	}
-
-	switch (submenu->type) {
 		case menu_type_list: {
 		goto_render_list:
 			auto item = submenu->list.items;
@@ -684,6 +662,28 @@ void menu_Render (menu_t *self, int depth) {
 			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y, .string = "Really delete this file?", .depth = depth, .ignore_camera = true);
 			Render_Text (.x = x + delete_confirmation_text_offset.x, .y = y + delete_confirmation_text_offset.y - resources_framework_font.line_height, .string = delete_confirmation_filename, .depth = depth, .ignore_camera = true);
 			goto goto_render_list;
+		} break;
+	}
+
+	switch (submenu->type) {
+		case menu_type_internal: {
+			goto goto_draw_box_list;
+		} break;
+		case menu_type_name_creator: break;
+		case menu_type_explorer:
+		case menu_type_list: {
+		goto_draw_box_list:
+			render_shape_t rectangle = {
+				.type = render_shape_rectangle,
+				.rectangle = {
+					.w = self->dimensions.w-1 + XMARGIN * 2,
+					.h = resources_framework_font.line_height,
+					.x = self->dimensions.x - XMARGIN,
+					.color_edge = self->selection_color,
+				}
+			};
+			rectangle.rectangle.y = self->dimensions.y + self->dimensions.h - (submenu->selected - explorer_start) * resources_framework_font.line_height - rectangle.rectangle.h;
+			Render_Shape (.shape = rectangle, .depth = depth, .ignore_camera = true);
 		} break;
 	}
 
