@@ -16,7 +16,7 @@
 
 #include "cereal.c"
 #include "explorer.c"
-#include "folders.c"
+#include "folders_common.c"
 #include "log.c"
 #include "menu.c"
 #include "utilities.c"
