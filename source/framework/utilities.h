@@ -75,13 +75,7 @@ static inline float vec2f_AngleOfAsTurns (vec2f_t v) {
     return XYToAngleTurns (v.x, v.y);
 }
 
-typedef union {
-    struct { int32_t x, y; };
-    struct { int32_t w, h; };
-    struct { int32_t width, height; };
-    int32_t array[2];
-} vec2i_t;
-
+typedef struct { int32_t x, y; } vec2i_t;
 typedef struct { int16_t x, y; } vec2i16_t;
 typedef struct { int8_t x, y; } vec2i8_t;
 typedef struct { uint8_t x, y; } vec2u8_t;

@@ -132,7 +132,7 @@ vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length)
         c = *++item;
 	}
 
-	return (vec2i_t){.w = width, .h = top - bottom + 1};
+	return (vec2i_t){width, top - bottom + 1};
 }
 
 vec2i_t menu_ItemDimensions (const char *item_start) {
@@ -159,7 +159,7 @@ void menu_CalculateDimensions (menu_t *self) {
 				auto dimensions = menu_ItemDimensions (item->name);
 				if (item == submenu->list.items)// first item
 					top_item_offset = resources_framework_font.line_height - dimensions.y;
-				if (dimensions.width > self->dimensions.w) self->dimensions.w = dimensions.width;
+				if (dimensions.x > self->dimensions.w) self->dimensions.w = dimensions.x;
 				y -= resources_framework_font.line_height;
 				switch (item->type) {
 					case menu_list_item_type_function:
@@ -194,7 +194,7 @@ void menu_CalculateDimensions (menu_t *self) {
 				auto dimensions = menu_ItemDimensions (menu_explorer.filenames[i]);
 				if (i == explorer_start)// first item
 					top_item_offset = resources_framework_font.line_height - dimensions.y;
-				if (dimensions.width > self->dimensions.w) self->dimensions.w = dimensions.width;
+				if (dimensions.x > self->dimensions.w) self->dimensions.w = dimensions.x;
 				y -= resources_framework_font.line_height;
 			}
 			self->dimensions.x = 20;
@@ -216,12 +216,12 @@ void menu_CalculateDimensions (menu_t *self) {
 			auto dimensions = menu_ItemDimensions(submenu->name_creator.text_buffer);
 			// Add extra pixel for baseline and cursor on right
 			top_item_offset = resources_framework_font.line_height - dimensions.y;
-			self->dimensions.x = (RESOLUTION_WIDTH - dimensions.w) / 2;
-			self->dimensions.y = (RESOLUTION_HEIGHT - dimensions.h) / 2;
-			++dimensions.w;
-			++dimensions.h;
-			self->dimensions.w = dimensions.w;
-			self->dimensions.h = dimensions.h;
+			self->dimensions.x = (RESOLUTION_WIDTH - dimensions.x) / 2;
+			self->dimensions.y = (RESOLUTION_HEIGHT - dimensions.y) / 2;
+			++dimensions.x;
+			++dimensions.y;
+			self->dimensions.w = dimensions.x;
+			self->dimensions.h = dimensions.y;
 		} break;
 
 		case menu_type_internal: {
@@ -232,7 +232,7 @@ void menu_CalculateDimensions (menu_t *self) {
 	if (submenu->type == menu_type_internal) {
 			assert (submenu == &submenu_delete_confirmation);
 			auto dim = menu_ItemDimensions("Really delete this file?");
-			delete_confirmation_text_offset.x = (self->dimensions.w - dim.w) / 2;
+			delete_confirmation_text_offset.x = (self->dimensions.w - dim.x) / 2;
 			delete_confirmation_text_offset.y = resources_framework_font.line_height * 3;
 			self->dimensions.y -= delete_confirmation_text_offset.y;
 	}
