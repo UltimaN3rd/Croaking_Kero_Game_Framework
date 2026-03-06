@@ -14,7 +14,7 @@ add_definitions("-DCMAKE_SOURCE_BASE_DIRECTORY_LENGTH=${SOURCE_PATH_SIZE}")
 
 include_directories(../framework)
 
-add_library(folders STATIC ../framework/folders.c ../framework/log.c)
+add_library(folders STATIC ../framework/folders_common.c ../framework/log.c)
 target_compile_definitions(folders PRIVATE FOLDERS_PRINT_ERRORS)
 
 add_executable(resource_builder source/main.c)
