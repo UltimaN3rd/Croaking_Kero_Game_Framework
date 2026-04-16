@@ -22,11 +22,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "utilities.h"
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-typedef uint8_t frame_buffer_pixel_t;
+typedef u8 frame_buffer_pixel_t;
 #else
-typedef uint32_t frame_buffer_pixel_t;
+typedef u32 frame_buffer_pixel_t;
 #endif
 
 typedef enum {
@@ -36,7 +37,7 @@ typedef enum {
 typedef enum { os_MOUSE_LEFT = 0b1, os_MOUSE_MIDDLE = 0b10, os_MOUSE_RIGHT = 0b100, os_MOUSE_X1 = 0b1000, os_MOUSE_X2 = 0b10000 } os_mouse_button_e;
 
 // 7-bit (0-127)
-typedef enum : uint8_t {
+typedef enum : u8 {
 	os_KEY_INVALID, os_KEY_ENTER, os_KEY_ESCAPE, os_KEY_LEFT, os_KEY_RIGHT, os_KEY_UP, os_KEY_DOWN, os_KEY_LALT, os_KEY_RALT, os_KEY_TAB = '	', os_KEY_CTRL, os_KEY_BACKSPACE, os_KEY_DELETE, os_KEY_SHIFT, os_KEY_HOME, os_KEY_END, os_KEY_PAGEUP, os_KEY_PAGEDOWN,
 	os_KEY_F1, os_KEY_F2, os_KEY_F3, os_KEY_F4, os_KEY_F5, os_KEY_F6, os_KEY_F7, os_KEY_F8, os_KEY_F9, os_KEY_F10, os_KEY_F11, os_KEY_F12,
 	os_KEY_FIRST_WRITABLE = ' ', os_KEY_SPACE = ' ', os_KEY_APOSTROPHE = '\'', os_KEY_COMMA = ',', os_KEY_MINUS = '-', os_KEY_PERIOD = '.', os_KEY_SLASH = '/',  os_KEY_SEMICOLON = ';', os_KEY_EQUALS = '=', os_KEY_BRACKETLEFT = '[', os_KEY_BACKSLASH = '\\', os_KEY_BRACKETRIGHT = ']', os_KEY_GRAVE = '`',
@@ -80,7 +81,7 @@ typedef struct {
 } os_vec2i;
 
 typedef struct {
-	float x, y;
+	f32 x, y;
 } os_vec2f;
 
 typedef struct {
@@ -106,7 +107,7 @@ typedef struct {
 	bool keyboard[128];
 	struct {
 		union { os_vec2i p, position; };
-		uint8_t buttons;
+		u8 buttons;
 		bool hidden;
 	} mouse;
 	struct {
@@ -149,8 +150,8 @@ void os_WindowFrameBufferCalculateScale ();
 
 typedef struct {
 	union {
-		struct { uint8_t r, g, b, a; };
-		uint32_t u32;
+		struct { u8 r, g, b, a; };
+		u32 u32;
 	} background_color;
 	struct {
 		HWND window_handle;
@@ -158,7 +159,7 @@ typedef struct {
 		HBITMAP bitmap;
 		HDC bitmap_device_context;
 		HBRUSH background_brush;
-		int64_t ticks_per_microsecond;
+		i64 ticks_per_microsecond;
 		HGLRC gl_context;
 		HDC window_context;
 	} win32;
@@ -180,7 +181,7 @@ typedef struct {
 	#endif
 	#ifdef OSINTERFACE_COLOR_INDEX_MODE
 	struct {
-		uint32_t texture;
+		u32 texture;
 		struct {
 			struct { int scale; } vertex;
 			struct { int palette, texture; } fragment;
@@ -219,8 +220,8 @@ typedef struct timespec timespec_t;
 
 typedef struct {
 	union {
-		struct { uint8_t r, g, b, a; };
-		uint32_t u32;
+		struct { u8 r, g, b, a; };
+		u32 u32;
 	} background_color;
 	struct {
 		Display* display;
@@ -248,7 +249,7 @@ typedef struct {
 	} new_frame_buffer;
 	#ifdef OSINTERFACE_COLOR_INDEX_MODE
 	struct {
-		uint32_t texture;
+		u32 texture;
 		struct {
 			struct { int scale; } vertex;
 			struct { int palette, texture; } fragment;
@@ -269,8 +270,8 @@ typedef struct {
 
 typedef struct {
 	union {
-		struct { uint8_t r, g, b, a; };
-		uint32_t u32;
+		struct { u8 r, g, b, a; };
+		u32 u32;
 	} background_color;
 	struct {
 		id application, window, gl_context;
@@ -293,7 +294,7 @@ typedef struct {
 	} new_frame_buffer;
 	#ifdef OSINTERFACE_COLOR_INDEX_MODE
 	struct {
-		uint32_t texture;
+		u32 texture;
 		struct {
 			struct { int scale; } vertex;
 			struct { int palette, texture; } fragment;
@@ -313,7 +314,7 @@ typedef struct {
 
 
 bool os_Init (const char *window_title);
-void os_SetBackgroundColor (uint8_t r, uint8_t g, uint8_t b);
+void os_SetBackgroundColor (u8 r, u8 g, u8 b);
 void os_Fullscreen (bool fullscreen);
 void os_Maximize (bool maximize);
 void os_WindowSize (int width, int height);
@@ -323,9 +324,9 @@ os_event_t os_NextEvent ();
 void os_SendQuitEvent ();
 void os_WaitForScreenRefresh ();
 void os_DrawScreen ();
-int64_t os_uTime ();
-void os_uSleepEfficient (int64_t microseconds);
-void os_uSleepPrecise (int64_t microseconds);
+i64 os_uTime ();
+void os_uSleepEfficient (i64 microseconds);
+void os_uSleepPrecise (i64 microseconds);
 void os_MessageBox (char *message);
 bool os_GLMakeCurrent ();
 typedef struct {char str[1024];} os_char1024_t; 

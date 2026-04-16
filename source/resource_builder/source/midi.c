@@ -14,20 +14,20 @@
 
 #include "midi.h"
 
-uint8_t MidiKeyToNote (midi_key_t key) {
+u8 MidiKeyToNote (midi_key_t key) {
     assert ((key.key >= 'a' && key.key <= 'g') || (key.key >= 'A' && key.key <= 'G'));
     assert (key.octave >= 0);
     assert (key.octave <= 9);
-    constexpr uint8_t k[] = {['c']=0,['C']=0,['d']=2,['D']=2,['e']=4,['E']=4,['f']=5,['F']=5,['g']=7,['G']=7,['a']=9,['A']=9,['b']=11,['B']=11};
-    return key.octave * MIDI_KEY_MIN + MIDI_KEYS_PER_OCTAVE + k[(uint8_t)key.key] + key.sharp;
+    constexpr u8 k[] = {['c']=0,['C']=0,['d']=2,['D']=2,['e']=4,['E']=4,['f']=5,['F']=5,['g']=7,['G']=7,['a']=9,['A']=9,['b']=11,['B']=11};
+    return key.octave * MIDI_KEY_MIN + MIDI_KEYS_PER_OCTAVE + k[(u8)key.key] + key.sharp;
 }
 
-midi_key_t MidiNoteToKey (uint8_t note) {
+midi_key_t MidiNoteToKey (u8 note) {
     assert (note >= MIDI_KEY_MIN);
     assert (note <= MIDI_KEY_MAX);
     constexpr char k[MIDI_KEYS_PER_OCTAVE] = {'C','C','D','D','E','F','F','G','G','A','A','B'};
     constexpr bool sharp[MIDI_KEYS_PER_OCTAVE] = {0,1,0,1,0,0,1,0,1,0,1,0};
-    const uint8_t index = (note-MIDI_KEY_MIN)%MIDI_KEYS_PER_OCTAVE;
+    const u8 index = (note-MIDI_KEY_MIN)%MIDI_KEYS_PER_OCTAVE;
     return (midi_key_t) {
         .key = k[index],
         .octave = note / MIDI_KEYS_PER_OCTAVE - 1,
@@ -35,12 +35,12 @@ midi_key_t MidiNoteToKey (uint8_t note) {
     };
 }
 
-uint8_t MidiFrequencyToNearestNote (uint16_t frequency) {
+u8 MidiFrequencyToNearestNote (u16 frequency) {
     int i = 0;
     while (i < MIDI_NOTE_COUNT && midi_note_frequency[i] < frequency) ++i;
     if (i == MIDI_NOTE_COUNT) return MIDI_NOTE_COUNT-1;
-    float dista = frequency - midi_note_frequency[i];
-    float distb = midi_note_frequency[i+1] - frequency;
+    f32 dista = frequency - midi_note_frequency[i];
+    f32 distb = midi_note_frequency[i+1] - frequency;
     if (dista < distb) return i;
     return i+1;
 }

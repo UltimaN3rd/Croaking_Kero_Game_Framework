@@ -32,7 +32,7 @@
 #include <assert.h>
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-extern const uint8_t palette[256][3];
+extern const u8 palette[256][3];
 #endif
 
 #pragma push_macro ("Min")
@@ -157,13 +157,13 @@ void main()
 	glDeleteShader (fragment);
 	glUseProgram (program);
 	if (os_LogGLErrors ()) { LOG ("OpenGL error"); return false; }
-	float float_palette[256][3];
+	f32 f32_palette[256][3];
 	for (int i = 0; i < 256; ++i) {
-		float_palette[i][0] = palette[i][0] / 255.f;
-		float_palette[i][1] = palette[i][1] / 255.f;
-		float_palette[i][2] = palette[i][2] / 255.f;
+		f32_palette[i][0] = palette[i][0] / 255.f;
+		f32_palette[i][1] = palette[i][1] / 255.f;
+		f32_palette[i][2] = palette[i][2] / 255.f;
 	}
-	glUniform3fv (glGetUniformLocation(program, "palette"), 256, (const GLfloat*)float_palette);
+	glUniform3fv (glGetUniformLocation(program, "palette"), 256, (const GLfloat*)f32_palette);
 
 	os_private.gl.locations.vertex.scale = glGetUniformLocation(program, "uni_scale");
 	os_private.gl.locations.fragment.texture = glGetUniformLocation(program, "sam_texture");

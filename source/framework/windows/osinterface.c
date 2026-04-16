@@ -25,7 +25,7 @@
 #include <assert.h>
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-extern const uint8_t palette[256][3];
+extern const u8 palette[256][3];
 #endif
 
 #pragma push_macro ("Min")
@@ -182,7 +182,7 @@ bool os_GLMakeCurrent () {
 	return true;
 }
 
-void os_SetBackgroundColor (uint8_t r, uint8_t g, uint8_t b) {
+void os_SetBackgroundColor (u8 r, u8 g, u8 b) {
 	{ os_private.win32.background_brush = CreateSolidBrush (RGB (r, g, b)); assert (os_private.win32.background_brush); if (os_private.win32.background_brush == NULL) { LOG ("CreateSolidBrush() failed"); return; } }
 	os_private.background_color.r = r;
 	os_private.background_color.g = g;
@@ -278,7 +278,7 @@ void os_HideCursor () {
 
 #define OS_INTERNAL_EVENTS_SIZE 256
 static struct {
-	uint32_t pushed, popped;
+	u32 pushed, popped;
 	os_event_t event[OS_INTERNAL_EVENTS_SIZE];
 } events = {};
 
@@ -287,7 +287,7 @@ static inline void PushEvent (os_event_t event) { events.event[events.pushed++ %
 // Handle resize differently because otherwise we end up with a zillion resize events being pushed. Wait until all other events are processed, then, if there were any number of resizes, handle just the last one.
 static struct {
 	bool happened;
-	int16_t w, h;
+	i16 w, h;
 } internal_resize_event = {};
 os_event_t os_NextEvent () {
 	MSG message = {};
@@ -545,19 +545,19 @@ void os_WaitForScreenRefresh () {
 void os_DrawScreen () { SwapBuffers (os_private.win32.window_context); }
 #endif // OSINTERFACE_NATIVE_GL_RENDERING
 
-int64_t os_uTime () {
+i64 os_uTime () {
 	LARGE_INTEGER ticks;
 	QueryPerformanceCounter(&ticks);
 	return ticks.QuadPart / os_private.win32.ticks_per_microsecond;
 }
 
-void os_uSleepEfficient (int64_t microseconds) {
+void os_uSleepEfficient (i64 microseconds) {
 	if (microseconds > 0) Sleep (microseconds / 1000);
 }
 
-void os_uSleepPrecise (int64_t microseconds) {
+void os_uSleepPrecise (i64 microseconds) {
 	if (microseconds < 0) return;
-	int64_t end, milliseconds;
+	i64 end, milliseconds;
 	end = os_uTime () + microseconds;
 
 	// Sleep an amount of milliseconds - inaccurate so we sleep 2 milliseconds less than we actually want
@@ -571,7 +571,7 @@ tinysleep:
 // Returns the refresh rate of the display on which the program window is.
 // Returns 0 if the refresh rate cannot be retrieved.
 int os_GetScreenRefreshRate () {
-	uint16_t screen_refresh;
+	u16 screen_refresh;
 	screen_refresh = GetDeviceCaps(CreateCompatibleDC(NULL), VREFRESH);
 	if (screen_refresh == 1) return 0; // 0 or 1 indicate the "default" refresh rate.
 	return screen_refresh;
@@ -647,7 +647,7 @@ void os_DrawScreen () {
 	#endif
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-	glUniform2f (os_private.gl.locations.vertex.scale, (float)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (float)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
+	glUniform2f (os_private.gl.locations.vertex.scale, (f32)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (f32)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
 	// if (os_LogGLErrors ()) LOG ("Had GL errors");
 	// glActiveTexture(GL_TEXTURE0);
 	// glBindTexture (GL_TEXTURE_2D, os_private.gl.texture);

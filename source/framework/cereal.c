@@ -18,7 +18,7 @@
 #include <string.h>
 #include "update.h"
 
-uint64_t cereal_dummy;
+u64 cereal_dummy;
 
 bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const char *const filename) {
 	FILE *file = fopen (filename, "wb");
@@ -29,7 +29,7 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const 
 		fprintf (file, "%s [", cereal[i].key);
 		switch (cereal[i].type) {
 			case cereal_array: {
-				uint64_t count = 0;
+				u64 count = 0;
 				assert (cereal[i].u.array.counter_type != cereal_array);
 				assert (cereal[i].u.array.counter_type != cereal_f32);
 				assert (cereal[i].u.array.counter_type != cereal_bool);
@@ -39,10 +39,10 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const 
 					case cereal_bool:
 					case cereal_string:
 					case cereal_array: unreachable();
-					case cereal_u8: fprintf (file, "%"PRIu8, *(uint8_t*)cereal[i].u.array.counter); count = *(uint8_t*)cereal[i].u.array.counter; break;
-					case cereal_u16: fprintf (file, "%"PRIu16, *(uint16_t*)cereal[i].u.array.counter); count = *(uint16_t*)cereal[i].u.array.counter; break;
-					case cereal_u32: fprintf (file, "%"PRIu32, *(uint32_t*)cereal[i].u.array.counter); count = *(uint32_t*)cereal[i].u.array.counter; break;
-					case cereal_u64: fprintf (file, "%"PRIu64, *(uint64_t*)cereal[i].u.array.counter); count = *(uint64_t*)cereal[i].u.array.counter; break;
+					case cereal_u8: fprintf (file, "%"PRIu8, *(u8*)cereal[i].u.array.counter); count = *(u8*)cereal[i].u.array.counter; break;
+					case cereal_u16: fprintf (file, "%"PRIu16, *(u16*)cereal[i].u.array.counter); count = *(u16*)cereal[i].u.array.counter; break;
+					case cereal_u32: fprintf (file, "%"PRIu32, *(u32*)cereal[i].u.array.counter); count = *(u32*)cereal[i].u.array.counter; break;
+					case cereal_u64: fprintf (file, "%"PRIu64, *(u64*)cereal[i].u.array.counter); count = *(u64*)cereal[i].u.array.counter; break;
 				}
 				assert (count <= cereal[i].u.array.capacity);
 				if (count > cereal[i].u.array.capacity) {
@@ -54,21 +54,21 @@ bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const 
 					switch (cereal[i].u.array.type) {
 						case cereal_array: unreachable ();
 						case cereal_bool: fprintf (file, " %"PRIu8, *(bool*)v ? 1 : 0); v += sizeof (bool); break;
-						case cereal_u8: fprintf (file, " %"PRIu8, *(uint8_t*)v); v += sizeof (uint8_t); break;
-						case cereal_u16: fprintf (file, " %"PRIu16, *(uint16_t*)v); v += sizeof (uint16_t); break;
-						case cereal_u32: fprintf (file, " %"PRIu32, *(uint32_t*)v); v += sizeof (uint32_t); break;
-						case cereal_u64: fprintf (file, " %"PRIu64, *(uint64_t*)v); v += sizeof (uint64_t); break;
-						case cereal_f32: fprintf (file, " %f", *(float*)v); v += sizeof (float); break;
+						case cereal_u8: fprintf (file, " %"PRIu8, *(u8*)v); v += sizeof (u8); break;
+						case cereal_u16: fprintf (file, " %"PRIu16, *(u16*)v); v += sizeof (u16); break;
+						case cereal_u32: fprintf (file, " %"PRIu32, *(u32*)v); v += sizeof (u32); break;
+						case cereal_u64: fprintf (file, " %"PRIu64, *(u64*)v); v += sizeof (u64); break;
+						case cereal_f32: fprintf (file, " %f", *(f32*)v); v += sizeof (f32); break;
 						case cereal_string: fprintf (file, " %zu %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
 					}
 				}
 			} break;
 			case cereal_bool: fprintf (file, "%"PRIu8, *(bool*)cereal[i].var ? 1 : 0); break;
-			case cereal_u8: fprintf (file, "%"PRIu8, *(uint8_t*)cereal[i].var); break;
-			case cereal_u16: fprintf (file, "%"PRIu16, *(uint16_t*)cereal[i].var); break;
-			case cereal_u32: fprintf (file, "%"PRIu32, *(uint32_t*)cereal[i].var); break;
-			case cereal_u64: fprintf (file, "%"PRIu64, *(uint64_t*)cereal[i].var); break;
-			case cereal_f32: fprintf (file, "%f", *(float*)cereal[i].var); break;
+			case cereal_u8: fprintf (file, "%"PRIu8, *(u8*)cereal[i].var); break;
+			case cereal_u16: fprintf (file, "%"PRIu16, *(u16*)cereal[i].var); break;
+			case cereal_u32: fprintf (file, "%"PRIu32, *(u32*)cereal[i].var); break;
+			case cereal_u64: fprintf (file, "%"PRIu64, *(u64*)cereal[i].var); break;
+			case cereal_f32: fprintf (file, "%f", *(f32*)cereal[i].var); break;
 			case cereal_string: fprintf (file, "%zu %s", strlen((const char*)cereal[i].var), (const char*)cereal[i].var); break;
 		}
 		fprintf (file, "]\n");
@@ -84,7 +84,7 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 	fseek (file, 0, SEEK_END);
 	long end_pos = ftell (file);
 	fseek (file, start_pos, SEEK_SET);
-	uint32_t size = end_pos - start_pos;
+	u32 size = end_pos - start_pos;
 	char *buf = malloc (size);
 	assert (buf); if (buf == NULL) { LOG ("[%s] Failed to allocate %"PRIu32" bytes", filename, size); return false; }
 	defer { free (buf); }
@@ -96,7 +96,7 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 		goto_nextline:
 		const char *const line_start = c;
 		char *line_end = c;
-		uint32_t linelen = 0;
+		u32 linelen = 0;
 		{
 			while (line_end < buf + size && *line_end != '\n') ++line_end;
 			linelen = line_end - c;
@@ -130,14 +130,14 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 		int scan_result = 0;
 		int scanned_chars = 0;
 		switch (cer.type) {
-			case cereal_bool: {uint8_t temp = 0; scan_result = sscanf (c, "%"SCNu8"%n", &temp, &scanned_chars); *(bool*)cer.var = temp; c += scanned_chars; } break;
-			case cereal_u8: scan_result = sscanf (c, "%"SCNu8"%n", (uint8_t*)cer.var, &scanned_chars); c += scanned_chars; break;
-			case cereal_u16: scan_result = sscanf (c, "%"SCNu16"%n", (uint16_t*)cer.var, &scanned_chars); c += scanned_chars; break;
-			case cereal_u32: scan_result = sscanf (c, "%"SCNu32"%n", (uint32_t*)cer.var, &scanned_chars); c += scanned_chars; break;
-			case cereal_u64: scan_result = sscanf (c, "%"SCNu64"%n", (uint64_t*)cer.var, &scanned_chars); c += scanned_chars; break;
-			case cereal_f32: scan_result = sscanf (c, "%f%n", (float*)cer.var, &scanned_chars); c += scanned_chars; break;
+			case cereal_bool: {u8 temp = 0; scan_result = sscanf (c, "%"SCNu8"%n", &temp, &scanned_chars); *(bool*)cer.var = temp; c += scanned_chars; } break;
+			case cereal_u8: scan_result = sscanf (c, "%"SCNu8"%n", (u8*)cer.var, &scanned_chars); c += scanned_chars; break;
+			case cereal_u16: scan_result = sscanf (c, "%"SCNu16"%n", (u16*)cer.var, &scanned_chars); c += scanned_chars; break;
+			case cereal_u32: scan_result = sscanf (c, "%"SCNu32"%n", (u32*)cer.var, &scanned_chars); c += scanned_chars; break;
+			case cereal_u64: scan_result = sscanf (c, "%"SCNu64"%n", (u64*)cer.var, &scanned_chars); c += scanned_chars; break;
+			case cereal_f32: scan_result = sscanf (c, "%f%n", (f32*)cer.var, &scanned_chars); c += scanned_chars; break;
 			case cereal_string: {
-				uint64_t string_length;
+				u64 string_length;
 				scan_result = sscanf (c, "%"SCNu64"%n", &string_length, &scanned_chars); c += scanned_chars;
 				if (scan_result != 1) {
 					LOG ("[%s] Failed to read first value on line [%s]", filename, line_start);
@@ -161,7 +161,7 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 							goto goto_nextline;
 						}
 						++c;
-						uint64_t chars_copied = 0;
+						u64 chars_copied = 0;
 						for (; chars_copied < string_length; ++chars_copied) {
 							char ch = c[chars_copied];
 							if (ch == 0) {
@@ -180,7 +180,7 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 				}
 			} break;
 			case cereal_array: {
-				uint64_t count = 0;
+				u64 count = 0;
 				assert (cer.u.array.counter_type != cereal_array);
 				assert (cer.u.array.counter_type != cereal_f32);
 				assert (cer.u.array.counter_type != cereal_bool);
@@ -188,10 +188,10 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 				assert (cer.u.array.type != cereal_array);
 				int chars_read = 0;
 				switch (cer.u.array.counter_type) {
-					case cereal_u8: scan_result = sscanf (c, "%"SCNu8" %n", (uint8_t*)cer.u.array.counter, &chars_read); count = *(uint8_t*)cer.u.array.counter; c += chars_read; break;
-					case cereal_u16: scan_result = sscanf (c, "%"SCNu16" %n", (uint16_t*)cer.u.array.counter, &chars_read); count = *(uint16_t*)cer.u.array.counter; c += chars_read; break;
-					case cereal_u32: scan_result = sscanf (c, "%"SCNu32" %n", (uint32_t*)cer.u.array.counter, &chars_read); count = *(uint32_t*)cer.u.array.counter; c += chars_read; break;
-					case cereal_u64: scan_result = sscanf (c, "%"SCNu64" %n", (uint64_t*)cer.u.array.counter, &chars_read); count = *(uint64_t*)cer.u.array.counter; c += chars_read; break;
+					case cereal_u8: scan_result = sscanf (c, "%"SCNu8" %n", (u8*)cer.u.array.counter, &chars_read); count = *(u8*)cer.u.array.counter; c += chars_read; break;
+					case cereal_u16: scan_result = sscanf (c, "%"SCNu16" %n", (u16*)cer.u.array.counter, &chars_read); count = *(u16*)cer.u.array.counter; c += chars_read; break;
+					case cereal_u32: scan_result = sscanf (c, "%"SCNu32" %n", (u32*)cer.u.array.counter, &chars_read); count = *(u32*)cer.u.array.counter; c += chars_read; break;
+					case cereal_u64: scan_result = sscanf (c, "%"SCNu64" %n", (u64*)cer.u.array.counter, &chars_read); count = *(u64*)cer.u.array.counter; c += chars_read; break;
 					case cereal_bool:
 					case cereal_f32:
 					case cereal_string:
@@ -203,16 +203,16 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 					goto goto_nextline;
 				}
 				char *arr = (char*)cer.var;
-				for (uint64_t i = 0; i < count; ++i) {
+				for (u64 i = 0; i < count; ++i) {
 					switch (cer.u.array.type) {
-						case cereal_bool: {uint8_t temp = 0; scan_result = sscanf (c, "%"SCNu8"%n", &temp, &chars_read); *(bool*)arr = temp; arr += sizeof (bool); c += chars_read; } break;
-						case cereal_u8: scan_result = sscanf (c, " %"SCNu8" %n", (uint8_t*)arr, &chars_read); arr += sizeof (uint8_t); c += chars_read; break;
-						case cereal_u16: scan_result = sscanf (c, " %"SCNu16" %n", (uint16_t*)arr, &chars_read); arr += sizeof (uint16_t); c += chars_read; break;
-						case cereal_u32: scan_result = sscanf (c, " %"SCNu32" %n", (uint32_t*)arr, &chars_read); arr += sizeof (uint32_t); c += chars_read; break;
-						case cereal_u64: scan_result = sscanf (c, " %"SCNu64" %n", (uint64_t*)arr, &chars_read); arr += sizeof (uint64_t); c += chars_read; break;
-						case cereal_f32: scan_result = sscanf (c, " %f %n", (float*)arr, &chars_read); arr += sizeof (float); c += chars_read; break;
+						case cereal_bool: {u8 temp = 0; scan_result = sscanf (c, "%"SCNu8"%n", &temp, &chars_read); *(bool*)arr = temp; arr += sizeof (bool); c += chars_read; } break;
+						case cereal_u8: scan_result = sscanf (c, " %"SCNu8" %n", (u8*)arr, &chars_read); arr += sizeof (u8); c += chars_read; break;
+						case cereal_u16: scan_result = sscanf (c, " %"SCNu16" %n", (u16*)arr, &chars_read); arr += sizeof (u16); c += chars_read; break;
+						case cereal_u32: scan_result = sscanf (c, " %"SCNu32" %n", (u32*)arr, &chars_read); arr += sizeof (u32); c += chars_read; break;
+						case cereal_u64: scan_result = sscanf (c, " %"SCNu64" %n", (u64*)arr, &chars_read); arr += sizeof (u64); c += chars_read; break;
+						case cereal_f32: scan_result = sscanf (c, " %f %n", (f32*)arr, &chars_read); arr += sizeof (f32); c += chars_read; break;
 						case cereal_string: { // UNTESTED
-							uint64_t string_length;
+							u64 string_length;
 							scan_result = sscanf (c, " %"SCNu64"%n", &string_length, &chars_read); c += chars_read;
 							if (scan_result != 1) {
 								LOG ("[%s] Failed to read first value on line [%s]", filename, line_start);
@@ -236,7 +236,7 @@ int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const 
 										goto goto_nextline;
 									}
 									++c;
-									uint64_t chars_copied = 0;
+									u64 chars_copied = 0;
 									for (; chars_copied < string_length; ++chars_copied) {
 										char ch = c[chars_copied];
 										if (ch == 0) {

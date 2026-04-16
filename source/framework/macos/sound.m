@@ -30,6 +30,9 @@ static bool restart_audio = true;
 OSStatus SoundCallback (void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData) {
     SInt16 *left = (SInt16*)ioData->mBuffers[0].mData;
 
+    if (inNumberFrames > SAMPLE_BUFFER_SIZE_MAX) sample_buffer_size = SAMPLE_BUFFER_SIZE_MAX;
+    else sample_buffer_size = inNumberFrames;
+
     for (UInt32 frame = 0; frame < inNumberFrames; ++frame) {
         *(left++) = sample_buffer[sample_buffer_swap].samples[frame] * INT16_MAX;
     }

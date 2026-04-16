@@ -37,9 +37,6 @@ endif()
 
 # Recommended build types: Debug for general debugging, RelWithDebInfo for testing optimized version, MinSizeRel for actual release.
 add_compile_options(-Wall -Werror -Wno-initializer-overrides -Wno-format-security -Wno-initializer-overrides -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable)
-if(NOT APPLE)
-    add_compile_options(-fmax-errors=5)
-endif()
 
 add_compile_definitions(OSINTERFACE_EVENT_AND_RENDER_THREADS_ARE_SEPARATE OSINTERFACE_FRAME_BUFFER_SCALED OSINTERFACE_COLOR_INDEX_MODE EXPLORER_PRINT_ERRORS FOLDERS_PRINT_ERRORS)
 

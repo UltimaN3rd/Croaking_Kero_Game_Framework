@@ -19,7 +19,7 @@
 #include "objects/text_popup.h"
 
 typedef struct {
-	uint8_t music_volume, fx_volume;
+	u8 music_volume, fx_volume;
 	bool fullscreen;
 	struct {
 		bool show_framerate, show_simtime, show_rendertime;
@@ -33,7 +33,7 @@ extern const cereal_t cereal[];
 typedef struct {
 	struct {
 		char name[17];
-		uint64_t score;
+		u64 score;
 	} high_score;
 } game_save_data_t;
 

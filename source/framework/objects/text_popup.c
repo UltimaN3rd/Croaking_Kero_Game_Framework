@@ -10,7 +10,7 @@ bool TextPopup_Update (text_popup_t *self) {
     return true;
 }
 
-bool TextPopup_Create_Loaded (const char *const text, int16_t x, int16_t y, int16_t vx, int16_t vy, int16_t time, int8_t depth, const render_text_payload_t *const payload) {
+bool TextPopup_Create_Loaded (const char *const text, i16 x, i16 y, i16 vx, i16 vy, i16 time, i8 depth, const render_text_payload_t *const payload) {
     const auto payload_count = payload ? Render_TextGetPayloadCountFromString (text) : 0;
     const auto payload_size = sizeof (*(text_popup_t){}.payload._)*payload_count;
     const auto text_size = strlen(text)+1;

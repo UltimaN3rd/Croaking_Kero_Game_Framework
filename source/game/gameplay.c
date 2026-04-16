@@ -31,26 +31,26 @@ typedef enum {state_alive, state_dead} gameplay_state_e;
 static struct {
     struct {
         int32split_t y;
-        int32_t vy;
-        float pitch;
-        uint64_t coins;
-        int32_t propeller_speed;
+        i32 vy;
+        f32 pitch;
+        u64 coins;
+        i32 propeller_speed;
         int32split_t propeller;
     } player;
     struct {
         int32split_t x;
-        int8_t bottom;
-        int8_t gap_size;
+        i8 bottom;
+        i8 gap_size;
         bool has_been_passed;
     } pipes[PIPES_MAX];
     gameplay_state_e state;
     struct {
-        uint8_t cooldown;
+        u8 cooldown;
         bool new_high_score;
     } dead;
 } data;
 
-static uint64_t random_state;
+static u64 random_state;
 
 #define ADSR_DEFAULT ((ADSR_t){.peak = .5, .sustain = .4, .attack = 48000 * .01, .decay = 48000 * .005, .release = 48000 * .01})
 const sound_t sound_coin2 = {.waveform = sound_waveform_sine, .duration = 48000 * .1, .frequency = 2000, .ADSR = ADSR_DEFAULT};
@@ -198,12 +198,12 @@ void UpdateAlive () {
         PipeGenerate (PIPES_MAX-1);
     }
 
-    uint8_t nearest_pipe = 0;
-    uint8_t pipe_distance = UINT8_MAX;
+    u8 nearest_pipe = 0;
+    u8 pipe_distance = UINT8_MAX;
 
     for (int i = 0; i < PIPES_MAX; ++i) {
         data.pipes[i].x.i32 -= PIPE_SPEED;
-        int16_t distance = abs (PLAYERX - data.pipes[i].x.high);
+        i16 distance = abs (PLAYERX - data.pipes[i].x.high);
         if (distance < pipe_distance) {
             nearest_pipe = i;
             pipe_distance = distance;
@@ -224,14 +224,14 @@ void UpdateAlive () {
     Render_Sprite (.sprite = &resources_gameplay_heli, .x = PLAYERX, .y = data.player.y.high, .rotation = data.player.pitch, .sprite_flags = {.center_horizontally = true, .center_vertically = true});
     // Propellers
     {
-        float spin = data.player.propeller.high / 360.0;
+        f32 spin = data.player.propeller.high / 360.0;
         repeat (2) {
-            float xprop = sin_turns (spin);
-            float yprop = sin_turns (spin + 0.25);
+            f32 xprop = sin_turns (spin);
+            f32 yprop = sin_turns (spin + 0.25);
             int y = (resources_gameplay_heli.h+1)/2;
-            float p = data.player.pitch - 0.0225f; // For some reason the propellers weren't lining up quite right - they always seemed to be a tiny bit further rotated around the player than they were supposed to be, and this fixed it, oddly. Not sure What's wrong with my math since it's working fine in Heli.
-            float originx = -y * sin_turns (p) + 0.5f;
-            float originy = y * cos_turns (p) + 0.5f;
+            f32 p = data.player.pitch - 0.0225f; // For some reason the propellers weren't lining up quite right - they always seemed to be a tiny bit further rotated around the player than they were supposed to be, and this fixed it, oddly. Not sure What's wrong with my math since it's working fine in Heli.
+            f32 originx = -y * sin_turns (p) + 0.5f;
+            f32 originy = y * cos_turns (p) + 0.5f;
             auto localpos = RotatePointiTurns(xprop * 12, yprop * 3, p);
             Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 1, .x0 = PLAYERX + originx + localpos.x, .x1 = PLAYERX + originx - localpos.x, .y0 = data.player.y.high + originy + localpos.y, .y1 = data.player.y.high + originy - localpos.y}});
             spin += 0.25;

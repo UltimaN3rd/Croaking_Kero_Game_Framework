@@ -15,10 +15,16 @@
 // Built together with ../osinterface_common.c
 
 #include "osinterface.h"
+// defer macro in DEFER.h messes with NSWindow initWithContentRect: styleMask: backing: defer:
+// I don't want to use that macro in this file anyway, but rather than edit DEFER.h or find a way to not include it, I just remove the definition in this file.
+#ifdef defer
+#undef defer
+#endif
 #include "log.h"
 #define GL_SILENCE_DEPRECATION
 #include <OpenGL/glu.h>
 #import <Cocoa/Cocoa.h>
+#import <mach/mach_time.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -27,7 +33,7 @@
 #include <assert.h>
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-extern const uint8_t palette[256][3];
+extern const u8 palette[256][3];
 #endif
 
 #pragma push_macro ("Min")
@@ -41,145 +47,14 @@ extern const uint8_t palette[256][3];
 bool os_CreateGLColorMap ();
 #endif
 
-#define GL_SILENCE_DEPRECATION
-#include <OpenGL/glu.h>
-#import <Cocoa/Cocoa.h>
-#import <stdint.h>
-#import <mach/mach_time.h>
-
-// Keycodes taken from HIToolbox/Events.h
-enum {
-  kVK_ANSI_A                    = 0x00,
-  kVK_ANSI_S                    = 0x01,
-  kVK_ANSI_D                    = 0x02,
-  kVK_ANSI_F                    = 0x03,
-  kVK_ANSI_H                    = 0x04,
-  kVK_ANSI_G                    = 0x05,
-  kVK_ANSI_Z                    = 0x06,
-  kVK_ANSI_X                    = 0x07,
-  kVK_ANSI_C                    = 0x08,
-  kVK_ANSI_V                    = 0x09,
-  kVK_ANSI_B                    = 0x0B,
-  kVK_ANSI_Q                    = 0x0C,
-  kVK_ANSI_W                    = 0x0D,
-  kVK_ANSI_E                    = 0x0E,
-  kVK_ANSI_R                    = 0x0F,
-  kVK_ANSI_Y                    = 0x10,
-  kVK_ANSI_T                    = 0x11,
-  kVK_ANSI_1                    = 0x12,
-  kVK_ANSI_2                    = 0x13,
-  kVK_ANSI_3                    = 0x14,
-  kVK_ANSI_4                    = 0x15,
-  kVK_ANSI_6                    = 0x16,
-  kVK_ANSI_5                    = 0x17,
-  kVK_ANSI_Equal                = 0x18,
-  kVK_ANSI_9                    = 0x19,
-  kVK_ANSI_7                    = 0x1A,
-  kVK_ANSI_Minus                = 0x1B,
-  kVK_ANSI_8                    = 0x1C,
-  kVK_ANSI_0                    = 0x1D,
-  kVK_ANSI_RightBracket         = 0x1E,
-  kVK_ANSI_O                    = 0x1F,
-  kVK_ANSI_U                    = 0x20,
-  kVK_ANSI_LeftBracket          = 0x21,
-  kVK_ANSI_I                    = 0x22,
-  kVK_ANSI_P                    = 0x23,
-  kVK_ANSI_L                    = 0x25,
-  kVK_ANSI_J                    = 0x26,
-  kVK_ANSI_Quote                = 0x27,
-  kVK_ANSI_K                    = 0x28,
-  kVK_ANSI_Semicolon            = 0x29,
-  kVK_ANSI_Backslash            = 0x2A,
-  kVK_ANSI_Comma                = 0x2B,
-  kVK_ANSI_Slash                = 0x2C,
-  kVK_ANSI_N                    = 0x2D,
-  kVK_ANSI_M                    = 0x2E,
-  kVK_ANSI_Period               = 0x2F,
-  kVK_ANSI_Grave                = 0x32,
-  kVK_ANSI_KeypadDecimal        = 0x41,
-  kVK_ANSI_KeypadMultiply       = 0x43,
-  kVK_ANSI_KeypadPlus           = 0x45,
-  kVK_ANSI_KeypadClear          = 0x47,
-  kVK_ANSI_KeypadDivide         = 0x4B,
-  kVK_ANSI_KeypadEnter          = 0x4C,
-  kVK_ANSI_KeypadMinus          = 0x4E,
-  kVK_ANSI_KeypadEquals         = 0x51,
-  kVK_ANSI_Keypad0              = 0x52,
-  kVK_ANSI_Keypad1              = 0x53,
-  kVK_ANSI_Keypad2              = 0x54,
-  kVK_ANSI_Keypad3              = 0x55,
-  kVK_ANSI_Keypad4              = 0x56,
-  kVK_ANSI_Keypad5              = 0x57,
-  kVK_ANSI_Keypad6              = 0x58,
-  kVK_ANSI_Keypad7              = 0x59,
-  kVK_ANSI_Keypad8              = 0x5B,
-  kVK_ANSI_Keypad9              = 0x5C
-};
-
+// Keycodes taken from HIToolbox/Events.h (part of Carbon, the old API for porting OS8/9 apps to OSX)
+enum { kVK_ANSI_A = 0x00, kVK_ANSI_S = 0x01, kVK_ANSI_D = 0x02, kVK_ANSI_F = 0x03, kVK_ANSI_H = 0x04, kVK_ANSI_G = 0x05, kVK_ANSI_Z = 0x06, kVK_ANSI_X = 0x07, kVK_ANSI_C = 0x08, kVK_ANSI_V = 0x09, kVK_ANSI_B = 0x0B, kVK_ANSI_Q = 0x0C, kVK_ANSI_W = 0x0D, kVK_ANSI_E = 0x0E, kVK_ANSI_R = 0x0F, kVK_ANSI_Y = 0x10, kVK_ANSI_T = 0x11, kVK_ANSI_1 = 0x12, kVK_ANSI_2 = 0x13, kVK_ANSI_3 = 0x14, kVK_ANSI_4 = 0x15, kVK_ANSI_6 = 0x16, kVK_ANSI_5 = 0x17, kVK_ANSI_Equal = 0x18, kVK_ANSI_9 = 0x19, kVK_ANSI_7 = 0x1A, kVK_ANSI_Minus = 0x1B, kVK_ANSI_8 = 0x1C, kVK_ANSI_0 = 0x1D, kVK_ANSI_RightBracket = 0x1E, kVK_ANSI_O = 0x1F, kVK_ANSI_U = 0x20, kVK_ANSI_LeftBracket = 0x21, kVK_ANSI_I = 0x22, kVK_ANSI_P = 0x23, kVK_ANSI_L = 0x25, kVK_ANSI_J = 0x26, kVK_ANSI_Quote = 0x27, kVK_ANSI_K = 0x28, kVK_ANSI_Semicolon = 0x29, kVK_ANSI_Backslash = 0x2A, kVK_ANSI_Comma = 0x2B, kVK_ANSI_Slash = 0x2C, kVK_ANSI_N = 0x2D, kVK_ANSI_M = 0x2E, kVK_ANSI_Period = 0x2F, kVK_ANSI_Grave = 0x32, kVK_ANSI_KeypadDecimal = 0x41, kVK_ANSI_KeypadMultiply = 0x43, kVK_ANSI_KeypadPlus = 0x45, kVK_ANSI_KeypadClear = 0x47, kVK_ANSI_KeypadDivide = 0x4B, kVK_ANSI_KeypadEnter = 0x4C, kVK_ANSI_KeypadMinus = 0x4E, kVK_ANSI_KeypadEquals = 0x51, kVK_ANSI_Keypad0 = 0x52, kVK_ANSI_Keypad1 = 0x53, kVK_ANSI_Keypad2 = 0x54, kVK_ANSI_Keypad3 = 0x55, kVK_ANSI_Keypad4 = 0x56, kVK_ANSI_Keypad5 = 0x57, kVK_ANSI_Keypad6 = 0x58, kVK_ANSI_Keypad7 = 0x59, kVK_ANSI_Keypad8 = 0x5B, kVK_ANSI_Keypad9 = 0x5C };
 /* keycodes for keys that are independent of keyboard layout*/
-enum {
-  kVK_Return                    = 0x24,
-  kVK_Tab                       = 0x30,
-  kVK_Space                     = 0x31,
-  kVK_Delete                    = 0x33,
-  kVK_Escape                    = 0x35,
-  kVK_Command                   = 0x37,
-  kVK_Shift                     = 0x38,
-  kVK_CapsLock                  = 0x39,
-  kVK_Option                    = 0x3A,
-  kVK_Control                   = 0x3B,
-  kVK_RightShift                = 0x3C,
-  kVK_RightOption               = 0x3D,
-  kVK_RightControl              = 0x3E,
-  kVK_Function                  = 0x3F,
-  kVK_F17                       = 0x40,
-  kVK_VolumeUp                  = 0x48,
-  kVK_VolumeDown                = 0x49,
-  kVK_Mute                      = 0x4A,
-  kVK_F18                       = 0x4F,
-  kVK_F19                       = 0x50,
-  kVK_F20                       = 0x5A,
-  kVK_F5                        = 0x60,
-  kVK_F6                        = 0x61,
-  kVK_F7                        = 0x62,
-  kVK_F3                        = 0x63,
-  kVK_F8                        = 0x64,
-  kVK_F9                        = 0x65,
-  kVK_F11                       = 0x67,
-  kVK_F13                       = 0x69,
-  kVK_F16                       = 0x6A,
-  kVK_F14                       = 0x6B,
-  kVK_F10                       = 0x6D,
-  kVK_F12                       = 0x6F,
-  kVK_F15                       = 0x71,
-  kVK_Help                      = 0x72,
-  kVK_Home                      = 0x73,
-  kVK_PageUp                    = 0x74,
-  kVK_ForwardDelete             = 0x75,
-  kVK_F4                        = 0x76,
-  kVK_End                       = 0x77,
-  kVK_F2                        = 0x78,
-  kVK_PageDown                  = 0x79,
-  kVK_F1                        = 0x7A,
-  kVK_LeftArrow                 = 0x7B,
-  kVK_RightArrow                = 0x7C,
-  kVK_DownArrow                 = 0x7D,
-  kVK_UpArrow                   = 0x7E
-};
-
+enum { kVK_Return = 0x24, kVK_Tab = 0x30, kVK_Space = 0x31, kVK_Delete = 0x33, kVK_Escape = 0x35, kVK_Command = 0x37, kVK_Shift = 0x38, kVK_CapsLock = 0x39, kVK_Option = 0x3A, kVK_Control = 0x3B, kVK_RightShift = 0x3C, kVK_RightOption = 0x3D, kVK_RightControl = 0x3E, kVK_Function = 0x3F, kVK_F17 = 0x40, kVK_VolumeUp = 0x48, kVK_VolumeDown = 0x49, kVK_Mute = 0x4A, kVK_F18 = 0x4F, kVK_F19 = 0x50, kVK_F20 = 0x5A, kVK_F5 = 0x60, kVK_F6 = 0x61, kVK_F7 = 0x62, kVK_F3 = 0x63, kVK_F8 = 0x64, kVK_F9 = 0x65, kVK_F11 = 0x67, kVK_F13 = 0x69, kVK_F16 = 0x6A, kVK_F14 = 0x6B, kVK_F10 = 0x6D, kVK_F12 = 0x6F, kVK_F15 = 0x71, kVK_Help = 0x72, kVK_Home = 0x73, kVK_PageUp = 0x74, kVK_ForwardDelete = 0x75, kVK_F4 = 0x76, kVK_End = 0x77, kVK_F2 = 0x78, kVK_PageDown = 0x79, kVK_F1 = 0x7A, kVK_LeftArrow = 0x7B, kVK_RightArrow = 0x7C, kVK_DownArrow = 0x7D, kVK_UpArrow = 0x7E };
 /* ISO keyboards only*/
-enum {
-  kVK_ISO_Section               = 0x0A
-};
-
+enum { kVK_ISO_Section = 0x0A };
 /* JIS keyboards only*/
-enum {
-  kVK_JIS_Yen                   = 0x5D,
-  kVK_JIS_Underscore            = 0x5E,
-  kVK_JIS_KeypadComma           = 0x5F,
-  kVK_JIS_Eisu                  = 0x66,
-  kVK_JIS_Kana                  = 0x68
-};
+enum { kVK_JIS_Yen = 0x5D, kVK_JIS_Underscore = 0x5E, kVK_JIS_KeypadComma = 0x5F, kVK_JIS_Eisu = 0x66, kVK_JIS_Kana = 0x68 };
 
 enum { OSXUserEvent_WindowClose, OSXUserEvent_WindowResize, OSXUserEvent_LostFocus, OSXUserEvent_EnterFullscreen, OSXUserEvent_ExitFullscreen, OSXUserEvent_MouseMoved, };
 
@@ -278,7 +153,7 @@ static bool live_resizing = false;
 }
 @end
 
-static float ticks_to_nanosec = 1;
+static f32 ticks_to_nanosec = 1;
 
 bool os_Init (const char *window_title) {
 	assert (window_title);
@@ -294,7 +169,7 @@ bool os_Init (const char *window_title) {
 
 	mach_timebase_info_data_t timebase;
 	mach_timebase_info (&timebase);
-	ticks_to_nanosec = (double)timebase.numer / timebase.denom;
+	ticks_to_nanosec = (f64)timebase.numer / timebase.denom;
 
 	os_public.window.is_fullscreen = false;
 	snprintf (os_public.window.title, sizeof (os_public.window.title)-1, "%s", window_title);
@@ -310,7 +185,7 @@ bool os_Init (const char *window_title) {
 	id appMenu = [NSMenu new];
 	[appMenu addItem:[[NSMenuItem alloc] initWithTitle:[@"Quit " stringByAppendingString:[[NSProcessInfo processInfo] processName]] action:@selector(terminate:) keyEquivalent:@"q"]];
 	[menuItemApp setSubmenu:appMenu];
-	os_private.osx.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,600) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+	os_private.osx.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,600) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:YES];
 	[os_private.osx.window setReleasedWhenClosed:NO];
 	[os_private.osx.window setDelegate:[WindowDelegate new]];
 
@@ -366,7 +241,7 @@ bool os_Init (const char *window_title) {
 	return true;
 }
 
-void os_SetBackgroundColor (uint8_t r, uint8_t g, uint8_t b) {
+void os_SetBackgroundColor (u8 r, u8 g, u8 b) {
 	os_private.background_color.r = r;
 	os_private.background_color.g = g;
 	os_private.background_color.b = b;
@@ -529,16 +404,16 @@ os_event_t os_NextEvent () {
 			case NSEventTypeFlagsChanged: {
 				typedef union {
 					struct {
-						uint8_t alpha_shift:1;
-						uint8_t shift:1;
-						uint8_t control:1;
-						uint8_t alternate:1;
-						uint8_t command:1;
-						uint8_t numeric_pad:1;
-						uint8_t help:1;
-						uint8_t function:1;
+						u8 alpha_shift:1;
+						u8 shift:1;
+						u8 control:1;
+						u8 alternate:1;
+						u8 command:1;
+						u8 numeric_pad:1;
+						u8 help:1;
+						u8 function:1;
 					};
-					uint8_t mask;
+					u8 mask;
 				} osx_event_modifiers_t;
 				static osx_event_modifiers_t mods_prev = {};
 				osx_event_modifiers_t mods = {.mask = ([e modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask) >> 16};
@@ -704,18 +579,18 @@ void os_Fullscreen (bool fullscreen) {
 	}
 }
 
-int64_t os_uTime () {
-	uint64_t t = mach_absolute_time();
+i64 os_uTime () {
+	u64 t = mach_absolute_time();
 	return t * ticks_to_nanosec / 1000;
 }
 
-void os_uSleepEfficient (int64_t microseconds) {
+void os_uSleepEfficient (i64 microseconds) {
 	// if (microseconds > 0) usleep (microseconds);
 	if (microseconds <= 0) return;
 	os_uSleepPrecise (microseconds);
 }
 
-void os_uSleepPrecise (int64_t microseconds) {
+void os_uSleepPrecise (i64 microseconds) {
 	mach_wait_until(mach_absolute_time() + microseconds*1000.0/ticks_to_nanosec);
 }
 
@@ -828,7 +703,7 @@ void os_DrawScreen () {
 	#endif
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-	glUniform2f (os_private.gl.locations.vertex.scale, (float)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (float)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
+	glUniform2f (os_private.gl.locations.vertex.scale, (f32)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (f32)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
 	// if (os_LogGLErrors ()) LOG ("Had GL errors");
 	// glActiveTexture(GL_TEXTURE0);
 	// glBindTexture (GL_TEXTURE_2D, os_private.gl.texture);

@@ -31,14 +31,14 @@ static struct { int l, b, r, t; } title_bounds = {};
 
 static struct { int x, y; } mouse;
 
-static uint8_t explorer_scroll = 0;
+static u8 explorer_scroll = 0;
 
 static void menu_Delete_Yes ();
 
 static bool delete_confirmed = false;
 static int delete_confirmation_explorer_file_index = 0;
 static const char *delete_confirmation_filename = NULL;
-static vec2i_t delete_confirmation_text_offset = {};
+static v2i32 delete_confirmation_text_offset = {};
 static submenu_t submenu_delete_confirmation = {
 	.name = "Delete confirmation",
 	.color = 131,
@@ -93,7 +93,7 @@ void menu_Init (menu_t *self, submenu_t *initial_submenu) {
 	if (self->selection_color == 0) self->selection_color = 1;
 }
 
-vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length) {
+v2i32 menu_ItemDimensions_Length (const char *item_start, const size_t length) {
 	const char *item = item_start;
 	char c = *item;
 	int x = 0, y = 0;
@@ -132,10 +132,10 @@ vec2i_t menu_ItemDimensions_Length (const char *item_start, const size_t length)
         c = *++item;
 	}
 
-	return (vec2i_t){width, top - bottom + 1};
+	return (v2i32){width, top - bottom + 1};
 }
 
-vec2i_t menu_ItemDimensions (const char *item_start) {
+v2i32 menu_ItemDimensions (const char *item_start) {
 	return menu_ItemDimensions_Length(item_start, strlen (item_start));
 }
 
@@ -450,7 +450,7 @@ void menu_Update (menu_t *self, menu_inputs_t input) {
 					|| (mouse_dragging == submenu->selected)) {
 						if (mx < l) mx = l;
 						if (mx > r) mx = r;
-						item->slider.value_0_to_255 = (float)(mx - l) / (SLIDER_WIDTH - 2) * item->slider.max;
+						item->slider.value_0_to_255 = (f32)(mx - l) / (SLIDER_WIDTH - 2) * item->slider.max;
 						mouse_dragging = submenu->selected;
 					}
 					if (item->slider.value_0_to_255 != before)
@@ -611,13 +611,13 @@ void menu_Render (menu_t *self, int depth) {
 						int b = y - resources_framework_font.line_height/2 - 3;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_edge = self->selection_color, .x = l, .w = SLIDER_WIDTH, .y = b, .h = 3}}, .depth = depth, .ignore_camera = true);
-						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / (float)item->slider.max);
+						int w = (SLIDER_WIDTH - 3) * (item->slider.value_0_to_255 / (f32)item->slider.max);
 						if (item->slider.value_0_to_255 > 0) Render_Shape (.shape = {.type = render_shape_line, .line = {.color = 255, .x0 = l+1, .x1 = l+1+w, .y0 = b+1, .y1 = b+1}}, .depth = depth, .ignore_camera = true);
 					} break;
 					case menu_list_item_type_toggle: {
 						int b = y - resources_framework_font.line_height;
 						int l = x + self->dimensions.textw + SLIDER_MARGIN;
-						uint8_t fill_color = 0;
+						u8 fill_color = 0;
 						if (*item->toggle.var) fill_color = 255;
 						Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.color_fill = fill_color, .color_edge = self->selection_color, .x = l, .w = TOGGLE_WIDTH, .y = b, .h = TOGGLE_WIDTH}}, .depth = depth, .ignore_camera = true);
 					} break;
@@ -647,7 +647,7 @@ void menu_Render (menu_t *self, int depth) {
 			const int baseliney = y - resources_framework_font.baseline - 1;
 			Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = x, .y = baseliney - 1, .w = self->dimensions.w, .h = 1, .color_edge = self->selection_color}}, .depth = depth);
 			auto cursorx = menu_ItemDimensions_Length(fc->text_buffer, fc->cursor).x + x;
-			vec2i_t cursorsize;
+			v2i32 cursorsize;
 			if (fc->cursor == strlen (fc->text_buffer)) {
 				cursorsize.x = 1;
 				cursorsize.y = resources_framework_font.baseline;
@@ -690,10 +690,10 @@ void menu_Render (menu_t *self, int depth) {
 	if (submenu->parent != NULL) Render_Sprite (.sprite = &resources_framework_menu_back, .y = RESOLUTION_HEIGHT - resources_framework_menu_back.h, .depth = depth, .ignore_camera = true);
 
     if (self->transparent_background_darkess) {
-        const int16_t l = self->dimensions.x - 2;
-        const int16_t r = l + self->dimensions.w-1 + 3;
-        const int16_t b = self->dimensions.y;
-        const int16_t t = b + self->dimensions.h-1;
+        const i16 l = self->dimensions.x - 2;
+        const i16 r = l + self->dimensions.w-1 + 3;
+        const i16 b = self->dimensions.y;
+        const i16 t = b + self->dimensions.h-1;
         Render_DarkenRectangle (.l = l, .r = r, .b = b, .t = t, .depth = depth, .levels = self->transparent_background_darkess);
     }
 

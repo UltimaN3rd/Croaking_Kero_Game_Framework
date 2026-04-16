@@ -18,7 +18,7 @@ extern bool quit;
 extern update_data_t update_data;
 extern render_data_t render_data;
 
-static uint64_t random_state;
+static u64 random_state;
 
 #ifndef PARTICLES_BOUNDARY_LEFT
 #define PARTICLES_BOUNDARY_LEFT 0
@@ -45,8 +45,8 @@ static void TypeThisFrame (os_key_e key) {
 
 static update_state_e current_state = 0;
 static void Update_ObjectClearTopUnusedMemory ();
-static void Update_ObjectDelete (uint16_t index);
-static void Update_ObjectSort (uint16_t starting_index);
+static void Update_ObjectDelete (u16 index);
+static void Update_ObjectSort (u16 starting_index);
 static bool object_created_or_destroyed_this_frame = false;
 static struct {
 	update_state_e new_state;
@@ -61,8 +61,8 @@ void *Update(void*) {
 	LOG ("Update thread started");
 	while (!render_data.thread_initialized) os_uSleepEfficient (1000);
 
-	int64_t time_last, time_now;
-	int64_t us_per_frame;
+	i64 time_last, time_now;
+	i64 us_per_frame;
 	us_per_frame = 1000000 / 120; // Update rate = 120Hz
 	time_last = os_uTime ();
 
@@ -71,7 +71,7 @@ void *Update(void*) {
 	typeof (update_data.events) events = {};
 	#define KEYBOARD_REPEAT_INITIAL_DELAY 30
 	#define KEYBOARD_REPEAT_DELAY 10
-	uint8_t keyboard_repeat_time[UPDATE_KEYBOARD_KEY_COUNT] = {};
+	u8 keyboard_repeat_time[UPDATE_KEYBOARD_KEY_COUNT] = {};
 
 	LOG ("Update thread entering main loop");
 
@@ -110,7 +110,7 @@ void *Update(void*) {
 		}
 
 		// Cache the latest events, handle cases where the buffer has overrun
-		uint8_t events_this_frame;
+		u8 events_this_frame;
 		auto events_cache = update_data.events;
 		if (events_cache.count - events.count > UPDATE_EVENTS_MAX) {
 			LOG ("Dropped [%d] input events!", (events_cache.count - events.count) - UPDATE_EVENTS_MAX);
@@ -173,8 +173,8 @@ void *Update(void*) {
 
 					case update_input_event_mouse_movement: {
 						assert (e <= end - 3);
-						const int16_t x = *(int16_t*)(e+1);
-						const int16_t y = *(int16_t*)(e+2);
+						const i16 x = *(i16*)(e+1);
+						const i16 y = *(i16*)(e+2);
 						update_data.frame.mouse.x = x;
 						update_data.frame.mouse.y = y;
 						e+= 2;
@@ -188,7 +188,7 @@ void *Update(void*) {
 			}
 		}
 	
-		static int64_t max_recorded_frame_time = 0;
+		static i64 max_recorded_frame_time = 0;
 
 		unedited_frameinput = update_data.frame; // Save input state in case game modifies it
 		object_created_or_destroyed_this_frame = false;
@@ -198,7 +198,7 @@ void *Update(void*) {
 			Render_SelectStateToEdit ();
 			asm volatile("" ::: "memory");
 
-			for (int16_t i = update_data.objects.count-1; i >= 0; --i) {
+			for (i16 i = update_data.objects.count-1; i >= 0; --i) {
 				const auto obj = &((update_object_t*)update_data.objects.mem)[i];
 				const auto objdata = update_data.objects.mem + obj->memory_offset;
 				if (!obj->UpdateAndRender (objdata))
@@ -234,7 +234,7 @@ void *Update(void*) {
 			memset (update_data.frame.keyboard, 0, sizeof (update_data.frame.keyboard));
 			update_data.frame.mouse = (typeof(update_data.frame.mouse)){.x = update_data.frame.mouse.x, .y = update_data.frame.mouse.y};
 
-			for (int16_t i = update_data.objects.count-1; i >= 0; --i) {
+			for (i16 i = update_data.objects.count-1; i >= 0; --i) {
 				const auto obj = &((update_object_t*)update_data.objects.mem)[i];
 				if (!obj->survive_state_change)
 					Update_ObjectDelete (i);
@@ -264,7 +264,7 @@ void *Update(void*) {
 		const auto frame_time = frame_end - frame_begin;
 
 		// Sleep until next frame
-		const int64_t sleep_time = time_last + us_per_frame - frame_end;
+		const i64 sleep_time = time_last + us_per_frame - frame_end;
 
 		time_last += us_per_frame;
 		if(frame_end - time_last > us_per_frame) time_last = frame_end;
@@ -289,7 +289,7 @@ void *Update(void*) {
 
 #define PARTICLE_GRAVITY -2048
 
-void ParticleAdd_ (uint8_t pixel, int x, int y, int32_t vx, int32_t vy, ParticleAdd_arguments arguments) {
+void ParticleAdd_ (u8 pixel, int x, int y, i32 vx, i32 vy, ParticleAdd_arguments arguments) {
 	auto udata = &update_data.gameplay;
 
 	int i = udata->particles.count++;
@@ -344,17 +344,17 @@ void ParticleDelete (int index) {
 	}
 }
 
-void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float direction, int32_t velocity, CreateParticlesFromSprite_arguments arguments) {
+void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, f32 direction, i32 velocity, CreateParticlesFromSprite_arguments arguments) {
 	enum {CPFSFLIP_NONE, CPFSFLIP_Y, CPFSFLIP_X, CPFSFLIP_BOTH} flip = (arguments.flipx ? 2 : 0) | (arguments.flipy ? 1 : 0);
     auto w = sprite->w;
     auto h = sprite->h;
-	float c = cos_turns (arguments.rotation);
-	float s = sin_turns (arguments.rotation);
+	f32 c = cos_turns (arguments.rotation);
+	f32 s = sin_turns (arguments.rotation);
 	switch (flip) {
 		case CPFSFLIP_NONE: {
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
-					uint8_t p = sprite->p[sx + sy * w];
+					u8 p = sprite->p[sx + sy * w];
 					int tx = sx - arguments.originx;
 					int ty = sy - arguments.originy;
 					int rx = c*tx - s*ty;
@@ -368,7 +368,7 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			// x += w-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
-					uint8_t p = sprite->p[sx + sy * w];
+					u8 p = sprite->p[sx + sy * w];
 					int tx = sx - arguments.originx;
 					int ty = sy - arguments.originy;
 					int rx = c*tx - s*ty;
@@ -382,7 +382,7 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			// y += h-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
-					uint8_t p = sprite->p[sx + sy * w];
+					u8 p = sprite->p[sx + sy * w];
 					int tx = sx - arguments.originx;
 					int ty = sy - arguments.originy;
 					int rx = c*tx - s*ty;
@@ -397,7 +397,7 @@ void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float dir
 			// y += h-1;
 			for (int sy = 0; sy < h; ++sy) {
 				for (int sx = 0; sx < w; ++sx) {
-					uint8_t p = sprite->p[sx + sy * w];
+					u8 p = sprite->p[sx + sy * w];
 					int tx = sx - arguments.originx;
 					int ty = sy - arguments.originy;
 					int rx = c*tx - s*ty;
@@ -438,7 +438,7 @@ static void Update_ObjectClearTopUnusedMemory () {
 	update_data.objects.top_used = new_top;
 }
 
-static void Update_ObjectDelete (uint16_t index) {
+static void Update_ObjectDelete (u16 index) {
 	assert (index < update_data.objects.count);
 	assert (update_data.objects.count > 0);
 	--update_data.objects.count;
@@ -447,7 +447,7 @@ static void Update_ObjectDelete (uint16_t index) {
 	update_object_header_t *header = (update_object_header_t*)(update_data.objects.mem + obj->memory_offset - sizeof (update_object_header_t));
 	header->used = false;
 
-	for (uint16_t i = index; i < update_data.objects.count; ++i) {
+	for (u16 i = index; i < update_data.objects.count; ++i) {
 		((update_object_t*)update_data.objects.mem)[i] = ((update_object_t*)update_data.objects.mem)[i+1];
 	}
 
@@ -456,7 +456,7 @@ static void Update_ObjectDelete (uint16_t index) {
 
 // Sort starting from index, continuing up. If 0 or 1, sort all objects.
 // Lowest layer object goes to front of array, because objects are processed from end of array back to the front.
-static void Update_ObjectSort (uint16_t starting_index) {
+static void Update_ObjectSort (u16 starting_index) {
 	if (update_data.objects.count == 0) return;
 	assert (starting_index < update_data.objects.count);
 	auto index = starting_index;
@@ -474,8 +474,8 @@ static void Update_ObjectSort (uint16_t starting_index) {
 	object_created_or_destroyed_this_frame = true;
 }
 
-update_object_t *Update_ObjectAlloc (const uint32_t bytes) {
-	uint16_t object_size = sizeof (update_object_header_t) + bytes;
+update_object_t *Update_ObjectAlloc (const u32 bytes) {
+	u16 object_size = sizeof (update_object_header_t) + bytes;
 	// object_size += object_size % 8; // Align by 8 bytes
 	const auto new_bottom = update_data.objects.bottom_used + sizeof (update_object_t);
 	const auto new_top = update_data.objects.top_used + object_size;
@@ -495,7 +495,7 @@ update_object_t *Update_ObjectAlloc (const uint32_t bytes) {
 	return obj;
 }
 
-uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change) {
+u32 Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const i8 layer, const bool survive_state_change) {
 	auto obj = Update_ObjectAlloc (data_size);
 	obj->UpdateAndRender = UpdateAndRenderFunc;
 	obj->layer = layer;
@@ -504,7 +504,7 @@ uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, c
 	return obj->id;
 }
 
-void *Update_ObjectMemOffsetToAddr (const uint32_t mem_offset) {
+void *Update_ObjectMemOffsetToAddr (const u32 mem_offset) {
 	return &update_data.objects.mem[mem_offset];
 }
 

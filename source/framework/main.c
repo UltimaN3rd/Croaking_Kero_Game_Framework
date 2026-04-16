@@ -25,33 +25,33 @@ pthread_t thread_render = 0, thread_update = 0, thread_sound = 0;
 bool quit = false;
 pthread_mutex_t update_render_swap_state_mutex = (pthread_mutex_t){};
 
-sprite_t render_data_frame_0 = {.p = (uint8_t[RESOLUTION_WIDTH*RESOLUTION_HEIGHT]){}}, render_data_frame_1 = {.p = (uint8_t[RESOLUTION_WIDTH*RESOLUTION_HEIGHT]){}};
+sprite_t render_data_frame_0 = {.p = (u8[RESOLUTION_WIDTH*RESOLUTION_HEIGHT]){}}, render_data_frame_1 = {.p = (u8[RESOLUTION_WIDTH*RESOLUTION_HEIGHT]){}};
 
 #ifndef NDEBUG
-typedef struct __attribute((__packed__)) {
-	struct __attribute((__packed__)) {
+typedef struct [[gnu::packed]] {
+	struct [[gnu::packed]] {
 		char magic[2];
-		uint32_t file_size;
-		uint32_t filler;
-		uint32_t image_data_address;
+		u32 file_size;
+		u32 filler;
+		u32 image_data_address;
 	} file;
-	struct __attribute((__packed__)) {
-		uint32_t header_size;
-		int32_t width;
-		int32_t height;
-		uint16_t color_planes;
-		uint16_t bits_per_pixel;
-		uint32_t compression;
-		uint32_t compressed_size;
-		uint32_t pixels_per_m_horizontal;
-		uint32_t pixels_per_m_vertical;
-		uint32_t colors_used;
-		uint32_t important_colors;
+	struct [[gnu::packed]] {
+		u32 header_size;
+		i32 width;
+		i32 height;
+		u16 color_planes;
+		u16 bits_per_pixel;
+		u32 compression;
+		u32 compressed_size;
+		u32 pixels_per_m_horizontal;
+		u32 pixels_per_m_vertical;
+		u32 colors_used;
+		u32 important_colors;
 	} info;
 } bmp_header_t;
 static_assert (sizeof (bmp_header_t) == 54);
 
-static struct __attribute((__packed__)) {
+static struct [[gnu::packed]] {
 	bmp_header_t header;
 	char palette[4*256];
 } bmp_static_data = {
@@ -155,7 +155,7 @@ int main (int argc, char **argv) {
 					default: break;
 				}
 
-				uint8_t i = update_data.events.count % UPDATE_EVENTS_MAX;
+				u8 i = update_data.events.count % UPDATE_EVENTS_MAX;
 				update_data.events._[i] = (update_input_event_t){
 					.tag = update_input_event_keyboard,
 					._.keyboard = {
@@ -169,7 +169,7 @@ skip_sending_key_event:
 			} break;
 
 			case os_EVENT_KEY_RELEASE: {
-				uint8_t i = update_data.events.count % UPDATE_EVENTS_MAX;
+				u8 i = update_data.events.count % UPDATE_EVENTS_MAX;
 				update_data.events._[i] = (update_input_event_t){
 					.tag = update_input_event_keyboard,
 					._.keyboard = {
@@ -183,9 +183,9 @@ skip_sending_key_event:
 			case os_EVENT_MOUSE_MOVE: {
 				auto ret = os_WindowPositionToScaledFrameBufferPosition (event.new_position.x, event.new_position.y);
 
-				uint8_t i = update_data.events.count % UPDATE_EVENTS_MAX;
-				uint8_t ix = (update_data.events.count+1) % UPDATE_EVENTS_MAX;
-				uint8_t iy = (update_data.events.count+2) % UPDATE_EVENTS_MAX;
+				u8 i = update_data.events.count % UPDATE_EVENTS_MAX;
+				u8 ix = (update_data.events.count+1) % UPDATE_EVENTS_MAX;
+				u8 iy = (update_data.events.count+2) % UPDATE_EVENTS_MAX;
 				update_data.events._[i] = (update_input_event_t){
 					.tag = update_input_event_mouse_movement,
 				};

@@ -23,7 +23,7 @@ struct submenu_t {
     submenu_t *parent;
     int selected;
     bool retain_selection;
-    uint8_t color;
+    u8 color;
     bool show_name;
     void (*on_exit_func) ();
     enum { menu_type_list, menu_type_explorer, menu_type_name_creator, menu_type_internal } type;
@@ -38,9 +38,9 @@ struct submenu_t {
                     void (*Function) ();
                     submenu_t *submenu;
                     struct {
-                        void (*Function) (uint8_t output_0_to_max);
-                        uint8_t (*InitialValueFunction) ();
-                        uint8_t value_0_to_255, max;
+                        void (*Function) (u8 output_0_to_max);
+                        u8 (*InitialValueFunction) ();
+                        u8 value_0_to_255, max;
                     } slider;
                     struct {
                         bool *var;
@@ -56,13 +56,13 @@ struct submenu_t {
             int maximum_depth;
             #define MENU_EXPLORER_SELECTABLE_FILES   0b01
             #define MENU_EXPLORER_SELECTABLE_FOLDERS 0b10
-            uint8_t selectable;
+            u8 selectable;
         } explorer;
         struct {
             char *const text_buffer;
             const size_t *const buffer_size; // Amount of characters that can be held +1 for NULL terminator
             void (*const confirm_func) ();
-            uint8_t cursor;
+            u8 cursor;
             bool dont_clear_buffer;
         } name_creator;
     };
@@ -73,8 +73,8 @@ struct submenu_t {
 
 typedef struct {
     typeof((render_state_t){}.background.type) background;
-    uint8_t transparent_background_darkess : 4; // Max value 7
-    uint8_t selection_color;
+    u8 transparent_background_darkess : 4; // Max value 7
+    u8 selection_color;
     struct { int x, y, w, h, textw, topoffset; } dimensions;
     const char *filename_to_delete;
     submenu_t *submenu;
@@ -85,13 +85,13 @@ typedef struct {
     bool up, down, confirm, cancel, left, right, backspace, delete;
     struct {
         int x, y;
-        uint8_t left;
-        int8_t scroll; // 1 for up, -1 for down, 0 for no scroll
+        u8 left;
+        i8 scroll; // 1 for up, -1 for down, 0 for no scroll
     } mouse;
     char typing[32];
 } menu_inputs_t;
 
-vec2i_t menu_ItemDimensions (const char *item_start);
+v2i32 menu_ItemDimensions (const char *item_start);
 void menu_CalculateDimensions (menu_t *self);
 void menu_Update (menu_t *self, menu_inputs_t inputs);
 void menu_Render (menu_t *self, int depth);

@@ -6,10 +6,10 @@ static bool FullscreenTextBox_Update (const char *const self) {
     const auto input = *Update_FrameInput ();
     bool retval = true;
     const auto dimensions = font_StringDimensions(&resources_framework_font, self, NULL);
-    const int16_t l = (RESOLUTION_WIDTH - dimensions.w) / 2;
-    const int16_t r = l + dimensions.w - 1;
-    const int16_t b = (RESOLUTION_HEIGHT - dimensions.h) / 2;
-    const int16_t t = b + dimensions.h - 1;
+    const i16 l = (RESOLUTION_WIDTH - dimensions.w) / 2;
+    const i16 r = l + dimensions.w - 1;
+    const i16 b = (RESOLUTION_HEIGHT - dimensions.h) / 2;
+    const i16 t = b + dimensions.h - 1;
     Render_Text (.string = self, .center_horizontally_on_screen = true, .center_vertically_on_screen = true, .depth = 127);
     Render_Shape (.shape = {.type = render_shape_rectangle, .rectangle = {.x = l-1, .y = b-1, .w = dimensions.w+2, .h = dimensions.h+2, .color_edge = 1}}, .depth = 127);
     Render_DarkenRectangle(.depth = 127, .l = l, .r = r, .b = b, .t = t, .levels = 1);

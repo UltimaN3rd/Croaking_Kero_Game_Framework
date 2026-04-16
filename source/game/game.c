@@ -80,16 +80,16 @@ void menu_Options_Fullscreen () {
 	os_Fullscreen (!os_public.window.is_fullscreen);
 	submenu_vars.fullscreen = os_public.window.is_fullscreen;
 }
-void menu_Options_Sound_Music (uint8_t output_0_to_max) {
-	SoundMusicSetVolume(output_0_to_max / (float)MENU_SLIDER_VOLUME_MAX);
+void menu_Options_Sound_Music (u8 output_0_to_max) {
+	SoundMusicSetVolume(output_0_to_max / (f32)MENU_SLIDER_VOLUME_MAX);
 	submenu_vars.music_volume = output_0_to_max;
 }
-uint8_t menu_Options_Sound_Music_Init () { return submenu_vars.music_volume; }
-void menu_Options_Sound_Effects (uint8_t output_0_to_max) {
-	SoundFXSetVolume(output_0_to_max / (float)MENU_SLIDER_VOLUME_MAX);
+u8 menu_Options_Sound_Music_Init () { return submenu_vars.music_volume; }
+void menu_Options_Sound_Effects (u8 output_0_to_max) {
+	SoundFXSetVolume(output_0_to_max / (f32)MENU_SLIDER_VOLUME_MAX);
 	submenu_vars.fx_volume = output_0_to_max;
 }
-uint8_t menu_Options_Sound_Effects_Init () { return submenu_vars.fx_volume; }
+u8 menu_Options_Sound_Effects_Init () { return submenu_vars.fx_volume; }
 
 submenu_vars_t submenu_vars = {
 	.music_volume = MENU_SLIDER_VOLUME_MAX * 0.6,

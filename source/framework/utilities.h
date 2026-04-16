@@ -19,6 +19,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef float f32;
+typedef double f64;
+
 #include <stdbool.h>
 #include <math.h>
 #ifndef M_PI
@@ -43,48 +55,45 @@
 
 #define SWAP(a, b) do {auto t = (a); (a) = (b); (b) = t;} while(0)
 
-typedef struct {
-	float x, y;
-} vec2f_t;
+#define VEC2TYPE f32
+#define VEC2NAME v2f
+#include "vec2_generator.h"
 
-static inline float vec2f_Distance (vec2f_t a, vec2f_t b) {
-	a.x -= b.x;
-	a.y -= b.y;
-	a.x *= a.x;
-	a.y *= a.y;
-	return sqrt (a.x + a.y);
-}
+#define VEC2TYPE f64
+#define VEC2NAME v2d
+#include "vec2_generator.h"
 
-static inline vec2f_t vec2f_FromTo (vec2f_t a, vec2f_t b) {
-	b.x -= a.x;
-	b.y -= a.y;
-	return b;
-}
+#define VEC2TYPE i8
+#define VEC2NAME v2i8
+#include "vec2_generator.h"
 
-static inline vec2f_t vec2f_LerpInaccurate (vec2f_t from, vec2f_t to, float t) {
-    from.x += (to.x - from.x) * t;
-    from.y += (to.y - from.y) * t;
-    return from;
-}
+#define VEC2TYPE i16
+#define VEC2NAME v2i16
+#include "vec2_generator.h"
 
-static inline float vec2f_Magnitude (vec2f_t v) {
-    return sqrtf (v.x * v.x + v.y * v.y);
-}
+#define VEC2TYPE i32
+#define VEC2NAME v2i32
+#include "vec2_generator.h"
 
-static inline float vec2f_AngleOfAsTurns (vec2f_t v) {
-    return XYToAngleTurns (v.x, v.y);
-}
+#define VEC2TYPE i64
+#define VEC2NAME v2i64
+#include "vec2_generator.h"
 
-typedef struct { int32_t x, y; } vec2i_t;
-typedef struct { int16_t x, y; } vec2i16_t;
-typedef struct { int8_t x, y; } vec2i8_t;
-typedef struct { uint8_t x, y; } vec2u8_t;
+#define VEC2TYPE u8
+#define VEC2NAME v2u8
+#include "vec2_generator.h"
 
-static inline float vec2i16_Distance (vec2i16_t a, vec2i16_t b) {
-    int16_t dx = b.x - a.x;
-    int16_t dy = b.y - a.y;
-    return sqrtf (dx * dx + dy * dy);
-}
+#define VEC2TYPE u16
+#define VEC2NAME v2u16
+#include "vec2_generator.h"
+
+#define VEC2TYPE u32
+#define VEC2NAME v2u32
+#include "vec2_generator.h"
+
+#define VEC2TYPE u64
+#define VEC2NAME v2u64
+#include "vec2_generator.h"
 
 // Checks the number of characters of the smaller of the two strings
 bool StringsAreTheSame (const char *a, const char *b);
@@ -243,17 +252,17 @@ goto_return:
 
 #define foreach(__element_name__, __array__) for (auto __element_name__ = &__array__[0]; __element_name__ < 1[&__array__]; ++__element_name__)
 
-static inline uint32_t RandFast () {
-    static uint32_t r = 1;
+static inline u32 RandFast () {
+    static u32 r = 1;
 	r ^= r << 13;
 	r ^= r >> 17;
 	r ^= r << 5;
 	return r;
 }
 
-static inline float RandFastf () { return (float)RandFast() / (float)UINT32_MAX; }
+static inline f32 RandFastf () { return (f32)RandFast() / (f32)UINT32_MAX; }
 
-static inline int32_t RandFast_Range (int32_t from, int32_t to) {
+static inline i32 RandFast_Range (i32 from, i32 to) {
     if (from > to) SWAP (from, to);
-    return (int32_t)(RandFastf() * (to - from) + from);
+    return (i32)(RandFastf() * (to - from) + from);
 }

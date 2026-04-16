@@ -86,7 +86,7 @@ explorer_OpenSubDirectory_return_t explorer_ReloadDirectory (explorer_t *explore
 		explorer->filenames[explorer->file_count] = &explorer->filenames[explorer->file_count-1][strlen(explorer->filenames[explorer->file_count-1])+1];
         if (explorer->is_folder[explorer->file_count-1]) ++explorer->filenames[explorer->file_count];
 		if ((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + (explorer->folder.is_folder ? 1 : 0)) - explorer->filename_data > MENU_EXPLORER_FILENAME_BYTES) {
-            LOG ("explorer filename [%s] is too long [%"PRId64"] > [%d]", explorer->folder.name, (int64_t)((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + 1) - explorer->filename_data), MENU_EXPLORER_FILENAME_BYTES);
+            LOG ("explorer filename [%s] is too long [%"PRId64"] > [%d]", explorer->folder.name, (i64)((explorer->filenames[explorer->file_count] + strlen (explorer->folder.name) + 1) - explorer->filename_data), MENU_EXPLORER_FILENAME_BYTES);
 			out_of_characters = true;
 			break;
 		}

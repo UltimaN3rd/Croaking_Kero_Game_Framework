@@ -22,11 +22,11 @@
 #include "c23defs.h"
 
 typedef struct {
-    float peak;
-    float attack;
-    float decay;
-    float sustain;
-    float release;
+    f32 peak;
+    f32 attack;
+    f32 decay;
+    f32 sustain;
+    f32 release;
 } ADSRf_t;
 
 ADSR_t ADSRf_to_ADSR (ADSRf_t in);
@@ -36,15 +36,15 @@ void *Sound(void*);
 typedef struct SoundFXPlay_args SoundFXPlay_args;
 struct SoundFXPlay_args {
     sound_waveform_e waveform;
-    uint16_t frequency;
-    float duration_seconds;
-    int32_t duration_samples;
-    float volume;
+    u16 frequency;
+    f32 duration_seconds;
+    i32 duration_samples;
+    f32 volume;
     ADSRf_t ADSR;
-    int16_t sweep;
+    i16 sweep;
     vibrato_t vibrato;
-    int8_t square_duty_cycle;
-    int16_t square_duty_cycle_sweep;
+    i8 square_duty_cycle;
+    i16 square_duty_cycle_sweep;
     const sound_t *next;
 };
 #define SoundFXPlay_args_default .frequency = 500, .volume = 1.0, .ADSR = {.peak = 1, .sustain = .75, .attack = .005, .decay = .002, .release = .005}
@@ -57,7 +57,7 @@ sound_t SoundGenerate_ (SoundFXPlay_args args);
 void SoundFXPlayDirect (const sound_t sound);
 
 // Returns a bit field of which channels were used to play the sound group
-uint32_t SoundFXPlayGroup (const sound_group_t *sounds);
+u32 SoundFXPlayGroup (const sound_group_t *sounds);
 
 void SoundStopChannel (int channel);
 
@@ -67,11 +67,11 @@ void SoundMusicPlay (const sound_music_t *music);
 
 void SoundMusicStop ();
 void SoundMusicResume ();
-void SoundMusicSetVolume (float volume_0_to_1);
-float SoundMusicGetVolume ();
+void SoundMusicSetVolume (f32 volume_0_to_1);
+f32 SoundMusicGetVolume ();
 void SoundFXStop ();
-void SoundFXSetVolume (float volume_0_to_1);
-float SoundFXGetVolume ();
+void SoundFXSetVolume (f32 volume_0_to_1);
+f32 SoundFXGetVolume ();
 
 void SoundStopAll ();
 
@@ -83,8 +83,8 @@ typedef struct {
 extern sound_extern_t sound_extern_data;
 
 typedef struct {
-    uint16_t sent;
-    uint8_t signals[256]; // Ring buffer
+    u16 sent;
+    u8 signals[256]; // Ring buffer
 } sound_signals_t;
 
 void SoundFXPlayPrepared ();

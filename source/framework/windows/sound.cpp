@@ -14,7 +14,7 @@ static IXAudio2* xaudio = nullptr;
 static IXAudio2MasteringVoice* xaudio_master_voice = nullptr;
 static IXAudio2SourceVoice* xaudio_source_voice = nullptr;
 static XAUDIO2_BUFFER xaudio_buffers[2];
-static float audio_buffers[2][PERIOD_SIZE] = {};
+static f32 audio_buffers[2][PERIOD_SIZE] = {};
 
 static bool restart_audio = true;
 
@@ -34,7 +34,7 @@ const char *HResultToStr (HRESULT result) {
 class VoiceCallback : public IXAudio2VoiceCallback {
 public:
     void OnBufferEnd(void* pBufferContext) override {
-        memcpy (&audio_buffers[sample_buffer_swap], &sample_buffer[sample_buffer_swap].samples, PERIOD_SIZE * sizeof (float));
+        memcpy (&audio_buffers[sample_buffer_swap], &sample_buffer[sample_buffer_swap].samples, PERIOD_SIZE * sizeof (f32));
         xaudio_source_voice->SubmitSourceBuffer (&xaudio_buffers[sample_buffer_swap], nullptr);
         RefillSampleBuffer ();
     }
@@ -67,9 +67,9 @@ const WAVEFORMATEX wave_format = {
     .wFormatTag = WAVE_FORMAT_IEEE_FLOAT,
     .nChannels = 1,
     .nSamplesPerSec = SAMPLING_RATE,
-    .nAvgBytesPerSec = SAMPLING_RATE * sizeof (float),
-    .nBlockAlign = sizeof (float),
-    .wBitsPerSample = sizeof (float) * 8,
+    .nAvgBytesPerSec = SAMPLING_RATE * sizeof (f32),
+    .nBlockAlign = sizeof (f32),
+    .wBitsPerSample = sizeof (f32) * 8,
     .cbSize = 0
 };
 
@@ -108,7 +108,7 @@ void *Sound (void *data_void) {
         xaudio_source_voice->Start(0, XAUDIO2_COMMIT_NOW);
 
         memset (audio_buffers, 0, sizeof (audio_buffers));
-        xaudio_buffers[0].AudioBytes = xaudio_buffers[1].AudioBytes = sizeof(float) * PERIOD_SIZE;
+        xaudio_buffers[0].AudioBytes = xaudio_buffers[1].AudioBytes = sizeof(f32) * PERIOD_SIZE;
         xaudio_buffers[0].pAudioData = (const BYTE*)&audio_buffers[0];
         xaudio_buffers[1].pAudioData = (const BYTE*)&audio_buffers[1];
 

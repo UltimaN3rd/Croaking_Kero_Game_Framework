@@ -55,12 +55,12 @@ typedef struct {
 typedef struct {
 	zen_timer_t timer;
 	int current;
-	int64_t splits[SPLIT_TIMER_MAX];
+	i64 splits[SPLIT_TIMER_MAX];
 	char names[SPLIT_TIMER_MAX][64];
 } zen_split_timer_t;
 
 static struct {
-	int64_t ticks_per_microsecond;
+	i64 ticks_per_microsecond;
 } zen_internal = {
 	.ticks_per_microsecond = 1
 };
@@ -78,7 +78,7 @@ static inline  zen_timer_t zen_Start () {
 }
 
 // Returns time in microseconds since the timer was Start()ed. Doesn't actually "end" the timer - just checks the current time and compares to the start time. So you could call this function multiple times with the same timer to continue getting the time since the timer started.
-static inline int64_t  zen_End (zen_timer_t *timer) {
+static inline i64  zen_End (zen_timer_t *timer) {
 	QueryPerformanceCounter(&timer->end);
 	return (timer->end.QuadPart - timer->start.QuadPart) / zen_internal.ticks_per_microsecond;
 }
@@ -127,7 +127,7 @@ static inline void zen_SplitPrintAll (zen_split_timer_t *timer) {
 #include <time.h>
 
 typedef struct {
-	int64_t start, end;
+	i64 start, end;
 } zen_timer_t;
 
 #define SPLIT_TIMER_MAX 64
@@ -135,7 +135,7 @@ typedef struct {
 
 typedef struct {
 	zen_timer_t timer;
-	int64_t splits[SPLIT_TIMER_MAX];
+	i64 splits[SPLIT_TIMER_MAX];
 	char names[SPLIT_TIMER_MAX][64];
 	int current;
 } zen_split_timer_t;
@@ -152,7 +152,7 @@ static inline  zen_timer_t zen_Start () {
 }
 
 // Returns time in microseconds since the timer was Start()ed. Doesn't actually "end" the timer - just checks the current time and compares to the start time. So you could call this function multiple times with the same timer to continue getting the time since the timer started.
-static inline int64_t  zen_End (zen_timer_t *timer) {
+static inline i64  zen_End (zen_timer_t *timer) {
 	struct timespec time;
 	clock_gettime (CLOCK_MONOTONIC, &time);
 	timer->end = (time.tv_sec * 1000000000   +   time.tv_nsec) / 1000;
@@ -202,7 +202,7 @@ static inline void zen_SplitPrintAll (zen_split_timer_t *timer) {
 #include <time.h>
 
 typedef struct {
-	int64_t start, end;
+	i64 start, end;
 } zen_timer_t;
 
 #define SPLIT_TIMER_MAX 64
@@ -210,7 +210,7 @@ typedef struct {
 
 typedef struct {
 	zen_timer_t timer;
-	int64_t splits[SPLIT_TIMER_MAX];
+	i64 splits[SPLIT_TIMER_MAX];
 	char names[SPLIT_TIMER_MAX][64];
 	int current;
 } zen_split_timer_t;
@@ -227,7 +227,7 @@ static inline  zen_timer_t zen_Start () {
 }
 
 // Returns time in microseconds since the timer was Start()ed. Doesn't actually "end" the timer - just checks the current time and compares to the start time. So you could call this function multiple times with the same timer to continue getting the time since the timer started.
-static inline int64_t  zen_End (zen_timer_t *timer) {
+static inline i64  zen_End (zen_timer_t *timer) {
 	struct timespec time;
 	clock_gettime (CLOCK_MONOTONIC, &time);
 	timer->end = (time.tv_sec * 1000000000   +   time.tv_nsec) / 1000;

@@ -41,7 +41,7 @@
 
 bool LoadCursor (const char *const folder, const char *const codename);
 
-uint8_t palette[256][3];
+u8 palette[256][3];
 
 FILE *phil, *header;
 
@@ -50,7 +50,7 @@ char current_directory[2048] = "";
 typedef struct {
 	union { int width,  w; };
 	union { int height, h; };
-	uint8_t *p;
+	u8 *p;
 } resources_sprite_t;
 
 #define BITMAP_FONT_FIRST_VISIBLE_CHAR 33
@@ -60,10 +60,10 @@ typedef struct {
 typedef struct {
     int line_height;
     int space_width;
-    uint8_t baseline;
-    uint8_t *pixels;
+    u8 baseline;
+    u8 *pixels;
     struct {int w, h, offset;} bitmaps[BITMAP_FONT_NUM_VISIBLE_CHARS];
-    int8_t descent[BITMAP_FONT_NUM_VISIBLE_CHARS];
+    i8 descent[BITMAP_FONT_NUM_VISIBLE_CHARS];
 } resources_font_t;
 
 static bool LoadMusic (const char *filename);
@@ -97,32 +97,32 @@ const char *const waveform_to_string[] = { [sound_waveform_none] = "sound_wavefo
 typedef struct {
 	V1_waveform_e waveform;
 	ADSRf_t ADSR;
-    int16_t sweep;
+    i16 sweep;
     vibrato_t vibrato;
-    uint32_t placeholder_color;
-    int8_t square_duty_cycle, square_duty_cycle_sweep;
+    u32 placeholder_color;
+    i8 square_duty_cycle, square_duty_cycle_sweep;
     char name[32];
 } V1_instrument_t;
 
 typedef struct {
-    uint8_t note;
-    uint8_t eighths;
-    uint8_t instrument_override;
+    u8 note;
+    u8 eighths;
+    u8 instrument_override;
     bool lead_in, lead_out;
 } V1_beat_t;
 
 typedef struct {
     bool in_use;
     char name[17];
-    uint32_t color;
+    u32 color;
     V1_beat_t beats[V1_EIGHTHS_PER_PATTERN_MAX];
 } V1_pattern_t;
 
 typedef struct {
-    uint8_t pattern_current;
-    uint8_t instrument;
-    uint8_t volume;
-    uint8_t patterns[V1_PATTERNS_PER_TRACK];
+    u8 pattern_current;
+    u8 instrument;
+    u8 volume;
+    u8 patterns[V1_PATTERNS_PER_TRACK];
 } V2_track_t;
 
 typedef struct {
@@ -133,22 +133,22 @@ typedef struct {
 
     // Pattern 0 is invalid
     struct {
-        uint16_t count;
-        uint8_t eighths_per;
+        u16 count;
+        u8 eighths_per;
         V1_pattern_t pattern[256];
     } patterns;
 
     // Instrument 0 is invalid
     struct {
-        uint16_t count;
-        uint8_t current;
+        u16 count;
+        u8 current;
         V1_instrument_t instrument[256];
     } instruments;
 
     struct {
         int BPM;
-        uint8_t pattern_eighths_per_column[256];
-        uint8_t pattern_column_current;
+        u8 pattern_eighths_per_column[256];
+        u8 pattern_column_current;
         int note_width;
         int note_offset;
         int loop_point;
@@ -160,15 +160,15 @@ constexpr int TRACK_COUNT = sizeof(music_data.tracks.track) / sizeof(*music_data
 
 bool track_is_used[TRACK_COUNT] = {};
 
-uint8_t music_track_count = 0;
+u8 music_track_count = 0;
 
 #define EIGHTHS_PER_PATTERN_MAX 64
 #define PATTERNS_PER_TRACK 128
 #define BPM_DEFAULT 80
 #define EIGHTHS_PER_PATTERN_DEFAULT 32
-static float SPB = 1.f / ((float)BPM_DEFAULT / 60);
-static float SP8th = (1.f / ((float)BPM_DEFAULT / 60)) / 8.f;// SPB / 8.f;
-static int32_t samples_per_beat = 48000 / (BPM_DEFAULT * 8 / 60);
+static f32 SPB = 1.f / ((f32)BPM_DEFAULT / 60);
+static f32 SP8th = (1.f / ((f32)BPM_DEFAULT / 60)) / 8.f;// SPB / 8.f;
+static i32 samples_per_beat = 48000 / (BPM_DEFAULT * 8 / 60);
 // Size large enough for every single beat of every pattern of every track to be occupied
 sound_t prepared_sounds[TRACK_COUNT][PATTERNS_PER_TRACK][EIGHTHS_PER_PATTERN_MAX];
 typedef enum { waveform_sine, waveform_triangle, waveform_saw, waveform_square, waveform_noise } waveform_e;
@@ -209,7 +209,7 @@ void ExploreFolder(const char *directory) {
 				assert(snprintf(&codename[len], sizeof(codename) - len, "%s",
 								folder.name) == strlen(folder.name));
 				for (int i = 0; i < BITMAP_FONT_NUM_VISIBLE_CHARS; ++i) {
-					fprintf (phil, "const sprite_t %s_bitmap_%d={.w=%d,.h=%d,.p=(uint8_t[]){", codename, i, font.bitmaps[i].w, font.bitmaps[i].h);
+					fprintf (phil, "const sprite_t %s_bitmap_%d={.w=%d,.h=%d,.p=(u8[]){", codename, i, font.bitmaps[i].w, font.bitmaps[i].h);
 					for (int j = 0; j < font.bitmaps[i].w*font.bitmaps[i].h; ++j) {
 						fprintf (phil, "%d,", font.pixels[font.bitmaps[i].offset + j]);
 					}
@@ -268,27 +268,27 @@ void ExploreFolder(const char *directory) {
         if (StringCompareCaseInsensitive(folder.name, "palette.bmp") == 0) {
             printf ("Loading palette: %s%s\n", current_directory, folder.name);
 
-            fputs("const uint8_t palette[256][3] = {", phil);
+            fputs("const u8 palette[256][3] = {", phil);
 
-            typedef struct __attribute((__packed__)) {
-                struct __attribute((__packed__)) {
+            typedef struct [[gnu::packed]] {
+                struct [[gnu::packed]] {
                     char magic[2];
-                    uint32_t file_size;
-                    uint32_t filler;
-                    uint32_t image_data_address;
+                    u32 file_size;
+                    u32 filler;
+                    u32 image_data_address;
                 } file;
-                struct __attribute((__packed__)) {
-                    uint32_t header_size;
-                    int32_t width;
-                    int32_t height;
-                    uint16_t color_planes;
-                    uint16_t bits_per_pixel;
-                    uint32_t compression;
-                    uint32_t compressed_size;
-                    uint32_t pixels_per_m_horizontal;
-                    uint32_t pixels_per_m_vertical;
-                    uint32_t colors_used;
-                    uint32_t important_colors;
+                struct [[gnu::packed]] {
+                    u32 header_size;
+                    i32 width;
+                    i32 height;
+                    u16 color_planes;
+                    u16 bits_per_pixel;
+                    u32 compression;
+                    u32 compressed_size;
+                    u32 pixels_per_m_horizontal;
+                    u32 pixels_per_m_vertical;
+                    u32 colors_used;
+                    u32 important_colors;
                 } info;
             } bmp_header_t;
             assert (sizeof (bmp_header_t) == 54);
@@ -303,7 +303,7 @@ void ExploreFolder(const char *directory) {
             }
 
             for (int i = 0; i < 256; ++i) {
-                uint8_t bgr[3];
+                u8 bgr[3];
                 fread (bgr, sizeof (bgr), 1, palettebmp);
                 fprintf (phil, "{%u,%u,%u},", bgr[2], bgr[1], bgr[0]);
                 fgetc (palettebmp);
@@ -315,7 +315,7 @@ void ExploreFolder(const char *directory) {
 			printf("Loading bmp: %s%s\n", current_directory, folder.name);
 			resources_sprite_t spr = sprite_LoadBMP(folder.name);
 			fprintf (header, "extern const sprite_t %s;\n", codename);
-			fprintf(phil, "const sprite_t %s = {.w = %u, .h = %u, .p = (uint8_t[]){",
+			fprintf(phil, "const sprite_t %s = {.w = %u, .h = %u, .p = (u8[]){",
 					codename, spr.w, spr.h);
 			for (int i = 0; i < spr.w * spr.h; ++i) {
 				fprintf(phil, "%u,", spr.p[i]);
@@ -327,11 +327,11 @@ void ExploreFolder(const char *directory) {
 			printf("Loading ktune: %s%s\n", current_directory, folder.name);
 			if (LoadMusic (folder.name)) {
                 fprintf (header, "extern const sound_music_t %s;\n", codename);
-                for (uint8_t track = 0; track < TRACK_COUNT; ++track) {
+                for (u8 track = 0; track < TRACK_COUNT; ++track) {
                     if (!track_is_used[track]) continue;
                     fprintf (phil, "const sound_t %s_sounds_%"PRIu8"[] = {", codename, track);
                     const sound_t *sound = &prepared_sounds[track][0][0];
-                    uint64_t nextindex = 0;
+                    u64 nextindex = 0;
                     do { // Loop through every sound until ->next == NULL (last sound of track) or it's an earlier sound, meaning it loops at that point
                         ++nextindex;
                         if (sound->next < sound) {
@@ -348,7 +348,7 @@ void ExploreFolder(const char *directory) {
                     fprintf (phil, "};\n");
                 }
                 fprintf (phil,   "const sound_music_t %s = {%"PRIu8",{", codename, music_track_count);
-                for (uint8_t track = 0; track < TRACK_COUNT; ++track) {
+                for (u8 track = 0; track < TRACK_COUNT; ++track) {
                     if (!track_is_used[track]) continue;
                     fprintf (phil, "%s_sounds_%"PRIu8"," , codename, track);
                 }
@@ -435,15 +435,15 @@ int main(int argc, char **argv) {
 resources_sprite_t sprite_LoadBMP (const char *filename) {
 	assert (filename != NULL);
 
-	struct {
+	struct [[gnu::packed]] {
 		char BM[2];
-		uint32_t size, reserved, data_address, header_size;
-		int32_t width, height;
-		uint16_t color_planes;
-		uint16_t bit_depth;
-	} __attribute__((__packed__)) header;
+		u32 size, reserved, data_address, header_size;
+		i32 width, height;
+		u16 color_planes;
+		u16 bit_depth;
+	} header;
 
-	uint32_t pixel_count;
+	u32 pixel_count;
 
 	FILE* file = fopen(filename, "rb");
 	assert (file);
@@ -457,13 +457,13 @@ resources_sprite_t sprite_LoadBMP (const char *filename) {
 
 	assert (fseek(file, header.data_address, SEEK_SET) == 0);
 
-	uint8_t *pixels = malloc(required_memory);
+	u8 *pixels = malloc(required_memory);
 	assert (pixels);
 
 	int padding_per_line = 4 - header.width % 4;
 	if (padding_per_line == 4) padding_per_line = 0;
 	for (int y = 0; y < header.height; ++y) {
-		uint32_t pixels_read = fread(&pixels[y * header.width], 1, header.width, file);
+		u32 pixels_read = fread(&pixels[y * header.width], 1, header.width, file);
 		assert (pixels_read == header.width);
 		assert (fseek (file, padding_per_line, SEEK_CUR) == 0);
 	}
@@ -506,7 +506,7 @@ bool font_Load (resources_font_t *font, char *directory) {
     width = bitmap.width / 10;
     height = bitmap.height / 10;
     font->space_width = width/2; font->line_height = height + 4; // Just defaults in case they aren't set inside properties.txt
-    font->pixels = (uint8_t*) malloc (width * height * BITMAP_FONT_NUM_VISIBLE_CHARS);
+    font->pixels = (u8*) malloc (width * height * BITMAP_FONT_NUM_VISIBLE_CHARS);
     assert (font->pixels);
     
     int x, y;
@@ -571,7 +571,7 @@ bool font_Load (resources_font_t *font, char *directory) {
 
     free (bitmap.p);
 
-    font->pixels = (uint8_t*)realloc (font->pixels, cumulative_pixels);
+    font->pixels = (u8*)realloc (font->pixels, cumulative_pixels);
 
     sprintf (filename, "%sproperties.txt", directory_fixed);
 
@@ -648,8 +648,8 @@ static void BPM_Change (int amount) {
 	if (amount > 0) music_data.properties.BPM = MIN (200, music_data.properties.BPM+1);
 	else if (amount < 0) music_data.properties.BPM = MAX (20, music_data.properties.BPM-1);
 	// else if amount == 0 do nothing
-	SPB = 1.f / ((float)music_data.properties.BPM / 60);
-	SP8th = (1.f / ((float)music_data.properties.BPM / 60)) / 8.f;// SPB / 8.f;
+	SPB = 1.f / ((f32)music_data.properties.BPM / 60);
+	SP8th = (1.f / ((f32)music_data.properties.BPM / 60)) / 8.f;// SPB / 8.f;
     samples_per_beat = 48000 / (music_data.properties.BPM * 8 / 60);
 }
 
@@ -663,7 +663,7 @@ sound_t SoundGenerate_(SoundFXPlay_args args) {
     if (args.waveform == sound_waveform_none) return (sound_t){};
     args.ADSR.peak *= args.volume;
     args.ADSR.sustain *= args.volume;
-    uint32_t duration = args.duration_samples;
+    u32 duration = args.duration_samples;
     if (duration == 0) duration = args.duration_seconds * SAMPLING_RATE;
     sound_t sound = {
         .waveform = args.waveform,
@@ -682,7 +682,7 @@ sound_t SoundGenerate_(SoundFXPlay_args args) {
     // }
     int duration_ADSR = sound.ADSR.attack + sound.ADSR.decay + sound.ADSR.release;
     if (sound.duration < duration_ADSR) { // There isn't enough time for the full envelope, even with 0 sustain. Get ratio of envelope and apply to the reduced duration
-        float total = args.ADSR.attack + args.ADSR.decay + args.ADSR.release;
+        f32 total = args.ADSR.attack + args.ADSR.decay + args.ADSR.release;
         sound.ADSR.attack = (args.ADSR.attack / total) * sound.duration;
         sound.ADSR.release = (args.ADSR.release / total) * sound.duration;
         sound.ADSR.decay = sound.duration - sound.ADSR.attack - sound.ADSR.release;
@@ -690,14 +690,14 @@ sound_t SoundGenerate_(SoundFXPlay_args args) {
     return sound;
 }
 
-static void PrepareTrackPattern (uint8_t track, uint8_t pattern) {
+static void PrepareTrackPattern (u8 track, u8 pattern) {
     track_is_used[track] = true;
     auto t = &music_data.tracks.track[track];
     auto pi = t->patterns[pattern];
     if (pi == 0) return;
     auto p = &music_data.patterns.pattern[pi];
     auto ti = &music_data.instruments.instrument[t->instrument];
-    uint8_t pattern_width = music_data.properties.pattern_eighths_per_column[pattern] ? music_data.properties.pattern_eighths_per_column[pattern] : music_data.patterns.eighths_per;
+    u8 pattern_width = music_data.properties.pattern_eighths_per_column[pattern] ? music_data.properties.pattern_eighths_per_column[pattern] : music_data.patterns.eighths_per;
     for (int beat = 0; beat < pattern_width; ++beat) {
         auto b = &p->beats[beat];
         sound_t *nextsound;
@@ -710,7 +710,7 @@ static void PrepareTrackPattern (uint8_t track, uint8_t pattern) {
             ADSRf_t ADSR = i->ADSR;
             if (b->lead_in) ADSR.attack = ADSR.decay = 0;
             if (b->lead_out) ADSR.release = 0;
-            uint8_t beat_width = b->eighths;
+            u8 beat_width = b->eighths;
             if (beat + b->eighths > pattern_width)
                 beat_width = pattern_width - beat;
             if (beat + b->eighths < pattern_width) nextsound = &prepared_sounds[track][pattern][beat + beat_width];
@@ -723,7 +723,7 @@ static void PrepareTrackPattern (uint8_t track, uint8_t pattern) {
     }
 }
 
-static void PrepareTrack (uint8_t track) {
+static void PrepareTrack (u8 track) {
     track_is_used[track] = false;
     auto t = &music_data.tracks.track[track];
     for (int i = 0; i < PATTERNS_PER_TRACK; ++i) {
@@ -748,7 +748,7 @@ static bool LoadMusic (const char *filename) {
     defer { fclose (file); }
     struct {
         char magic[14];
-        uint32_t version;
+        u32 version;
     } file_identifier;
     if (fread (&file_identifier, sizeof (file_identifier), 1, file) != 1) return false;
     if (strcmp (file_identifier.magic, "Kero Chiptune") != 0) return false;
@@ -886,7 +886,7 @@ bool LoadCursor (const char *const folder, const char *const codename) {
     }
 
     fprintf (header, "extern const cursor_t %s;\n", codename);
-    fprintf (phil, "const cursor_t %s = {.offset = {.x = %d, .y = %d}, .sprite = &(sprite_t){.w = %d, .h = %d, .p = (uint8_t[]){", codename, cursor.x, cursor.y, sprite.w, sprite.h);
+    fprintf (phil, "const cursor_t %s = {.offset = {.x = %d, .y = %d}, .sprite = &(sprite_t){.w = %d, .h = %d, .p = (u8[]){", codename, cursor.x, cursor.y, sprite.w, sprite.h);
     for (int i = 0; i < sprite.w * sprite.h; ++i) {
         fprintf (phil, "%d,", sprite.p[i]);
     }

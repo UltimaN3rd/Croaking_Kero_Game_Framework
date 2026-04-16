@@ -44,7 +44,7 @@ void Render_Camera (int x, int y) {
 	render_state_being_edited->camera.y = y;
 }
 
-static uint64_t random_state;
+static u64 random_state;
 void Render_ScreenShake (int x, int y) {
 	if (x) render_state_being_edited->camera.x += DiscreteRandom_Range(&random_state, -x, x);
 	if (y) render_state_being_edited->camera.y += DiscreteRandom_Range(&random_state, -y, y);
@@ -66,11 +66,12 @@ void Render_Sprite_ (Render_Sprite_arguments arguments) {
 			.rotation = arguments.rotation,
 			.originx = arguments.sprite_flags.center_horizontally ? arguments.sprite->w/2 : (arguments.sprite_flags.flip_horizontally ? arguments.sprite->w-1 - arguments.originx : arguments.originx),
 			.originy = arguments.sprite_flags.center_vertically ? arguments.sprite->h/2 : (arguments.sprite_flags.flip_vertically ? arguments.sprite->h-1 - arguments.originy : arguments.originy),
+			.color_swap_palette = arguments.color_swap_palette,
 		}
 	};
 }
 
-void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments) {
+void Render_SpriteSilhouette_ (u8 color, Render_Sprite_arguments arguments) {
 	if (arguments.sprite == NULL) return;
 	if (render_state_being_edited->element_count >= RENDER_MAX_ELEMENTS) return;
 	const auto count = render_state_being_edited->element_count++;
@@ -117,7 +118,7 @@ void Render_Shape_ (Render_Shape_arguments arguments) {
 	};
 }
 
-static uint16_t Render_AllocInState (uint16_t bytes) {
+static u16 Render_AllocInState (u16 bytes) {
 	assert (render_state_being_edited->mem.position < RENDER_STATE_MEM_AMOUNT - bytes);
 	if (render_state_being_edited->mem.position >= RENDER_STATE_MEM_AMOUNT - bytes) return RENDER_STATE_MEM_AMOUNT;
 	auto pos = render_state_being_edited->mem.position;
@@ -173,10 +174,10 @@ void Render_Text_ (Render_Text_arguments arguments) {
 	}
 
 	if (arguments.translucent_background_darkness) {
-		const int16_t l = arguments.x-1;
-		const int16_t r = l + dimensions.w+1;
-		const int16_t t = arguments.y-2;
-		const int16_t b = t - dimensions.h+1;
+		const i16 l = arguments.x-1;
+		const i16 r = l + dimensions.w+1;
+		const i16 t = arguments.y-2;
+		const i16 b = t - dimensions.h+1;
 		Render_DarkenRectangle(.l = l, .b = b, .r = r, .t = t, .levels = arguments.translucent_background_darkness, .depth = arguments.depth);
 	}
 }
@@ -185,7 +186,7 @@ void Render_Background_ (Render_Background_arguments background) {
 	render_state_being_edited->background = background;
 }
 
-void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera) {
+void Render_Particle (int x, int y, u8 pixel, bool ignore_camera) {
 	if (render_state_being_edited->particles.count >= PARTICLES_MAX) return;
 	if (!ignore_camera) {
 		x -= render_state_being_edited->camera.x;
@@ -251,9 +252,9 @@ render_state_t *Render_GetCurrentEditableState () {
 
 void Render_SelectStateToEdit () {
 	// Select oldest non-busy render state to replace
-	static uint64_t state_count = 0;
+	static u64 state_count = 0;
 	int found = -1;
-	uint64_t lowest_state_count = -1;
+	u64 lowest_state_count = -1;
 
 	pthread_mutex_lock (&update_render_swap_state_mutex);
 	for(int i = 0; i < 3; ++i) {
@@ -290,18 +291,18 @@ static inline void DrawBackground (render_state_t *render_state) {
 		case background_type_none: break;
 
 		case background_type_blank: {
-			uint8_t *p = frame->p;
+			u8 *p = frame->p;
 			int c = frame->w * frame->h;
-			uint8_t b = render_state->background.blank.color;
+			u8 b = render_state->background.blank.color;
 			repeat (c) *p++ = b;
 		} break;
 
 		case background_type_stripes: {
-			uint8_t colors[2] = {render_state->background.stripes.color, render_state->background.stripes.color/2};
+			u8 colors[2] = {render_state->background.stripes.color, render_state->background.stripes.color/2};
 			bool color_index = 0;
-			uint8_t color = colors[color_index];
-			uint8_t *p = frame->p;
-			float angle = render_state->background.stripes.angle;
+			u8 color = colors[color_index];
+			u8 *p = frame->p;
+			f32 angle = render_state->background.stripes.angle;
 			angle -= (int)angle;
 			angle = fabs (angle);
 			if (angle == 0 || angle == 0.5f) {// Flat horizontal line
@@ -340,9 +341,9 @@ static inline void DrawBackground (render_state_t *render_state) {
 			}
 			else {
 				// This is fricked
-				float slope = tanf (render_state->background.stripes.angle * TWOPI);
-				float x_per_y = 1.f / slope;
-				// float slopex = 0;
+				f32 slope = tanf (render_state->background.stripes.angle * TWOPI);
+				f32 x_per_y = 1.f / slope;
+				// f32 slopex = 0;
 				int width = frame->w;
 				// int height = frame->h;
 				int stripe_width = render_state->background.stripes.width;
@@ -371,13 +372,13 @@ static inline void DrawBackground (render_state_t *render_state) {
 		case background_type_checkers: {
 			int height = frame->h;
 			int width = frame->w;
-			uint8_t *p = frame->p;
+			u8 *p = frame->p;
 			int checker_width = render_state->background.checkers.width;
 			int checker_height = render_state->background.checkers.height;
 			assert (checker_height);
-			uint8_t colors[2] = {render_state->background.checkers.color, render_state->background.checkers.color/2};
+			u8 colors[2] = {render_state->background.checkers.color, render_state->background.checkers.color/2};
 			bool color_index = 0;
-			uint8_t color = colors[color_index];
+			u8 color = colors[color_index];
 			int y = 0;
 			int offsetx = render_state->background.checkers.x;
 			color_index = (offsetx / checker_width) % 2;
@@ -435,22 +436,45 @@ static inline void DrawSprite (render_state_element_t element) {
 		s.flags.rotation_by_quarters = 0;
 		// s.rotation = 0;
 	}
-	if (s.rotation != 0) {
-		sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
+	
+	if (s.color_swap_palette) {
+		if (s.rotation != 0) {
+			sprite_SampleColorSwapRotatedFlipped (s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically, *s.color_swap_palette);
+		}
+		else {
+			switch (flip) {
+				case flip_none: {
+					switch (s.flags.rotation_by_quarters) {
+						case 0: sprite_BlitColorSwap (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, *s.color_swap_palette); break;
+						case 1: sprite_BlitColorSwapRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy, *s.color_swap_palette); break;
+						case 2: sprite_BlitColorSwapRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy, *s.color_swap_palette); break;
+						case 3: sprite_BlitColorSwapRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy, *s.color_swap_palette); break;
+					}
+				} break;
+				case flip_both: sprite_BlitColorSwapRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy, *s.color_swap_palette); break;
+				case flip_hori: sprite_BlitColorSwapFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, *s.color_swap_palette); break;
+				case flip_vert: sprite_BlitColorSwapFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy, *s.color_swap_palette); break;
+			}
+		}
 	}
 	else {
-		switch (flip) {
-			case flip_none: {
-				switch (s.flags.rotation_by_quarters) {
-					case 0: sprite_Blit (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
-					case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy); break;
-					case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
-					case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
-				}
-			} break;
-			case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
-			case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
-			case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+		if (s.rotation != 0) {
+			sprite_SampleRotatedFlipped(s.sprite, frame, s.position.x, s.position.y, s.rotation, s.originx, s.originy, s.flags.flip_horizontally, s.flags.flip_vertically);
+		}
+		else {
+			switch (flip) {
+				case flip_none: {
+					switch (s.flags.rotation_by_quarters) {
+						case 0: sprite_Blit (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+						case 1: sprite_BlitRotated90 (s.sprite, frame, s.position.x,s.position.y, s.originx, s.originy); break;
+						case 2: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+						case 3: sprite_BlitRotated270 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+					}
+				} break;
+				case flip_both: sprite_BlitRotated180 (s.sprite, frame, s.position.x, s.position.y, s.originx, s.originy); break;
+				case flip_hori: sprite_BlitFlippedHorizontally (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+				case flip_vert: sprite_BlitFlippedVertically (s.sprite, frame, s.position.x - s.originx, s.position.y - s.originy); break;
+			}
 		}
 	}
 }
@@ -548,8 +572,8 @@ static inline void DrawRectangle (render_state_element_t element) {
 			frame->p[x + top * frame->w] = r.color_edge;
 }
 
-static inline void DrawCircle(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color) {
-	float d;
+static inline void DrawCircle(sprite_t *destination, int center_x, int center_y, f32 radius, u8 color) {
+	f32 d;
 	int x, y;
 	d = 3.f - (2.f*radius);
 	x = 0;
@@ -572,8 +596,8 @@ static inline void DrawCircle(sprite_t *destination, int center_x, int center_y,
 	#pragma pop_macro ("PXY")
 }
 
-static inline void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, float radius, uint8_t color) {
-	float d;
+static inline void DrawCircleFilled(sprite_t *destination, int center_x, int center_y, f32 radius, u8 color) {
+	f32 d;
 	int x, y;
 	d = 3.f - (2.f*radius);
 	x = 0;
@@ -596,14 +620,14 @@ static inline void DrawCircleFilled(sprite_t *destination, int center_x, int cen
 	}
 }
 
-static inline void DrawEllipse (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
-	int16_t l = center_x - radiusx,
+static inline void DrawEllipse (sprite_t *destination, int center_x, int center_y, f32 radiusx, f32 radiusy, u8 color) {
+	i16 l = center_x - radiusx,
 			r = center_x + radiusx,
 			b_ = center_y - radiusy,
 			t = center_y + radiusy;
-	int32_t a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
-	int32_t dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
-	int32_t err = dx+dy+b1*a*a, e2; /* error of 1.step */
+	i32 a = abs(r-l), b = abs(t-b_), b1 = b&1; /* values of diameter */
+	i32 dx = 4*(1-a)*b*b, dy = 4*(b1+1)*a*a; /* error increment */
+	i32 err = dx+dy+b1*a*a, e2; /* error of 1.step */
 
 	if (l > r) SWAP (l, r);
 	if (b_ > t) SWAP (b_, t);
@@ -633,7 +657,7 @@ static inline void DrawEllipse (sprite_t *destination, int center_x, int center_
 	#pragma pop_macro ("PXY")
 }
 
-static inline void DrawLineHorizontal (sprite_t *destination, int16_t l, int16_t r, int16_t y, uint8_t color) {
+static inline void DrawLineHorizontal (sprite_t *destination, i16 l, i16 r, i16 y, u8 color) {
 	if (y < 0 || color == 0 || y > destination->h-1) return;
 	if (l > r) SWAP (l, r);
 	if (l > destination->w-1 || r < 0) return;
@@ -642,8 +666,8 @@ static inline void DrawLineHorizontal (sprite_t *destination, int16_t l, int16_t
 	memset (&destination->p[l + y * destination->w], color, r - l + 1);
 }
 
-static inline void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, float radiusx, float radiusy, uint8_t color) {
-	int16_t l = center_x - radiusx,
+static inline void DrawEllipseFilled (sprite_t *destination, int center_x, int center_y, f32 radiusx, f32 radiusy, u8 color) {
+	i16 l = center_x - radiusx,
 			r = center_x + radiusx,
 			b_ = center_y - radiusy,
 			t = center_y + radiusy;
@@ -697,17 +721,17 @@ static inline void DrawLine (render_state_element_t element) {
 	if (l.x0 > frame->w-1 || l.x1 < 0 || bottom > frame->h-1 || top < 0) return; // line is completely outside the screen
 
 	if (l.x0 < 0) {
-		float width = l.x1 - l.x0;
+		f32 width = l.x1 - l.x0;
 		int height = l.y1 - l.y0;
-		float distance = -l.x0 / width;
+		f32 distance = -l.x0 / width;
 		l.y0 += height * distance;
 		l.x0 = 0;
 	}
 
 	if (l.x1 > frame->w-1) {
-		float width = l.x1 - l.x0;
+		f32 width = l.x1 - l.x0;
 		int height = l.y1 - l.y0;
-		float distance = (frame->w-1 - l.x1) / width;
+		f32 distance = (frame->w-1 - l.x1) / width;
 		l.y1 -= height * distance;
 		l.x1 = frame->w-1;
 	}
@@ -715,17 +739,17 @@ static inline void DrawLine (render_state_element_t element) {
 	if (l.y0 > l.y1) { SWAP (l.x0, l.x1); SWAP (l.y0, l.y1); }
 
 	if (l.y0 < 0) {
-		float width = l.x1 - l.x0;
-		float height = l.y1 - l.y0;
-		float distance = (float)-l.y0 / height;
+		f32 width = l.x1 - l.x0;
+		f32 height = l.y1 - l.y0;
+		f32 distance = (f32)-l.y0 / height;
 		l.x0 += width * distance;
 		l.y0 = 0;
 	}
 
 	if (l.y1 > frame->h-1) {
-		float width = l.x1 - l.x0;
-		float height = l.y1 - l.y0;
-		float distance = (float)(frame->h-1 - l.y1) / height;
+		f32 width = l.x1 - l.x0;
+		f32 height = l.y1 - l.y0;
+		f32 distance = (f32)(frame->h-1 - l.y1) / height;
 		l.x1 += width * distance;
 		l.y1 = frame->h-1;
 	}
@@ -815,9 +839,9 @@ static inline void DrawTriangle (render_state_element_t element) {
 		if (ps[1].y > ps[2].y) {
 			tri1[1] = ps[1];
 			tri1[2].y = tri1[1].y;
-			float dy = ps[2].y - ps[0].y;
-			float slope = (ps[2].x - ps[0].x) / dy;
-			float distance = (ps[1].y - ps[0].y) / dy;
+			f32 dy = ps[2].y - ps[0].y;
+			f32 slope = (ps[2].x - ps[0].x) / dy;
+			f32 distance = (ps[1].y - ps[0].y) / dy;
 			tri1[2].x = distance * (ps[2].x - ps[0].x) + ps[0].x;
 
 			tri2[0] = tri1[1];
@@ -827,9 +851,9 @@ static inline void DrawTriangle (render_state_element_t element) {
 		else {
 			tri1[1] = ps[2];
 			tri1[2].y = tri1[1].y;
-			float dy = ps[1].y - ps[0].y;
-			float slope = (ps[1].x - ps[0].x) / dy;
-			float distance = (ps[2].y - ps[0].y) / dy;
+			f32 dy = ps[1].y - ps[0].y;
+			f32 slope = (ps[1].x - ps[0].x) / dy;
+			f32 distance = (ps[2].y - ps[0].y) / dy;
 			tri1[2].x = distance * (ps[1].x - ps[0].x) + ps[0].x;
 
 			tri2[0] = tri1[1];
@@ -1046,7 +1070,7 @@ static inline void DrawShape (render_state_element_t element) {
 	}
 }
 
-static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const uint64_t frame_index) {
+static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, int left, int top, const char *text, const size_t length, const u64 frame_index) {
 	const char *const text_start = text;
     char c = *(text++);
     int i;
@@ -1056,10 +1080,10 @@ static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, 
 	// \cXX\ - Color: set color to XX (in hexadecimal). Use \c0\ to reset color. Color can be 1 or 2 digits in the hex range 0 - FF.
 	// \wABC\ - Sine wave: set wave to A pixels in height, B speed, C steepness (all single digit hex values 0-f). Use \w0\ to disable wave. C can be omitted to default to 3 steepness.
 	struct {
-		uint8_t colorize;
+		u8 colorize;
 		struct {
-			uint8_t height : 4, speed : 4, steepness : 4;
-			float offset; // Increased with each character within the wave
+			u8 height : 4, speed : 4, steepness : 4;
+			f32 offset; // Increased with each character within the wave
 		} wave;
 	} state = {};
 
@@ -1078,7 +1102,7 @@ static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, 
 			case '\\': { // Escape code
         		c = *(text++);
 
-				constexpr uint8_t hex2int[256] = { // Size 255 so that when accessed by an unsigned char, doesn't go out of range. All invalid values are 0
+				constexpr u8 hex2int[256] = { // Size 255 so that when accessed by an unsigned char, doesn't go out of range. All invalid values are 0
 					['0']=0, ['1']=1, ['2']=2, ['3']=3, ['4']=4, ['5']=5, ['6']=6, ['7']=7, ['8']=8, ['9']=9, ['a']=10, ['b']=11, ['c']=12, ['d']=13, ['e']=14, ['f']=15, ['A']=10, ['B']=11, ['C']=12, ['D']=13, ['E']=14, ['F']=15
 				};
 
@@ -1134,7 +1158,7 @@ static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, 
 
 								int yy = y + spr.y;
 								if (state.wave.height) {
-									yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
+									yy += (f32)(state.wave.height / 2.f) * sin_turns ((f32)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
 									state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
 								}
 
@@ -1172,7 +1196,7 @@ static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, 
 
                     int yy = y - font->descent[i];
 					if (state.wave.height) {
-						yy += (float)(state.wave.height / 2.f) * sin_turns ((float)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
+						yy += (f32)(state.wave.height / 2.f) * sin_turns ((f32)frame_index / (255 - state.wave.speed*16) + state.wave.offset) + 0.75f;
 						state.wave.offset -= (state.wave.steepness / 15.f) * .5f;
 					}
                     int right = x + font->bitmaps[i]->w-1;
@@ -1192,7 +1216,7 @@ static inline void DrawWrite_Length (const font_t *font, sprite_t *destination, 
     }
 }
 
-static inline void DrawWrite (const font_t *font, sprite_t *destination, int left, int top, const char *text, const uint64_t frame_index) {
+static inline void DrawWrite (const font_t *font, sprite_t *destination, int left, int top, const char *text, const u64 frame_index) {
 	DrawWrite_Length(font, destination, left, top, text, strlen (text), frame_index);
 }
 
@@ -1205,7 +1229,7 @@ static inline void DrawTexturedPoly (render_state_element_t element) {
 	}
 	
 	int top = 0;
-	int16_t boty = INT16_MAX;
+	i16 boty = INT16_MAX;
 	for (int i = 0; i < p.vertex_count; ++i) {
 		p.vertices[i].x += p.x;
 		p.vertices[i].y += p.y;
@@ -1216,17 +1240,17 @@ static inline void DrawTexturedPoly (render_state_element_t element) {
 	if (top < 0 || boty > frame->h-1) return;
 
 	// Find leftmost top, and rightmost top vertices
-	uint8_t l = top;
+	u8 l = top;
 	{
-		uint8_t ll = (l+1) % p.vertex_count;
+		u8 ll = (l+1) % p.vertex_count;
 		while (p.vertices[ll].y == p.vertices[l].y && p.vertices[ll].x <= p.vertices[l].x && ll != top) {
 			l = ll;
 			ll = (ll+1) % p.vertex_count;
 		}
 	}
-	uint8_t r = top;
+	u8 r = top;
 	{
-		uint8_t rr = r-1;
+		u8 rr = r-1;
 		if (-rr >= p.vertex_count) rr = p.vertex_count-1;
 		while (p.vertices[rr].y == p.vertices[r].y && p.vertices[rr].x >= p.vertices[r].x && rr != top) {
 			r = rr;
@@ -1234,16 +1258,16 @@ static inline void DrawTexturedPoly (render_state_element_t element) {
 		}
 	}
 
-	int16_t y = p.vertices[top].y;
+	i16 y = p.vertices[top].y;
 	while (y >= boty) {
-		float ld = 0, rd = 0;
-		uint8_t lnext = (l+1) % p.vertex_count;
+		f32 ld = 0, rd = 0;
+		u8 lnext = (l+1) % p.vertex_count;
 		if (p.vertices[lnext].y >= p.vertices[l].y) lnext = l;
-		else ld = MAX(0, MIN(1, (float)(y - p.vertices[l].y) / (p.vertices[lnext].y - p.vertices[l].y)));
-		uint8_t rnext = r-1;
+		else ld = MAX(0, MIN(1, (f32)(y - p.vertices[l].y) / (p.vertices[lnext].y - p.vertices[l].y)));
+		u8 rnext = r-1;
 		if (rnext >= p.vertex_count) rnext = p.vertex_count-1;
 		if (p.vertices[rnext].y >= p.vertices[r].y) rnext = r;
-		else rd = MAX(0, MIN(1, (float)(y - p.vertices[r].y) / (p.vertices[rnext].y - p.vertices[r].y)));
+		else rd = MAX(0, MIN(1, (f32)(y - p.vertices[r].y) / (p.vertices[rnext].y - p.vertices[r].y)));
 
 		const auto lv0 = p.vertices[l];
 		const auto lv1 = p.vertices[lnext];
@@ -1258,8 +1282,8 @@ static inline void DrawTexturedPoly (render_state_element_t element) {
 		}
 
 		const struct {
-			int16_t x;
-			float u, v;
+			i16 x;
+			f32 u, v;
 		}
 		left = {
 			(lv1.x - lv0.x) * ld + lv0.x + .5f,
@@ -1272,15 +1296,15 @@ static inline void DrawTexturedPoly (render_state_element_t element) {
 			(rv1.v - rv0.v) * rd + rv0.v,
 		};
 
-		int16_t drawl = MAX(0, left.x);
-		int16_t drawr = MIN(frame->w-1, right.x);
-		for (int16_t x = drawl; x <= drawr; ++x) {
-			int16_t w = right.x - left.x + 1;
-			float d = (float)(x - left.x) / w;
-			float u = MIN(1, MAX(0, (d * (right.u - left.u) + left.u)));
-			float v = MIN(1, MAX(0, (d * (right.v - left.v) + left.v)));
-			int16_t texu = u * (p.texture->w) + 0.5f;
-			int16_t texv = v * (p.texture->h-1) + 0.5f;
+		i16 drawl = MAX(0, left.x);
+		i16 drawr = MIN(frame->w-1, right.x);
+		for (i16 x = drawl; x <= drawr; ++x) {
+			i16 w = right.x - left.x + 1;
+			f32 d = (f32)(x - left.x) / w;
+			f32 u = MIN(1, MAX(0, (d * (right.u - left.u) + left.u)));
+			f32 v = MIN(1, MAX(0, (d * (right.v - left.v) + left.v)));
+			i16 texu = u * (p.texture->w) + 0.5f;
+			i16 texv = v * (p.texture->h-1) + 0.5f;
 			auto pixel = p.texture->p[texu + texv * p.texture->w];
 			frame->p[x + y * frame->w] = pixel;
 		}
@@ -1303,16 +1327,16 @@ void *Render (void*) {
 	LOG("Reported screen refresh rate: %d", screen_refresh);
 	if(screen_refresh < 59) screen_refresh = 60;
 
-	int64_t time_last, useconds_per_frame;
+	i64 time_last, useconds_per_frame;
 	time_last = os_uTime ();
 	useconds_per_frame = 1000000 / screen_refresh;
 	// LOG ("Microseconds per frame: %"PRId64"", useconds_per_frame);
 
 	frame = (render_data.frame[frame_select]);
 
-	int64_t sleep_time;
+	i64 sleep_time;
 
-	static uint64_t frame_index = 0;
+	static u64 frame_index = 0;
 
 	int i = 0;
 	do {
@@ -1335,13 +1359,13 @@ void *Render (void*) {
 		static bool show_fps = false, reset_fps = true;
 		int fps_this_frame = 0;
 		if (show_fps){
-			static int64_t last_time = 0;
+			static i64 last_time = 0;
 			const auto time = os_uTime ();
-			const int64_t delta = time - last_time;
+			const i64 delta = time - last_time;
 			last_time = time;
 			#define FPS_SAMPLES 30
-			static int64_t total_time = 0;
-			static int8_t sample_count = 0;
+			static i64 total_time = 0;
+			static i8 sample_count = 0;
 			if (reset_fps) {
 				reset_fps = false;
 				total_time = 0;
@@ -1353,11 +1377,11 @@ void *Render (void*) {
 					total_time += delta;
 				}
 				else {
-					total_time *= (float)(FPS_SAMPLES - 1) / (FPS_SAMPLES);
+					total_time *= (f32)(FPS_SAMPLES - 1) / (FPS_SAMPLES);
 					total_time += delta;
 				}
 				static_assert (FPS_SAMPLES > 1);
-				int64_t average_time = total_time / sample_count;
+				i64 average_time = total_time / sample_count;
 				fps_this_frame = 1000000.f/average_time + 0.5f;
 			}
 		}
@@ -1367,7 +1391,7 @@ void *Render (void*) {
 		render_state_t *render_state;
 		{
 			int found = -1;
-			uint64_t highest_state_count = 0;
+			u64 highest_state_count = 0;
 
 			pthread_mutex_lock (&update_render_swap_state_mutex);
 			for(int i = 0; i < 3; ++i) {
@@ -1438,8 +1462,8 @@ void *Render (void*) {
 
 				case render_element_darkness_rectangle: {
 					const auto r = element->darkness_rectangle;
-					for (int16_t y = r.b; y <= r.t; ++y) {
-						for (int16_t x = r.l; x <= r.r; ++x) {
+					for (i16 y = r.b; y <= r.t; ++y) {
+						for (i16 x = r.l; x <= r.r; ++x) {
 							frame->p[x + frame->w * y] >>= r.levels;
 						}
 					}
@@ -1468,7 +1492,7 @@ void *Render (void*) {
 
 		if (render_state->debug.show_rendertime) {
 			static int frames_before_reset = 60;
-			static int64_t max_recorded_frame_time = 0;
+			static i64 max_recorded_frame_time = 0;
 			if (--frames_before_reset == 0) {
 				frames_before_reset = 120;
 				max_recorded_frame_time = frame_time;
@@ -1507,7 +1531,7 @@ void *Render (void*) {
 		frame = (render_data.frame[frame_select]);
 
 		// Sleep until next frame
-		int64_t time_now = os_uTime ();
+		i64 time_now = os_uTime ();
 		sleep_time = (time_last + useconds_per_frame) - time_now;
 		time_last += useconds_per_frame;
 		if(time_now - time_last > useconds_per_frame) time_last = time_now;
@@ -1580,8 +1604,8 @@ font_StringDimensions_return_t font_StringDimensions (const font_t *font, const 
     return (font_StringDimensions_return_t){.w = width, .h = y};
 }
 
-int16_t Render_TextGetPayloadCountFromString (const char *text) {
-	int16_t payload_count = 0;
+i16 Render_TextGetPayloadCountFromString (const char *text) {
+	i16 payload_count = 0;
     char c = *(text++);
 	while (c != '\0') {
 		if (c == '\\') {

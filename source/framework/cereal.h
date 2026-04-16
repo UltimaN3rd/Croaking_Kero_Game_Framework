@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-static_assert (sizeof (float) == 4); // Make sure float is 32 bits
+static_assert (sizeof (f32) == 4); // Make sure f32 is 32 bits
 typedef enum {cereal_bool, cereal_u64, cereal_u32, cereal_u16, cereal_u8, cereal_f32, cereal_array, cereal_string} cereal_type_e;
 // cereal_array shall be serialized as follows:
 // KEY [COUNT, a, b, c, ..., z]
@@ -31,15 +31,15 @@ typedef struct {
 			cereal_type_e type;
 			cereal_type_e counter_type;
 			void *counter;
-			uint32_t capacity;
+			u32 capacity;
 		} array;
 		struct {
-			uint16_t capacity;
+			u16 capacity;
 		} string;
 	} u;
 } cereal_t;
 
-extern uint64_t cereal_dummy;
+extern u64 cereal_dummy;
 
 bool cereal_WriteToFile (const cereal_t cereal[], const int cereal_count, const char *const filename);
 int cereal_ReadFromFile (const cereal_t cereal[], const int cereal_count, const char *const filename);

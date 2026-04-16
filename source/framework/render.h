@@ -19,95 +19,96 @@
 #include "sprite.h"
 #include "framework_types.h"
 
-typedef struct __attribute__((__packed__)) {
-	vec2i16_t position;
-    int16_t originx, originy;
+typedef struct [[gnu::packed]] {
+	v2i16 position;
+    i16 originx, originy;
 	const sprite_t *sprite;
-	float rotation;
-	struct __attribute__((__packed__)) {
+	f32 rotation;
+	struct [[gnu::packed]] {
 	    bool flip_horizontally : 1;
 	    bool flip_vertically : 1;
         bool center_horizontally : 1;
         bool center_vertically : 1;
 		unsigned int rotation_by_quarters : 2;
     } flags;
+	const u8 (*color_swap_palette)[256];
 } render_state_sprite_t;
 
 typedef struct {
-	int16_t x, y;
-	float u, v;
+	i16 x, y;
+	f32 u, v;
 } textured_poly_vertex_t;
 
-typedef struct __attribute__((__packed__)) {
-	enum : uint8_t { render_shape_rectangle, render_shape_circle, render_shape_line, render_shape_dot, render_shape_triangle, render_shape_ellipse } type;
-	union __attribute__((__packed__)) {
-		struct __attribute__((__packed__)) {
-			int16_t x, y, w, h;
+typedef struct [[gnu::packed]] {
+	enum : u8 { render_shape_rectangle, render_shape_circle, render_shape_line, render_shape_dot, render_shape_triangle, render_shape_ellipse } type;
+	union [[gnu::packed]] {
+		struct [[gnu::packed]] {
+			i16 x, y, w, h;
 			struct {
 				bool center_horizontally:1;
 				bool center_vertically:1;
 			} flags;
-			uint8_t color_edge, color_fill;
+			u8 color_edge, color_fill;
 		} rectangle;
-		struct __attribute__((__packed__)) {
-			int16_t x, y, r;
-			uint8_t color_edge, color_fill;
+		struct [[gnu::packed]] {
+			i16 x, y, r;
+			u8 color_edge, color_fill;
 		} circle;
-		struct __attribute__((__packed__)) {
-			int16_t x, y, rx, ry;
-			uint8_t color_edge, color_fill;
+		struct [[gnu::packed]] {
+			i16 x, y, rx, ry;
+			u8 color_edge, color_fill;
 		} ellipse;
-		struct __attribute__((__packed__)) {
-			int16_t x0, y0, x1, y1;
-			uint8_t color;
+		struct [[gnu::packed]] {
+			i16 x0, y0, x1, y1;
+			u8 color;
 		} line;
-		struct __attribute__((__packed__)) {
-			int16_t x, y;
-			uint8_t color;
+		struct [[gnu::packed]] {
+			i16 x, y;
+			u8 color;
 		} dot;
-		struct __attribute__((__packed__)) {
-			int16_t x0, y0, x1, y1, x2, y2;
-			struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
+			i16 x0, y0, x1, y1, x2, y2;
+			struct [[gnu::packed]] {
 				bool center_horizontally:1;
 				bool center_vertically:1;
 			} flags;
-			uint8_t color_edge, color_fill;
+			u8 color_edge, color_fill;
 		} triangle;
 	};
 } render_shape_t;
 
 // Packed SOA to save mem may be better than AOS because pos/pixel are always accessed together
-typedef struct {
-	vec2i16_t position;
-	uint8_t pixel;
-} __attribute__((__packed__)) render_state_particle_t;
+typedef struct [[gnu::packed]] {
+	v2i16 position;
+	u8 pixel;
+} render_state_particle_t;
 
-typedef struct __attribute__((__packed__)) {
+typedef struct [[gnu::packed]] {
 	struct {
-		enum : uint8_t {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle, render_element_textured_poly} type : 3;
+		enum : u8 {render_element_sprite, render_element_shape, render_element_text, render_element_sprite_silhouette, render_element_darkness_rectangle, render_element_textured_poly} type : 3;
 		bool ignore_camera : 1;
 	};
-	int8_t depth;
+	i8 depth;
 	union {
 		render_state_sprite_t sprite;
 		render_shape_t shape;
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			char *string;
-			int16_t x, y, length;
+			i16 x, y, length;
 		} text;
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			render_state_sprite_t sprite;
-			uint8_t color;
+			u8 color;
 		} sprite_silhouette;
-		struct __attribute__((__packed__)) {
-			int16_t l, b, r, t;
-			uint8_t levels : 3; // Maximum value of 7
+		struct [[gnu::packed]] {
+			i16 l, b, r, t;
+			u8 levels : 3; // Maximum value of 7
 		} darkness_rectangle;
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			textured_poly_vertex_t *vertices;
 			const sprite_t *texture;
-			int16_t x, y;
-			uint8_t vertex_count;
+			i16 x, y;
+			u8 vertex_count;
 		} textured_poly;
 	};
 	#define RENDER_MAX_ELEMENTS 4096
@@ -115,17 +116,17 @@ typedef struct __attribute__((__packed__)) {
 
 typedef struct render_state_s {
 	volatile bool busy;
-	uint64_t state_count;
+	u64 state_count;
 	render_state_element_t elements[RENDER_MAX_ELEMENTS];
-	int32_t element_count;
+	i32 element_count;
 	#define RENDER_STATE_MEM_AMOUNT UINT16_MAX
 	struct {
-		uint16_t position;
+		u16 position;
 		char bytes[RENDER_STATE_MEM_AMOUNT];
 	} mem;
 	#define PARTICLES_MAX 4096
 	struct {
-		int16_t count;
+		i16 count;
 		render_state_particle_t array[PARTICLES_MAX];
 	} particles;
 	struct {
@@ -135,15 +136,15 @@ typedef struct render_state_s {
 		enum { background_type_none, background_type_blank, background_type_stripes, background_type_checkers, background_type_sprite } type;
 		union {
 			struct {
-				uint8_t color;
+				u8 color;
 			} blank;
 			struct {
-				uint8_t color;
+				u8 color;
 				int width;
-				float angle;
+				f32 angle;
 			} stripes;
 			struct {
-				uint8_t color;
+				u8 color;
 				int width, height;
 				int x, y;
 			} checkers;
@@ -181,50 +182,51 @@ void Render_FinishEditingState ();
 void Render_Camera (int x, int y);
 
 typedef struct {
-	int8_t depth;
+	i8 depth;
     int x, y;
 	const sprite_t *sprite;
-    float rotation;
+    f32 rotation;
     int originx, originy;
 	bool ignore_camera;
 	typeof ((render_state_sprite_t){}.flags) sprite_flags;
+	const u8 (*const color_swap_palette)[256];
 } Render_Sprite_arguments;
 #define Render_Sprite(...) Render_Sprite_((Render_Sprite_arguments){__VA_ARGS__})
 void Render_Sprite_ (Render_Sprite_arguments arguments);
 
 #define Render_SpriteSilhouette(__color__, ...) Render_SpriteSilhouette_ (__color__, (Render_Sprite_arguments){__VA_ARGS__})
-void Render_SpriteSilhouette_ (uint8_t color, Render_Sprite_arguments arguments);
+void Render_SpriteSilhouette_ (u8 color, Render_Sprite_arguments arguments);
 
 typedef struct {
-    int8_t depth;
+    i8 depth;
 	bool ignore_camera;
     render_shape_t shape;
 } Render_Shape_arguments;
 #define Render_Shape(...) Render_Shape_((Render_Shape_arguments){__VA_ARGS__})
 void Render_Shape_ (Render_Shape_arguments arguments);
 
-typedef struct __attribute__((__packed__)) {
+typedef struct [[gnu::packed]] {
 	enum {render_text_payload_sprite} tag;
 	union {
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			const sprite_t *_;
-			int16_t x, y;
+			i16 x, y;
 		} sprite;
 	} _;
 } render_text_payload_t;
 
 typedef struct {
-    int8_t depth;
+    i8 depth;
     int x, y, length;
     const char *string;
-	struct __attribute__((__packed__)) {
-		int16_t count;
+	struct [[gnu::packed]] {
+		i16 count;
 		const render_text_payload_t *_;
 	} payload;
 	bool ignore_camera;
 	bool center_horizontally_on_screen;
 	bool center_vertically_on_screen;
-	uint8_t translucent_background_darkness : 4; // Max value 7
+	u8 translucent_background_darkness : 4; // Max value 7
 } Render_Text_arguments;
 #define Render_Text(...) Render_Text_((Render_Text_arguments){.y = 20, __VA_ARGS__})
 void Render_Text_ (Render_Text_arguments arguments);
@@ -233,7 +235,7 @@ typedef typeof((render_state_t){}.background) Render_Background_arguments;
 #define Render_Background(...) Render_Background_ ((Render_Background_arguments){__VA_ARGS__})
 void Render_Background_ (Render_Background_arguments background);
 
-void Render_Particle (int x, int y, uint8_t pixel, bool ignore_camera);
+void Render_Particle (int x, int y, u8 pixel, bool ignore_camera);
 
 render_state_t *Render_GetCurrentEditableState ();
 
@@ -241,7 +243,7 @@ void Render_Cursor (const cursor_t *cursor, int x, int y);
 void Render_CursorAtRawMousePos (const cursor_t *cursor);
 
 typedef struct {
-	int16_t w, h;
+	i16 w, h;
 } font_StringDimensions_return_t;
 font_StringDimensions_return_t font_StringDimensions (const font_t *font, const char *text, const render_text_payload_t *payload_ptr);
 
@@ -252,9 +254,9 @@ void Render_ShowRenderTime (bool show);
 void Render_ShowFPS (bool show);
 
 typedef struct {
-	int16_t l, b, r, t;
-	int8_t depth;
-	uint8_t levels; // Capped at 7
+	i16 l, b, r, t;
+	i8 depth;
+	u8 levels; // Capped at 7
 } Render_DarkenRectangle_arguments_t;
 #define Render_DarkenRectangle(...) Render_DarkenRectangle_ ((Render_DarkenRectangle_arguments_t){.l = 0, .b = 0, .r = RESOLUTION_WIDTH-1, .t = RESOLUTION_HEIGHT-1, .levels = 1, .depth = 0, __VA_ARGS__})
 void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args);
@@ -262,10 +264,10 @@ void Render_DarkenRectangle_ (Render_DarkenRectangle_arguments_t args);
 void Render_Screenshot (sprite_t *destination);
 
 typedef struct {
-	int8_t depth;
+	i8 depth;
 	const sprite_t *texture;
-	int16_t x, y;
-	uint8_t vertex_count;
+	i16 x, y;
+	u8 vertex_count;
 	textured_poly_vertex_t *vertices;
 } Render_TexturedPoly_arguments_t;
 // Call convention: Render_TexturedPoly(.texture = &whatever, .vertex_count = n, .vertices = (textured_poly_vertex_t[]){{your}, {x, y, u, v}, {verts}, {here}}, .otherarguments)
@@ -273,4 +275,4 @@ typedef struct {
 #define Render_TexturedPoly(...) Render_TexturedPoly_ ((Render_TexturedPoly_arguments_t){__VA_ARGS__})
 void Render_TexturedPoly_ (Render_TexturedPoly_arguments_t args);
 
-int16_t Render_TextGetPayloadCountFromString (const char *text);
+i16 Render_TextGetPayloadCountFromString (const char *text);

@@ -19,13 +19,13 @@ sound_extern_t sound_extern_data;
 
 typedef struct {
     sound_t sound;
-    uint8_t ADSR_state;
-    uint32_t t;
-    float d; // Wave position where 0 = start, 1 = full period. Not reset to 0 when sound channels change, in order to transition between waves smoothly. This value is like degrees or radians, but measures turns.
-	float vibrato_d; // Same as d, but for vibrato
+    u8 ADSR_state;
+    u32 t;
+    f32 d; // Wave position where 0 = start, 1 = full period. Not reset to 0 when sound channels change, in order to transition between waves smoothly. This value is like degrees or radians, but measures turns.
+	f32 vibrato_d; // Same as d, but for vibrato
     union {
         struct {
-            int16_t current_duty_cycle;
+            i16 current_duty_cycle;
         } pulse;
     } u;
 } sound_channel_t;
@@ -35,12 +35,12 @@ typedef enum {music_state_pause, music_state_playing} music_state_e;
 typedef struct {
     sound_channel_t channels[SOUND_CHANNELS];
     struct {
-        float volume;
+        f32 volume;
     } fx;
-    float master_volume;
+    f32 master_volume;
     struct {
         const sound_music_t *new_source;
-        float volume;
+        f32 volume;
         music_state_e state;
         sound_music_t source;
     } music;
@@ -59,7 +59,7 @@ static sound_internal_t sound = {
 typedef enum { sound_command_fx_stop, sound_command_fx_play, sound_command_fx_prepare, sound_command_fx_play_prepared, sound_command_fx_volume_set, sound_command_music_new, sound_command_music_pause, sound_command_music_resume, sound_command_music_volume_set } sound_command_e;
 
 static struct {
-    uint8_t executed, filled; // when filled < executed, execute until overflow, then check again.
+    u8 executed, filled; // when filled < executed, execute until overflow, then check again.
     // SIZE must be 256 so the overflow logic works
     #define COMMAND_BUFFER_SIZE 256
     struct {
@@ -72,13 +72,13 @@ static struct {
                 const sound_t *sound;
             } fx_prepare;
             struct {
-                float volume;
+                f32 volume;
             } fx_volume_set;
             struct {
                 const sound_music_t *music;
             } music_new;
             struct {
-                float volume;
+                f32 volume;
             } music_volume_set;
         } data;
     } commands[COMMAND_BUFFER_SIZE];
@@ -101,8 +101,8 @@ static inline int SelectFXChannel () {
 }
 
 static inline void SoundExecuteCommands () {
-    uint8_t filled = command_buffer.filled; // Latch this value since other threads could be modifying it while we work through commands
-    uint8_t count = filled - command_buffer.executed;
+    u8 filled = command_buffer.filled; // Latch this value since other threads could be modifying it while we work through commands
+    u8 count = filled - command_buffer.executed;
     if (filled < command_buffer.executed) { // Filled has looped around so we need to execute the remaining commands
         count = COMMAND_BUFFER_SIZE - command_buffer.executed + filled;
     }
@@ -164,22 +164,22 @@ void SoundMusicResume () {
     SoundAddCommand (.type = sound_command_music_resume);
 }
 
-void SoundMusicSetVolume (float volume_0_to_1) {
+void SoundMusicSetVolume (f32 volume_0_to_1) {
     if (volume_0_to_1 < 0) volume_0_to_1 = 0;
     if (volume_0_to_1 > 1) volume_0_to_1 = 1;
     SoundAddCommand (.type = sound_command_music_volume_set, .data.music_volume_set.volume = volume_0_to_1);
 }
-float SoundMusicGetVolume () { return sound.music.volume; }
+f32 SoundMusicGetVolume () { return sound.music.volume; }
 
 void SoundFXStop () {
     SoundAddCommand (.type = sound_command_fx_stop);
 }
-void SoundFXSetVolume (float volume_0_to_1) {
+void SoundFXSetVolume (f32 volume_0_to_1) {
     if (volume_0_to_1 < 0) volume_0_to_1 = 0;
     if (volume_0_to_1 > 1) volume_0_to_1 = 1;
     SoundAddCommand (.type = sound_command_fx_volume_set, .data.fx_volume_set.volume = volume_0_to_1);
 }
-float SoundFXGetVolume () { return sound.fx.volume; }
+f32 SoundFXGetVolume () { return sound.fx.volume; }
 
 #ifdef __linux__
 #define PERIOD_SIZE (SAMPLING_RATE / 200)
@@ -190,11 +190,11 @@ float SoundFXGetVolume () { return sound.fx.volume; }
 #endif
 
 // Two 5ms buffers
-// SAMPLE_BUFFER_SIZE is the maximum size allowed. On Linux we only use 240 (5ms). Windows must be discovered at runtime, seems to usually be 256. Mac lets us set it to 240 but can reset itself.
+// SAMPLE_BUFFER_SIZE_MAX is the maximum size allowed. On Linux we only use 240 (5ms). Windows must be discovered at runtime, seems to usually be 256. Mac lets us set it to 240 but can reset itself.
 // Currently one buffer holds 5ms uncompressed samples, the next buffer holds 5ms compressed. When the audio system requests samples, we copy over the compressed ones, compress the uncompressed and generate 5ms of new samples. If there are problems with variable chunk sizes in future, we could just generate some max amount of samples (10ms or so?) then compress the amount requested and refill exactly that amount. Just have to track the chunk sizes to lerp compression value correctly.
 sample_buffer_t sample_buffer[2] = {};
 bool sample_buffer_swap = 0; // Use this to index the buffer which is compressed and ready for playback.
-int16_t sample_buffer_size = 0;
+i16 sample_buffer_size = 0;
 
 ADSR_t ADSRf_to_ADSR (ADSRf_t in) { return (ADSR_t){.peak = in.peak, .attack = in.attack * SAMPLING_RATE, .decay = in.decay * SAMPLING_RATE, .sustain = in.sustain, .release = in.release * SAMPLING_RATE}; }
 
@@ -203,7 +203,7 @@ sound_t SoundGenerate_(SoundFXPlay_args args) {
     if (args.waveform == sound_waveform_none) return (sound_t){};
     args.ADSR.peak *= args.volume;
     args.ADSR.sustain *= args.volume;
-    uint32_t duration = args.duration_samples;
+    u32 duration = args.duration_samples;
     if (duration == 0) duration = args.duration_seconds * SAMPLING_RATE;
     sound_t sound = {
         .waveform = args.waveform,
@@ -222,7 +222,7 @@ sound_t SoundGenerate_(SoundFXPlay_args args) {
     // }
     int duration_ADSR = sound.ADSR.attack + sound.ADSR.decay + sound.ADSR.release;
     if (sound.duration < duration_ADSR) { // There isn't enough time for the full envelope, even with 0 sustain. Get ratio of envelope and apply to the reduced duration
-        float total = args.ADSR.attack + args.ADSR.decay + args.ADSR.release;
+        f32 total = args.ADSR.attack + args.ADSR.decay + args.ADSR.release;
         sound.ADSR.attack = (args.ADSR.attack / total) * sound.duration;
         sound.ADSR.release = (args.ADSR.release / total) * sound.duration;
         sound.ADSR.decay = sound.duration - sound.ADSR.attack - sound.ADSR.release;
@@ -242,8 +242,8 @@ void SoundFXPrepare (const sound_t *const sound) {
     SoundAddCommand (.type = sound_command_fx_prepare, .data.fx_prepare.sound = sound);
 }
 
-uint32_t SoundFXPlayGroup (const sound_group_t *group) {
-    uint32_t channels = 0;
+u32 SoundFXPlayGroup (const sound_group_t *group) {
+    u32 channels = 0;
     for (int i = 0; i < group->count; ++i)
         SoundAddCommand (.type = sound_command_fx_prepare, .data.fx_prepare.sound = group->sounds[i]);
     SoundFXPlayPrepared ();
@@ -265,11 +265,11 @@ void SoundStopAll () {
     // }
 }
 
-static inline float CosineInterpolate (float d) { return (1.f - cos_turns(d/2)) / 2.f; }
-static inline int16_t Lerpi16 (int16_t from, int16_t to, float ratio) { return (1-ratio)*from + to*ratio;}
+static inline f32 CosineInterpolate (f32 d) { return (1.f - cos_turns(d/2)) / 2.f; }
+static inline i16 Lerpi16 (i16 from, i16 to, f32 ratio) { return (1-ratio)*from + to*ratio;}
 
-static inline float PolyBLEP (float t, float frequency) {
-    float dt = frequency / SAMPLING_RATE;
+static inline f32 PolyBLEP (f32 t, f32 frequency) {
+    f32 dt = frequency / SAMPLING_RATE;
     if (t < dt) {
         t /= dt;
         return t + t - t*t - 1;
@@ -281,35 +281,35 @@ static inline float PolyBLEP (float t, float frequency) {
     else return 0;
 }
 
-static inline float CreateNextSample () {
-    static float noise_channels[SOUND_CHANNELS];
-    float value_music = 0;
-    float value_fx = 0;
-    float *value = &value_music;
+static inline f32 CreateNextSample () {
+    static f32 noise_channels[SOUND_CHANNELS];
+    f32 value_music = 0;
+    f32 value_fx = 0;
+    f32 *value = &value_music;
     for (int c = (sound.music.state != music_state_playing ? FX_CHANNELS_FIRST : MUSIC_CHANNELS_FIRST); c < SOUND_CHANNELS; ++c) {
         if (c > MUSIC_CHANNELS_LAST) value = &value_fx;
         auto channel = &sound.channels[c];
         auto sound = &channel->sound;
-        float sample = 0;
-        float envelope = 1;
+        f32 sample = 0;
+        f32 envelope = 1;
         if (!(sound->waveform == sound_waveform_none || sound->waveform == sound_waveform_preparing)) {
             channel->t++;
             if (sound->waveform != sound_waveform_silence) {
-                int16_t freq = Lerpi16(sound->frequency, sound->frequency + sound->sweep, (float)channel->t / sound->duration);
+                i16 freq = Lerpi16(sound->frequency, sound->frequency + sound->sweep, (f32)channel->t / sound->duration);
                 if (sound->vibrato.vibrations_per_hundred_seconds) {
                     auto vibrato_range = sound->vibrato.frequency_range;
-                    int16_t vibrato = sin_turns (channel->vibrato_d) * vibrato_range;
+                    i16 vibrato = sin_turns (channel->vibrato_d) * vibrato_range;
                     freq += vibrato;
-                    channel->vibrato_d += sound->vibrato.vibrations_per_hundred_seconds / (float)(SAMPLING_RATE * 100);
+                    channel->vibrato_d += sound->vibrato.vibrations_per_hundred_seconds / (f32)(SAMPLING_RATE * 100);
                 }
                 // At this point, due to sweep and vibrato, freq may be negative. Turns out that's totally fine and allows for some nice effects!
                 int prevd = channel->d;
-                float d_change = (float)freq / SAMPLING_RATE;
+                f32 d_change = (f32)freq / SAMPLING_RATE;
                 channel->d += d_change;
                 switch (sound->waveform) {
                     case sound_waveform_sine: sample = sin_turns (channel->d); break;
                     case sound_waveform_triangle: {
-                        float a = (channel->d - (int)channel->d);
+                        f32 a = (channel->d - (int)channel->d);
                         if (a > .5) a = 1 - a;
                         sample = a * 4 - 1;
                     } break;
@@ -318,11 +318,11 @@ static inline float CreateNextSample () {
                         sample -= PolyBLEP (channel->d - (int)channel->d, freq);
                     } break;
                     case sound_waveform_pulse: {
-                        float pos = channel->d - (int)channel->d;
+                        f32 pos = channel->d - (int)channel->d;
                         // Duty cycle 0 = 50%. 127 = 98%, -128 = 99%
-                        // Duty cycle as int8, loops with overflow. Convert to float. Divide by 129 means computed duty cycle is never 0 (avoid pop when temporarily hitting 0) and 127 == -127 for perfect looping through -128
-                        int8_t duty_cycle1 = (sound->square_duty_cycle + (int32_t)channel->t * sound->square_duty_cycle_sweep / (int32_t)sound->duration);
-                        float duty_cycle = absf(duty_cycle1) / 257.f + .5f;
+                        // Duty cycle as int8, loops with overflow. Convert to f32. Divide by 129 means computed duty cycle is never 0 (avoid pop when temporarily hitting 0) and 127 == -127 for perfect looping through -128
+                        i8 duty_cycle1 = (sound->square_duty_cycle + (i32)channel->t * sound->square_duty_cycle_sweep / (i32)sound->duration);
+                        f32 duty_cycle = absf(duty_cycle1) / 257.f + .5f;
                         // if (duty_cycle < 0.5) duty_cycle = 1 - duty_cycle;
                         assert (duty_cycle >= 0.5 && duty_cycle < 1);
                         // sample = -2 * duty_cycle;
@@ -330,7 +330,7 @@ static inline float CreateNextSample () {
                         sample = pos >= duty_cycle ? -1 : 1;
                         const auto BLEP0 = PolyBLEP (pos, freq);
                         sample += BLEP0;
-                        float pos2 = pos + 1 - duty_cycle;
+                        f32 pos2 = pos + 1 - duty_cycle;
                         pos2 -= (int)pos2;
                         const auto BLEP1 = PolyBLEP (pos2, freq);
                         sample -= BLEP1;
@@ -338,7 +338,7 @@ static inline float CreateNextSample () {
                     case sound_waveform_noise: {
                         channel->d += 3 * d_change;
                         if (prevd != (int)channel->d) {
-                            noise_channels[c] = rand() / (float)RAND_MAX * 2 - 1;
+                            noise_channels[c] = rand() / (f32)RAND_MAX * 2 - 1;
                         }
                         sample = noise_channels[c];
                     } break;
@@ -350,22 +350,22 @@ static inline float CreateNextSample () {
                 switch (channel->ADSR_state) {
                     case 0: {
                         if (channel->t < sound->ADSR.attack) {
-                            envelope = (float)channel->t / sound->ADSR.attack * sound->ADSR.peak;
+                            envelope = (f32)channel->t / sound->ADSR.attack * sound->ADSR.peak;
                             break;
                         }
                         channel->ADSR_state = 1;
                     }
                     case 1: {
-                        int32_t t = channel->t - sound->ADSR.attack;
+                        i32 t = channel->t - sound->ADSR.attack;
                         if (t < sound->ADSR.decay) {
-                            float ratio = (float)t / sound->ADSR.decay;
+                            f32 ratio = (f32)t / sound->ADSR.decay;
                             envelope = (1 - ratio) * sound->ADSR.peak + ratio * sound->ADSR.sustain;
                             break;
                         }
                         channel->ADSR_state = 2;
                     }
                     case 2: {
-                        int32_t t = sound->duration - channel->t;
+                        i32 t = sound->duration - channel->t;
                         if (t >= sound->ADSR.release) {
                             envelope = sound->ADSR.sustain;
                             break;
@@ -373,9 +373,9 @@ static inline float CreateNextSample () {
                         channel->ADSR_state = 3;
                     }
                     case 3: {
-                        int32_t t = channel->t + (sound->ADSR.release - sound->duration);
+                        i32 t = channel->t + (sound->ADSR.release - sound->duration);
                         if (t <= 0) envelope = 0;
-                        else envelope = (1.f - (float)t / sound->ADSR.release) * sound->ADSR.sustain;
+                        else envelope = (1.f - (f32)t / sound->ADSR.release) * sound->ADSR.sustain;
                         break;
                     }
                 }
@@ -409,6 +409,7 @@ static inline float CreateNextSample () {
 }
 
 void RefillSampleBuffer () {
+    assert (sample_buffer_size <= SAMPLE_BUFFER_SIZE_MAX);
     SoundExecuteCommands ();
 
     if (sound_extern_data.prepared_sounds_ready) {
@@ -422,26 +423,26 @@ void RefillSampleBuffer () {
     }
 
     sample_buffer_swap = !sample_buffer_swap;
-    static float compressor_level = 1;
+    static f32 compressor_level = 1;
 
     // Fill used-up buffer with new, uncompressed samples
-    float peak = 1;
+    f32 peak = 1;
     for (int i = 0; i < sample_buffer_size; ++i) {
-        float sample = CreateNextSample();
-        float sampleabs = fabs (sample);
+        f32 sample = CreateNextSample();
+        f32 sampleabs = fabs (sample);
         if (sampleabs > peak) peak = sampleabs;
         sample_buffer[!sample_buffer_swap].samples[i] = sample;
     }
-    if (peak > 1) peak += 0.00001f; // Tiny bit of extra for floating point inaccuracy
+    if (peak > 1) peak += 0.00001f; // Tiny bit of extra for f32ing point inaccuracy
     else peak = 1; // Peak lower than 1, set to 1
     sample_buffer[!sample_buffer_swap].peak = peak;
 
     // Compress other buffer
     // Starting from compression level previous frame ended with, lerp to peak of (greater of current or next frame).
-    float compressor_target = MAX (sample_buffer[sample_buffer_swap].peak, sample_buffer[!sample_buffer_swap].peak);
+    f32 compressor_target = MAX (sample_buffer[sample_buffer_swap].peak, sample_buffer[!sample_buffer_swap].peak);
     for (int i = 0; i < sample_buffer_size; ++i) {
-        float d = (float)i / sample_buffer_size;
-        float compression = (1-d)*compressor_level + d*compressor_target;
+        f32 d = (f32)i / sample_buffer_size;
+        f32 compression = (1-d)*compressor_level + d*compressor_target;
         sample_buffer[sample_buffer_swap].samples[i] /= compression;
         assert (fabs (sample_buffer[sample_buffer_swap].samples[i]) <= 1);
     }

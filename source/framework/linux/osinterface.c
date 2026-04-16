@@ -24,7 +24,7 @@
 #include <assert.h>
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-extern const uint8_t palette[256][3];
+extern const u8 palette[256][3];
 #endif
 
 #pragma push_macro ("Min")
@@ -151,8 +151,8 @@ bool os_Init (const char *window_title) {
 	return true;
 }
 
-void os_SetBackgroundColor (uint8_t r, uint8_t g, uint8_t b) {
-	// os_private.background_color.u32 = ((uint32_t)r << 16) + ((uint32_t)g << 8) + b;
+void os_SetBackgroundColor (u8 r, u8 g, u8 b) {
+	// os_private.background_color.u32 = ((u32)r << 16) + ((u32)g << 8) + b;
 	os_private.background_color.r = r;
 	os_private.background_color.g = g;
 	os_private.background_color.b = b;
@@ -445,14 +445,14 @@ void os_Fullscreen (bool fullscreen) {
 	}
 }
 
-int64_t os_uTime () {
+i64 os_uTime () {
 	timespec_t t;
 	clock_gettime (CLOCK_MONOTONIC, &t);
-	int64_t ticks = t.tv_sec * 1000000000 + t.tv_nsec;
+	i64 ticks = t.tv_sec * 1000000000 + t.tv_nsec;
 	return ticks / 1000;
 }
 
-void os_uSleepEfficient (int64_t microseconds) {
+void os_uSleepEfficient (i64 microseconds) {
 	// if (microseconds > 0) usleep (microseconds);
 	if (microseconds <= 0) return;
 	timespec_t t;
@@ -476,7 +476,7 @@ void os_uSleepEfficient (int64_t microseconds) {
 	while (clock_nanosleep (CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL) == EINTR); // If sleep is interrupted, it will repeat with the same target time until complete.
 }
 
-void os_uSleepPrecise (int64_t microseconds) {
+void os_uSleepPrecise (i64 microseconds) {
 	os_uSleepEfficient (microseconds);
 }
 
@@ -615,7 +615,7 @@ void os_DrawScreen () {
 	#endif
 
 #ifdef OSINTERFACE_COLOR_INDEX_MODE
-	glUniform2f (os_private.gl.locations.vertex.scale, (float)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (float)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
+	glUniform2f (os_private.gl.locations.vertex.scale, (f32)os_private.frame_buffer.width * os_private.frame_buffer.scale / os_public.window.width, (f32)os_private.frame_buffer.height * os_private.frame_buffer.scale / os_public.window.height);
 	// if (os_LogGLErrors ()) LOG ("Had GL errors");
 	// glActiveTexture(GL_TEXTURE0);
 	// glBindTexture (GL_TEXTURE_2D, os_private.gl.texture);

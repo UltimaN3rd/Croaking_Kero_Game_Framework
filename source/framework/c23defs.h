@@ -19,27 +19,27 @@
 #  define counted_by(ignored__) 
 # else
 #  ifdef __clang__
-#   define counted_by(__count__) __counted_by(__count__)
+#   define counted_by(count__) clang::counted_by(count__)
 #  elifdef __GNUC__
-#   define counted_by(__count__) __attribute((counted_by(__count__)))
+#   define counted_by(count__) gnu::counted_by(count__)
 #  endif
 # endif
 #endif
 
 #ifndef unreachable
-#if __clang__
-    #include <__stddef_unreachable.h>
-#elif __GNUC__
-    #define unreachable() __builtin_unreachable()
-#else
-    #error "C23 unreachable() does not seem to be supported by your compiler."
-#endif
+# if __clang__
+#  include <__stddef_unreachable.h>
+# elif __GNUC__
+#  define unreachable() __builtin_unreachable()
+# else
+#  error "C23 unreachable() does not seem to be supported by your compiler."
+# endif
 #endif
 
 #ifndef _Countof
-    #if __has_include(<stdcountof.h>)
-        #include <stdcountof.h>
-    #else
-        #define _Countof(__a__) (sizeof (__a__) / sizeof (*__a__))
-    #endif
+# if __has_include(<stdcountof.h>)
+#  include <stdcountof.h>
+# else
+#  define _Countof(a__) (sizeof (a__) / sizeof (*a__))
+# endif
 #endif

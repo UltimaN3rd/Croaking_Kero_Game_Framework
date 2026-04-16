@@ -17,21 +17,21 @@
 #include "framework.h"
 
 typedef enum {update_input_event_keyboard, update_input_event_mouse_button, update_input_event_mouse_movement, update_input_event_mouse_scroll} update_input_event_type_e;
-typedef struct __attribute__((__packed__)) {
+typedef struct [[gnu::packed]] {
 	update_input_event_type_e tag : 8; // Specified 8 bits just so no bits are assumed
 	union {
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			os_key_e key : 7;
 			bool pressed : 1;
 		} keyboard;
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			mouse_button_e button : 7;
 			bool pressed : 1;
 		} mouse_button;
-		struct __attribute__((__packed__)) {
-			// Cast the next 2 events are int16_t x, y. This is because other event types are only 2 bytes, but this event type would swell the size of all events to 5 bytes
+		struct [[gnu::packed]] {
+			// Cast the next 2 events are i16 x, y. This is because other event types are only 2 bytes, but this event type would swell the size of all events to 5 bytes
 		} movement;
-		struct __attribute__((__packed__)) {
+		struct [[gnu::packed]] {
 			bool up : 1;
 		} scroll;
 	} _;
@@ -48,23 +48,23 @@ typedef struct update_data_s { // update_data_t
 	#define KEY_REPEATED 0b1000
 	struct {
 		#define UPDATE_KEYBOARD_KEY_COUNT 128
-		uint8_t keyboard[UPDATE_KEYBOARD_KEY_COUNT];
+		u8 keyboard[UPDATE_KEYBOARD_KEY_COUNT];
 		struct {
-			uint8_t count;
+			u8 count;
 			char chars[33];
 		} typing;
 		struct {
 			int x, y;
-			int8_t scroll;
-			uint8_t buttons[MOUSE_BUTTON_COUNT];
+			i8 scroll;
+			u8 buttons[MOUSE_BUTTON_COUNT];
 		} mouse;
 	} frame;
 	char text_to_print[64];
 	struct {
 		struct {
 			vec2i32split_t position[PARTICLES_MAX];
-			uint8_t pixel[PARTICLES_MAX];
-			vec2i_t velocity[PARTICLES_MAX];
+			u8 pixel[PARTICLES_MAX];
+			v2i32 velocity[PARTICLES_MAX];
 			int count;
 			bool gravity[PARTICLES_MAX];
 			int time[PARTICLES_MAX];
@@ -72,7 +72,7 @@ typedef struct update_data_s { // update_data_t
 	} gameplay;
 	#define UPDATE_EVENTS_MAX 256
 	struct {
-		uint32_t count;
+		u32 count;
 		update_input_event_t _[UPDATE_EVENTS_MAX];
 	} events;
 	char debug_frame_time_string[64];
@@ -82,7 +82,7 @@ typedef struct update_data_s { // update_data_t
 	#define UPDATE_OBJECT_MEMORY_SIZE 65535
 	// Fixed memory buffer. Bottom contains array of object descriptors. Each object has a fixed size component in the bottom region of the memory, and a pointer to memory in the top region.
 	struct {
-		uint32_t bottom_used, top_used, count, nextid;
+		u32 bottom_used, top_used, count, nextid;
 		char mem[UPDATE_OBJECT_MEMORY_SIZE];
 	} objects;
 } update_data_t;
@@ -97,18 +97,18 @@ typedef struct {
 	int time;
 } ParticleAdd_arguments;
 #define ParticleAdd(pixel, x, y, vx, vy, ...) ParticleAdd_ (pixel, x, y, vx, vy, (ParticleAdd_arguments){.gravity = true, .time = -1, __VA_ARGS__})
-void ParticleAdd_ (uint8_t pixel, int x, int y, int32_t vx, int32_t vy, ParticleAdd_arguments arguments);
+void ParticleAdd_ (u8 pixel, int x, int y, i32 vx, i32 vy, ParticleAdd_arguments arguments);
 #define ParticleAddAngleVelocity(pixel, x, y, angle, velocity, ...) ParticleAdd (pixel, x, y, cos_turns (angle) * velocity, sin_turns (angle) * velocity, __VA_ARGS__)
 void ParticlesUpdate (int left, int right, int bottom, int top);
 void ParticleDelete (int index);
 typedef struct {
-	float rotation;
+	f32 rotation;
 	bool flipx, flipy;
 	int originx, originy;
-	uint8_t color;
+	u8 color;
 } CreateParticlesFromSprite_arguments;
 #define CreateParticlesFromSprite(sprite, x, y, direction, velocity, ...) CreateParticlesFromSprite_ (sprite, x, y, direction, velocity, (CreateParticlesFromSprite_arguments){__VA_ARGS__})
-void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, float direction, int32_t velocity, CreateParticlesFromSprite_arguments arguments);
+void CreateParticlesFromSprite_ (const sprite_t *sprite, int x, int y, f32 direction, i32 velocity, CreateParticlesFromSprite_arguments arguments);
 
 #define UPDATE_CHANGE_STATE_DATA_SIZE_MAX 1024
 
@@ -133,21 +133,21 @@ void Update_RunAfterStateChange (void (*func)());
 
 typedef bool (*Update_Object_Func_t) (const void *self);
 
-typedef struct __attribute__((__packed__)) {
-	uint32_t id;
-	uint32_t memory_offset;
+typedef struct [[gnu::packed]] {
+	u32 id;
+	u32 memory_offset;
 	Update_Object_Func_t UpdateAndRender;
-	int8_t layer; // Objects are ordered by layer - higher layer means processed first. Objects in higher layers may occlude input from objects in lower layers.
+	i8 layer; // Objects are ordered by layer - higher layer means processed first. Objects in higher layers may occlude input from objects in lower layers.
 	bool survive_state_change : 1;
 } update_object_t;
 
 // Placed at the base address of every object's memory
 typedef struct {
 	bool used : 1;
-	uint32_t size : 31;
+	u32 size : 31;
 } update_object_header_t;
 
-uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const int8_t layer, const bool survive_state_change);
+u32 Update_ObjectCreate_ (const void *const data, const size_t data_size, const Update_Object_Func_t UpdateAndRenderFunc, const i8 layer, const bool survive_state_change);
 
 // 4th argument is your object, which can be initialized as (object_t){a, b, c}
 #define Update_ObjectCreate(update_and_render_func__, layer__, survive_state_change__, ...) \
@@ -159,9 +159,9 @@ uint32_t Update_ObjectCreate_ (const void *const data, const size_t data_size, c
 		Update_ObjectCreate_ (&(__VA_ARGS__), sizeof (typeof(__VA_ARGS__)), (Update_Object_Func_t)(update_and_render_func__), layer__, survive_state_change__); \
 	})
 
-update_object_t *Update_ObjectAlloc (const uint32_t bytes);
+update_object_t *Update_ObjectAlloc (const u32 bytes);
 
-void *Update_ObjectMemOffsetToAddr (const uint32_t mem_offset);
+void *Update_ObjectMemOffsetToAddr (const u32 mem_offset);
 
 typeof((update_data_t){}.frame) *Update_FrameInput ();
 typeof((update_data_t){}.frame) Update_GetUneditedFrameInputState ();

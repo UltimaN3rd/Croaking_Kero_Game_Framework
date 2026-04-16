@@ -14,9 +14,9 @@
 
 #pragma once
 
-// uint64_t my_random_state = DiscreteRandom_SeedFromTime ();
-// uint32_t a_random_number = DiscreteRandom_Next (&my_random_state);
-// Make a local uint64_t. This is the specific state of your random sequence. Assign it whatever value you want and call call DiscreteRandom_Seed (&your_var), or just use SeedFromTime(). Then to get each random value, do: uint32_t num = DiscreteRandom_Next (&your_var);
+// u64 my_random_state = DiscreteRandom_SeedFromTime ();
+// u32 a_random_number = DiscreteRandom_Next (&my_random_state);
+// Make a local u64. This is the specific state of your random sequence. Assign it whatever value you want and call call DiscreteRandom_Seed (&your_var), or just use SeedFromTime(). Then to get each random value, do: u32 num = DiscreteRandom_Next (&your_var);
 
 // Code based on https://en.wikipedia.org/wiki/Permuted_congruential_generator#Example_code
 // Edits have been made, though the core algorithm is unchanged.
@@ -28,25 +28,25 @@
 #define DISCRETE_RANDOM_MULTIPLIER 6364136223846793005u
 #define DISCRETE_RANDOM_INCREMENT 1442695040888963407u
 
-static inline uint32_t DiscreteRandom_InternalRotate (uint32_t x, unsigned r) {
+static inline u32 DiscreteRandom_InternalRotate (u32 x, unsigned r) {
 	return x >> r | x << (-r & 31);
 }
 
-static inline uint32_t DiscreteRandom_Next (uint64_t *state) {
-	uint64_t x = *state;
+static inline u32 DiscreteRandom_Next (u64 *state) {
+	u64 x = *state;
 	unsigned int count = (unsigned int)(x >> 59);		// 59 = 64 - 5
 
 	*state = x * DISCRETE_RANDOM_MULTIPLIER + DISCRETE_RANDOM_INCREMENT;
 	x ^= x >> 18;								// 18 = (64 - 27)/2
-	return DiscreteRandom_InternalRotate ((uint32_t)(x >> 27), count);	// 27 = 32 - 5
+	return DiscreteRandom_InternalRotate ((u32)(x >> 27), count);	// 27 = 32 - 5
 }
 
-static inline void DiscreteRandom_Seed (uint64_t *seed) {
+static inline void DiscreteRandom_Seed (u64 *seed) {
 	*seed += DISCRETE_RANDOM_INCREMENT;
 	DiscreteRandom_Next (seed);
 }
 
-static inline int DiscreteRandom_Range (uint64_t *state, int min, int max) {
+static inline int DiscreteRandom_Range (u64 *state, int min, int max) {
 	if (min > max) {
 		int temp = min;
 		min = max;
@@ -57,18 +57,18 @@ static inline int DiscreteRandom_Range (uint64_t *state, int min, int max) {
 
 #define DiscreteRandom_Percentage(state) DiscreteRandom_Range (state, 0, 100)
 
-static inline int DiscreteRandom_Bool (uint64_t *state) {
+static inline int DiscreteRandom_Bool (u64 *state) {
 	return DiscreteRandom_Next (state) % 2;
 }
 
-static inline float DiscreteRandom_Rangef (uint64_t *state, float min, float max) {
-	return (max - min) * ((float)DiscreteRandom_Next(state) / (float)DISCRETE_RANDOM_MAX) + min;
+static inline f32 DiscreteRandom_Rangef (u64 *state, f32 min, f32 max) {
+	return (max - min) * ((f32)DiscreteRandom_Next(state) / (f32)DISCRETE_RANDOM_MAX) + min;
 }
 
 #include <time.h>
 
-static inline uint64_t DiscreteRandom_SeedFromTime () {
-	uint64_t t = (uint64_t) time (NULL);
+static inline u64 DiscreteRandom_SeedFromTime () {
+	u64 t = (u64) time (NULL);
 	DiscreteRandom_Seed (&t);
 	return t;
 }

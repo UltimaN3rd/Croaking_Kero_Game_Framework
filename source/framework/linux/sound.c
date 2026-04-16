@@ -33,7 +33,7 @@ void *Sound (void *data_void) {
     while (!sound_extern_data.quit) {
         RefillSampleBuffer ();
         int buffer_index = 0;
-        { auto result = pa_simple_write (simple, sample_buffer[sample_buffer_swap].samples, PERIOD_SIZE * sizeof (float), &pulse_error); if (result != 0) { LOG ("PulseAudio failed to write buffer [%s]", pa_strerror (pulse_error)); return NULL; } }
+        { auto result = pa_simple_write (simple, sample_buffer[sample_buffer_swap].samples, PERIOD_SIZE * sizeof (f32), &pulse_error); if (result != 0) { LOG ("PulseAudio failed to write buffer [%s]", pa_strerror (pulse_error)); return NULL; } }
     }
 
     LOG ("Render thread exiting normally");
